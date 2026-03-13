@@ -109,8 +109,8 @@ export function useKeyboardNav({
       return
     }
 
-    // Clear filter with Escape
-    if (key.name === "escape" && isFilterActive(filter)) {
+    // Clear filter with Escape or Backspace
+    if ((key.name === "escape" || key.name === "backspace") && isFilterActive(filter)) {
       dispatch({ type: "SET_DISCOVERY_QUERY", query: "" })
       return
     }
@@ -137,13 +137,15 @@ export function useKeyboardNav({
       return
     }
 
-    // Navigation
+    // Navigation - clamp to filtered list bounds
     if (key.name === "j" || key.name === "down") {
-      dispatch({ type: "MOVE", delta: 1 })
+      const newIndex = Math.min(selectedIndex + 1, filteredPRs.length - 1)
+      dispatch({ type: "SELECT", index: newIndex })
       return
     }
     if (key.name === "k" || key.name === "up") {
-      dispatch({ type: "MOVE", delta: -1 })
+      const newIndex = Math.max(selectedIndex - 1, 0)
+      dispatch({ type: "SELECT", index: newIndex })
       return
     }
 

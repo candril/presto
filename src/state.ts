@@ -2,8 +2,8 @@
  * Application state management
  */
 
-import type { AppState, PR, View, PreviewPosition } from "./types"
-import { loadCache } from "./cache"
+import type { AppState, PR, View, PreviewPosition, ColumnId } from "./types"
+import { loadCache, getColumnVisibility } from "./cache"
 
 /** Action types for the reducer */
 export type AppAction =
@@ -34,6 +34,8 @@ export type AppAction =
   // Optimistic PR updates
   | { type: "UPDATE_PR"; url: string; updates: Partial<PR> }
   | { type: "REMOVE_PR"; url: string }
+  // Column visibility
+  | { type: "TOGGLE_COLUMN"; column: ColumnId }
 
 /** Create initial state, loading persisted filter from cache */
 export function createInitialState(): AppState {
@@ -55,6 +57,8 @@ export function createInitialState(): AppState {
     previewScrollOffset: 0,
     // Command palette state (spec 010)
     commandPaletteVisible: false,
+    // Column visibility (persisted)
+    columnVisibility: getColumnVisibility(),
   }
 }
 
@@ -98,9 +102,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case "SELECT":
+      // Trust caller to pass valid index (they know the filtered list length)
       return {
         ...state,
-        selectedIndex: Math.max(0, Math.min(state.prs.length - 1, action.index)),
+        selectedIndex: Math.max(0, action.index),
       }
 
     case "MOVE":
@@ -216,6 +221,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         // Adjust selection if needed
         selectedIndex: Math.min(state.selectedIndex, Math.max(0, prs.length - 1)),
       }
+    }
+
+    // Column visibility
+    case "TOGGLE_COLUMN": {
+      const columnVisibility = {
+        ...state.columnVisibility,
+        [action.column]: !state.columnVisibility[action.column],
+      }
+      return { ...state, columnVisibility }
     }
 
     default:

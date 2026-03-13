@@ -8,6 +8,19 @@ export type View = "list" | "detail"
 // Preview panel position
 export type PreviewPosition = "right" | "bottom" | null
 
+// Column visibility settings
+export type ColumnId = "state" | "checks" | "review" | "time" | "repo" | "author" | "id"
+
+export interface ColumnVisibility {
+  state: boolean
+  checks: boolean
+  review: boolean
+  time: boolean
+  repo: boolean
+  author: boolean
+  id: boolean
+}
+
 /**
  * Pull Request from GitHub API
  */
@@ -205,4 +218,8 @@ export interface AppState {
   // Command palette state (spec 010)
   /** Command palette visibility */
   commandPaletteVisible: boolean
+
+  // Column visibility
+  /** Which columns are visible in the PR list */
+  columnVisibility: ColumnVisibility
 }

@@ -2,7 +2,7 @@
  * Cache schema for stale-while-revalidate PR data
  */
 
-import type { PR } from "../types"
+import type { PR, ColumnVisibility } from "../types"
 
 export interface PRCache {
   /** Cached PRs */
@@ -13,6 +13,19 @@ export interface PRCache {
   repos: string[]
   /** Last active filter query */
   filterQuery?: string
+  /** Column visibility settings */
+  columnVisibility?: ColumnVisibility
+}
+
+/** Default column visibility - all columns visible */
+export const defaultColumnVisibility: ColumnVisibility = {
+  state: true,
+  checks: true,
+  review: true,
+  time: true,
+  repo: true,
+  author: true,
+  id: true,
 }
 
 export const defaultCache: PRCache = {
@@ -20,6 +33,7 @@ export const defaultCache: PRCache = {
   updatedAt: "",
   repos: [],
   filterQuery: "",
+  columnVisibility: defaultColumnVisibility,
 }
 
 /** Cache is considered stale after this many minutes */

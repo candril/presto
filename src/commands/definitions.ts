@@ -6,7 +6,42 @@ import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
 import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
 import { toggleStarAuthor, saveHistory } from "../history"
-import { getRepoName } from "../types"
+import { saveColumnVisibility } from "../cache"
+import { getRepoName, type ColumnId } from "../types"
+
+/** Column display names */
+const COLUMN_NAMES: Record<ColumnId, string> = {
+  state: "State",
+  checks: "Checks",
+  review: "Review",
+  time: "Time",
+  repo: "Repository",
+  author: "Author",
+  id: "PR ID",
+}
+
+/** Get column commands with current visibility state in labels */
+export function getColumnCommands(ctx: CommandContext): Command[] {
+  const columns: ColumnId[] = ["state", "checks", "review", "time", "repo", "author", "id"]
+  return columns.map((columnId) => ({
+    id: `column.${columnId}`,
+    label: `${ctx.columnVisibility[columnId] ? "Hide" : "Show"} ${COLUMN_NAMES[columnId]} column`,
+    category: "column" as const,
+    execute: async (execCtx: CommandContext) => {
+      execCtx.dispatch({ type: "TOGGLE_COLUMN", column: columnId })
+      const newVisibility = {
+        ...execCtx.columnVisibility,
+        [columnId]: !execCtx.columnVisibility[columnId],
+      }
+      saveColumnVisibility(newVisibility)
+      const visible = newVisibility[columnId]
+      return {
+        type: "success",
+        message: `${COLUMN_NAMES[columnId]} column ${visible ? "shown" : "hidden"}`,
+      }
+    },
+  }))
+}
 
 /** All available commands */
 export const commands: Command[] = [
@@ -157,6 +192,26 @@ export const commands: Command[] = [
       return { type: "success" }
     },
   },
+  {
+    id: "action.help",
+    label: "Show help",
+    category: "action",
+    shortcut: "?",
+    execute: async (ctx) => {
+      ctx.setShowHelp(true)
+      return { type: "success" }
+    },
+  },
+  {
+    id: "action.refresh",
+    label: "Refresh PRs",
+    category: "action",
+    shortcut: "R",
+    execute: async (ctx) => {
+      ctx.fetchPRs(true)
+      return { type: "success", message: "Refreshing..." }
+    },
+  },
 
   // ============================================================================
   // STATE CHANGES
@@ -282,17 +337,21 @@ export const commands: Command[] = [
       return { type: "success", message: `Rebase merged #${pr.number}` }
     },
   },
+
+  // Column commands are generated dynamically in getAvailableCommands
 ]
 
 /** Get commands filtered by context */
 export function getAvailableCommands(ctx: CommandContext): Command[] {
-  return commands.filter((cmd) => {
+  const filtered = commands.filter((cmd) => {
     // Check if command requires a PR
     if (cmd.requiresPR && !ctx.selectedPR) return false
     // Check dynamic availability
     if (cmd.available && !cmd.available(ctx)) return false
     return true
   })
+  // Add dynamic column commands with current visibility state
+  return [...filtered, ...getColumnCommands(ctx)]
 }
 
 /** Group commands by category */
@@ -315,6 +374,7 @@ export function formatCategory(category: string): string {
     filter: "FILTERS",
     action: "ACTIONS",
     state: "STATE CHANGES",
+    column: "COLUMNS",
   }
   return names[category] || category.toUpperCase()
 }

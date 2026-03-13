@@ -5,8 +5,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { getConfigDir } from "../config"
-import type { PR } from "../types"
-import { defaultCache, CACHE_STALE_MINUTES, type PRCache } from "./schema"
+import type { PR, ColumnVisibility } from "../types"
+import { defaultCache, defaultColumnVisibility, CACHE_STALE_MINUTES, type PRCache } from "./schema"
 
 /** Cache file path */
 const CACHE_FILE = join(getConfigDir(), "cache.json")
@@ -41,6 +41,19 @@ export function saveFilterQuery(filterQuery: string): void {
   const cache = loadCache()
   cache.filterQuery = filterQuery
   writeFileSync(CACHE_FILE, JSON.stringify(cache))
+}
+
+/** Save column visibility settings */
+export function saveColumnVisibility(columnVisibility: ColumnVisibility): void {
+  const cache = loadCache()
+  cache.columnVisibility = columnVisibility
+  writeFileSync(CACHE_FILE, JSON.stringify(cache))
+}
+
+/** Get column visibility from cache (with defaults) */
+export function getColumnVisibility(): ColumnVisibility {
+  const cache = loadCache()
+  return { ...defaultColumnVisibility, ...cache.columnVisibility }
 }
 
 /** Check if cache is valid for these repos */

@@ -3,13 +3,13 @@
  */
 
 import type { CliRenderer } from "@opentui/core"
-import type { PR } from "../types"
+import type { PR, ColumnVisibility } from "../types"
 import type { Config } from "../config"
 import type { History } from "../history"
 import type { AppAction } from "../state"
 
 /** Command categories for grouping */
-export type CommandCategory = "filter" | "action" | "state"
+export type CommandCategory = "filter" | "action" | "state" | "column"
 
 /** Result of executing a command */
 export type CommandResult =
@@ -26,6 +26,8 @@ export interface CommandContext {
   setHistory: (history: History) => void
   renderer: CliRenderer
   fetchPRs: (showAsRefresh?: boolean) => void
+  setShowHelp: (show: boolean) => void
+  columnVisibility: ColumnVisibility
 }
 
 /** Command definition */

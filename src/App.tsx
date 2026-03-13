@@ -113,6 +113,8 @@ export function App({ config, currentUser }: AppProps) {
     setHistory,
     renderer,
     fetchPRs,
+    setShowHelp,
+    columnVisibility: state.columnVisibility,
   }
 
   // Handle command palette results
@@ -157,7 +159,7 @@ export function App({ config, currentUser }: AppProps) {
               <text fg={theme.textDim}>Press {config.keys.refresh} to retry</text>
             </box>
           ) : (
-            <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} />
+            <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} columnVisibility={state.columnVisibility} />
           )}
 
           {/* Suggestions popup - anchored to bottom of content area */}

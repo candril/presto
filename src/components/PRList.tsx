@@ -7,7 +7,7 @@
 import { useRef, useEffect } from "react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { theme } from "../theme"
-import type { PR, CheckState, ReviewDecision } from "../types"
+import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
 import { getRepoName, getShortRepoName, computeCheckState } from "../types"
 import { formatRelativeTime } from "../utils/time"
 
@@ -45,12 +45,13 @@ const ICONS = {
 interface PRListProps {
   prs: PR[]
   selectedIndex: number
+  columnVisibility: ColumnVisibility
 }
 
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
 
   // Scroll to keep selected item visible with margin
@@ -82,13 +83,14 @@ export function PRList({ prs, selectedIndex }: PRListProps) {
 
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
-      <PRHeaderRow />
+      <PRHeaderRow columnVisibility={columnVisibility} />
       <scrollbox ref={scrollRef} flexGrow={1}>
         {prs.map((pr, index) => (
           <PRRow
             key={`${getRepoName(pr)}#${pr.number}`}
             pr={pr}
             selected={index === selectedIndex}
+            columnVisibility={columnVisibility}
           />
         ))}
       </scrollbox>
@@ -97,7 +99,8 @@ export function PRList({ prs, selectedIndex }: PRListProps) {
 }
 
 /** Header row with column labels */
-function PRHeaderRow() {
+function PRHeaderRow({ columnVisibility }: { columnVisibility: ColumnVisibility }) {
+  const v = columnVisibility
   return (
     <box
       height={1}
@@ -107,27 +110,27 @@ function PRHeaderRow() {
     >
       <text fg={theme.textDim}>
         {/* State (combined with draft) */}
-        {"S"}
-        {" "}
+        {v.state && "S"}
+        {v.state && " "}
         {/* Checks */}
-        {"C"}
-        {" "}
+        {v.checks && "C"}
+        {v.checks && " "}
         {/* Review */}
-        {"R"}
-        {"  "}
+        {v.review && "R"}
+        {v.review && "  "}
         {/* Time */}
-        {padLeft("Updated", COL.time)}
-        {"  "}
+        {v.time && padLeft("Updated", COL.time)}
+        {v.time && "  "}
         {/* Repo */}
-        {padRight("Repository", COL.repo)}
-        {" "}
+        {v.repo && padRight("Repository", COL.repo)}
+        {v.repo && " "}
         {/* Author */}
-        {padRight("Author", COL.author)}
-        {" "}
+        {v.author && padRight("Author", COL.author)}
+        {v.author && " "}
         {/* ID */}
-        {padRight("PR", COL.id)}
-        {" "}
-        {/* Title */}
+        {v.id && padRight("PR", COL.id)}
+        {v.id && " "}
+        {/* Title - always visible */}
         {"Title"}
       </text>
     </box>
@@ -137,9 +140,11 @@ function PRHeaderRow() {
 interface PRRowProps {
   pr: PR
   selected: boolean
+  columnVisibility: ColumnVisibility
 }
 
-function PRRow({ pr, selected }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility }: PRRowProps) {
+  const v = columnVisibility
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(computeCheckState(pr.statusCheckRollup))
   const reviewIndicator = getReviewIndicator(pr.reviewDecision)
@@ -158,26 +163,26 @@ function PRRow({ pr, selected }: PRRowProps) {
     >
       <text>
         {/* State (Open/Draft/Merged/Closed) */}
-        <span fg={stateIndicator.color}>{stateIndicator.icon}</span>
-        {" "}
+        {v.state && <span fg={stateIndicator.color}>{stateIndicator.icon}</span>}
+        {v.state && " "}
         {/* Checks */}
-        <span fg={checkIndicator.color}>{checkIndicator.icon}</span>
-        {" "}
+        {v.checks && <span fg={checkIndicator.color}>{checkIndicator.icon}</span>}
+        {v.checks && " "}
         {/* Review */}
-        <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>
-        {"  "}
+        {v.review && <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>}
+        {v.review && "  "}
         {/* Time - right-aligned in fixed width */}
-        <span fg={theme.textMuted}>{padLeft(timeAgo, COL.time)}</span>
-        {"  "}
+        {v.time && <span fg={theme.textMuted}>{padLeft(timeAgo, COL.time)}</span>}
+        {v.time && "  "}
         {/* Repo - fixed width */}
-        <span fg={theme.primary}>{padRight(truncate(repoName, COL.repo), COL.repo)}</span>
-        {" "}
+        {v.repo && <span fg={theme.primary}>{padRight(truncate(repoName, COL.repo), COL.repo)}</span>}
+        {v.repo && " "}
         {/* Author - fixed width */}
-        <span fg={theme.textMuted}>{padRight(truncate(author, COL.author), COL.author)}</span>
-        {" "}
+        {v.author && <span fg={theme.textMuted}>{padRight(truncate(author, COL.author), COL.author)}</span>}
+        {v.author && " "}
         {/* PR ID */}
-        <span fg={theme.textDim}>{padRight(prId, COL.id)}</span>
-        {" "}
+        {v.id && <span fg={theme.textDim}>{padRight(prId, COL.id)}</span>}
+        {v.id && " "}
         {/* Title - takes remaining space */}
         <span fg={theme.text}>{pr.title}</span>
       </text>

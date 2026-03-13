@@ -16,6 +16,7 @@ import {
   type CommandContext,
   type CommandResult,
 } from "../commands"
+import { fuzzyFilter } from "../utils/fuzzy"
 
 interface CommandPaletteProps {
   visible: boolean
@@ -48,19 +49,17 @@ export function CommandPalette({
   // Get available commands and filter by query
   const availableCommands = useMemo(
     () => getAvailableCommands(context),
-    [context.selectedPR]
+    [context.selectedPR, context.columnVisibility]
   )
 
   const filteredCommands = useMemo(() => {
     if (!query) return availableCommands
 
-    const q = query.toLowerCase()
-    return availableCommands.filter(
-      (cmd) =>
-        cmd.label.toLowerCase().includes(q) ||
-        cmd.shortcut?.toLowerCase().includes(q) ||
-        cmd.category.toLowerCase().includes(q)
-    )
+    return fuzzyFilter(query, availableCommands, (cmd) => [
+      cmd.label,
+      cmd.shortcut ?? "",
+      cmd.category,
+    ])
   }, [availableCommands, query])
 
   const groupedCommands = useMemo(
@@ -99,11 +98,11 @@ export function CommandPalette({
   useKeyboard((key) => {
     if (!visible) return
 
-    // Confirmation mode
+    // Confirmation mode - Y to confirm, n/Escape to cancel
     if (confirming) {
-      if (key.name === "return") {
+      if (key.name === "y" || key.name === "Y") {
         handleExecute(confirming)
-      } else if (key.name === "escape") {
+      } else if (key.name === "n" || key.name === "N" || key.name === "escape") {
         setConfirming(null)
       }
       return
@@ -187,7 +186,6 @@ export function CommandPalette({
             paddingBottom={1}
           >
             <text fg={theme.warning}>Confirm Action</text>
-            <text fg={theme.textMuted}>esc</text>
           </box>
           {/* Message */}
           <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
@@ -201,8 +199,11 @@ export function CommandPalette({
           </box>
           {/* Footer */}
           <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
-            <text fg={theme.textMuted}>
-              Press Enter to confirm, Escape to cancel
+            <text>
+              <span fg={theme.success}>Y</span>
+              <span fg={theme.textMuted}>es / </span>
+              <span fg={theme.error}>n</span>
+              <span fg={theme.textMuted}>o</span>
             </text>
           </box>
         </box>
@@ -350,6 +351,8 @@ function CommandRow({
 }) {
   const bg = selected ? theme.selection : undefined
   const fg = selected ? theme.text : theme.textDim
+  // Use brighter shortcut color when selected for contrast
+  const shortcutFg = selected ? theme.textDim : theme.textMuted
 
   return (
     <box
@@ -364,7 +367,7 @@ function CommandRow({
         <span fg={fg}>{command.label}</span>
         {command.dangerous && <span fg={theme.warning}> !</span>}
       </text>
-      {command.shortcut && <text fg={theme.textMuted}>{command.shortcut}</text>}
+      {command.shortcut && <text fg={shortcutFg}>{command.shortcut}</text>}
     </box>
   )
 }
