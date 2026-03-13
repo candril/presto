@@ -16,12 +16,20 @@ export async function openInBrowser(pr: PR): Promise<void> {
 
 /**
  * Open PR in riff for code review
- * Returns a function to call that suspends the renderer and opens riff
+ * Spawns riff with full terminal inheritance
  */
 export async function openInRiff(pr: PR): Promise<void> {
   const repo = getRepoName(pr)
   const target = `gh:${repo}#${pr.number}`
-  await $`riff ${target}`
+  
+  // Use Bun.spawn with inherit for proper terminal handling
+  const proc = Bun.spawn(["riff", target], {
+    stdin: "inherit",
+    stdout: "inherit", 
+    stderr: "inherit",
+  })
+  
+  await proc.exited
 }
 
 /**

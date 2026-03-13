@@ -48,6 +48,30 @@ export async function listReviewRequests(): Promise<PR[]> {
 }
 
 /**
+ * List PRs from a repo, updated within the last N days
+ */
+export async function listRecentPRs(repo: string, days: number): Promise<PR[]> {
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+  const sinceStr = since.toISOString().split("T")[0]
+  
+  const args = [
+    "pr", "list",
+    "-R", repo,
+    "--json", PR_FIELDS,
+    "--limit", "100",
+    "--search", `updated:>=${sinceStr}`,
+  ]
+
+  try {
+    const result = await $`gh ${args}`.json()
+    return result as PR[]
+  } catch {
+    return []
+  }
+}
+
+/**
  * List PRs from multiple repositories
  */
 export async function listPRsFromRepos(repos: string[]): Promise<PR[]> {
@@ -58,6 +82,29 @@ export async function listPRsFromRepos(repos: string[]): Promise<PR[]> {
 
   // Fetch from all repos in parallel
   const results = await Promise.allSettled(repos.map((repo) => listPRs(repo)))
+
+  // Aggregate successful results
+  const allPRs: PR[] = []
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      allPRs.push(...result.value)
+    }
+  }
+
+  // Sort by updatedAt (most recent first)
+  return allPRs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+}
+
+/**
+ * List recent PRs from multiple repositories (fast initial load)
+ */
+export async function listRecentPRsFromRepos(repos: string[], days: number): Promise<PR[]> {
+  if (repos.length === 0) {
+    return listPRs()
+  }
+
+  // Fetch recent PRs from all repos in parallel
+  const results = await Promise.allSettled(repos.map((repo) => listRecentPRs(repo, days)))
 
   // Aggregate successful results
   const allPRs: PR[] = []

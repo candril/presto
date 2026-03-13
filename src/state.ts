@@ -10,10 +10,12 @@ export type AppAction =
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_PRS"; prs: PR[] }
+  | { type: "APPEND_PRS"; prs: PR[] }
   | { type: "SELECT"; index: number }
   | { type: "MOVE"; delta: number }
   | { type: "OPEN_DISCOVERY" }
   | { type: "CLOSE_DISCOVERY" }
+  | { type: "ACCEPT_DISCOVERY" }
   | { type: "SET_DISCOVERY_QUERY"; query: string }
   | { type: "SHOW_MESSAGE"; message: string }
   | { type: "CLEAR_MESSAGE" }
@@ -52,6 +54,19 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectedIndex: Math.min(state.selectedIndex, Math.max(0, action.prs.length - 1)),
       }
 
+    case "APPEND_PRS": {
+      // Merge new PRs, avoiding duplicates by PR URL, keep sorted by updatedAt
+      const existingUrls = new Set(state.prs.map(pr => pr.url))
+      const newPRs = action.prs.filter(pr => !existingUrls.has(pr.url))
+      const allPRs = [...state.prs, ...newPRs].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )
+      return {
+        ...state,
+        prs: allPRs,
+      }
+    }
+
     case "SELECT":
       return {
         ...state,
@@ -68,7 +83,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         discoveryVisible: true,
-        discoveryQuery: "",
+        // Keep existing query so filter is still visible
       }
 
     case "CLOSE_DISCOVERY":
@@ -76,6 +91,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         discoveryVisible: false,
         discoveryQuery: "",
+      }
+
+    case "ACCEPT_DISCOVERY":
+      return {
+        ...state,
+        discoveryVisible: false,
+        // Keep the query - filter stays active
       }
 
     case "SET_DISCOVERY_QUERY":

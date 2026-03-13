@@ -27,6 +27,7 @@ interface DiscoveryBarProps {
   query: string
   onChange: (query: string) => void
   onClose: () => void
+  onAccept: () => void
   history: History
   prs: PR[]
   filteredCount: number
@@ -36,6 +37,7 @@ export function DiscoveryBar({
   query,
   onChange,
   onClose,
+  onAccept,
   history,
   prs,
   filteredCount,
@@ -80,7 +82,13 @@ export function DiscoveryBar({
       return
     }
 
-    // Close with Escape
+    // Accept search with Enter - close but keep filter
+    if (key.name === "return") {
+      onAccept()
+      return
+    }
+
+    // Close with Escape - clears filter
     if (key.name === "escape") {
       onClose()
       return
@@ -99,7 +107,7 @@ export function DiscoveryBar({
         <text fg={theme.primary}>/</text>
         <input
           value={query}
-          onChange={onChange}
+          onInput={onChange}
           placeholder="@author, repo:name, or text..."
           focused={true}
           flexGrow={1}
@@ -113,7 +121,7 @@ export function DiscoveryBar({
       </box>
 
       {/* Suggestions */}
-      {suggestions.length > 0 && (
+      {suggestions.length > 0 ? (
         <box flexDirection="column" paddingX={1}>
           {suggestions.slice(0, 8).map((suggestion, index) => (
             <SuggestionRow
@@ -123,7 +131,11 @@ export function DiscoveryBar({
             />
           ))}
         </box>
-      )}
+      ) : query ? (
+        <box paddingX={1}>
+          <text fg={theme.textDim}>No matches for "{query}" (prs: {prs.length})</text>
+        </box>
+      ) : null}
     </box>
   )
 }
@@ -216,35 +228,108 @@ function buildSuggestions(
         label: filter,
       })
     }
-  } else if (q.startsWith("@")) {
-    // Typing @author - suggest authors
-    const partial = q.slice(1)
-    const authors = getAllAuthors(prs, history)
+  } else {
+    // Check the last token being typed for special prefixes
+    const tokens = q.split(/\s+/)
+    const lastToken = tokens[tokens.length - 1] || ""
+    const prefix = tokens.slice(0, -1).join(" ")
+    const prefixWithSpace = prefix ? prefix + " " : ""
 
-    for (const author of authors) {
-      if (author.login.toLowerCase().includes(partial)) {
-        items.push({
-          type: "author",
-          value: `@${author.login}`,
-          label: author.login,
-          count: author.count,
-          starred: history.starredAuthors.includes(author.login),
-        })
+    if (lastToken.startsWith("@")) {
+      // Typing @author - suggest authors
+      const partial = lastToken.slice(1)
+      const authors = getAllAuthors(prs, history)
+
+      for (const author of authors) {
+        if (author.login.toLowerCase().includes(partial)) {
+          items.push({
+            type: "author",
+            value: `${prefixWithSpace}@${author.login}`,
+            label: author.login,
+            count: author.count,
+            starred: history.starredAuthors.includes(author.login),
+          })
+        }
       }
-    }
-  } else if (q.startsWith("repo:")) {
-    // Typing repo: - suggest repos
-    const partial = q.slice(5)
-    const repos = getAllRepos(prs)
+    } else if (lastToken.startsWith("repo:")) {
+      // Typing repo: - suggest repos
+      const partial = lastToken.slice(5)
+      const repos = getAllRepos(prs)
 
-    for (const repo of repos) {
-      if (repo.name.toLowerCase().includes(partial)) {
-        items.push({
-          type: "repo",
-          value: `repo:${repo.name}`,
-          label: repo.name,
-          count: repo.count,
-        })
+      for (const repo of repos) {
+        if (repo.name.toLowerCase().includes(partial)) {
+          items.push({
+            type: "repo",
+            value: `${prefixWithSpace}repo:${repo.name}`,
+            label: repo.name,
+            count: repo.count,
+          })
+        }
+      }
+    } else if (lastToken.startsWith("state:")) {
+      // Typing state: - suggest state options
+      const partial = lastToken.slice(6)
+      const states = [
+        { value: "open", label: "Open", count: countByState(prs, "open") },
+        { value: "closed", label: "Closed", count: countByState(prs, "closed") },
+        { value: "merged", label: "Merged", count: countByState(prs, "merged") },
+        { value: "draft", label: "Draft", count: countByState(prs, "draft") },
+      ]
+
+      for (const state of states) {
+        if (state.value.includes(partial) || state.label.toLowerCase().includes(partial)) {
+          items.push({
+            type: "quick",
+            value: `${prefixWithSpace}state:${state.value}`,
+            label: state.label,
+            count: state.count,
+          })
+        }
+      }
+    } else {
+      // Plain text - filter all suggestion types that match
+
+      // Filter matching authors
+      const authors = getAllAuthors(prs, history)
+      for (const author of authors) {
+        if (author.login.toLowerCase().includes(lastToken)) {
+          items.push({
+            type: "author",
+            value: `@${author.login}`,
+            label: author.login,
+            count: author.count,
+            starred: history.starredAuthors.includes(author.login),
+          })
+        }
+      }
+
+      // Filter matching repos
+      const repos = getAllRepos(prs)
+      for (const repo of repos) {
+        // Match against short name (after /) or full name
+        const shortName = repo.name.split("/")[1] || repo.name
+        if (
+          repo.name.toLowerCase().includes(lastToken) ||
+          shortName.toLowerCase().includes(lastToken)
+        ) {
+          items.push({
+            type: "repo",
+            value: `repo:${repo.name}`,
+            label: repo.name,
+            count: repo.count,
+          })
+        }
+      }
+
+      // Filter matching recent filters
+      for (const filter of history.recentFilters) {
+        if (filter.toLowerCase().includes(lastToken)) {
+          items.push({
+            type: "filter",
+            value: filter,
+            label: filter,
+          })
+        }
       }
     }
   }
@@ -257,6 +342,24 @@ function countAuthorPRs(prs: PR[], author: string): number {
   return prs.filter(
     (pr) => pr.author.login.toLowerCase() === author.toLowerCase()
   ).length
+}
+
+/** Count PRs by state */
+function countByState(prs: PR[], state: string): number {
+  return prs.filter((pr) => {
+    switch (state) {
+      case "open":
+        return pr.state === "OPEN" && !pr.isDraft
+      case "closed":
+        return pr.state === "CLOSED"
+      case "merged":
+        return pr.state === "MERGED"
+      case "draft":
+        return pr.isDraft
+      default:
+        return false
+    }
+  }).length
 }
 
 /** Get all authors from PRs and history, sorted by PR count */

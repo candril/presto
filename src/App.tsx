@@ -11,7 +11,7 @@ import { PRList } from "./components/PRList"
 import { Loading } from "./components/Loading"
 import { DiscoveryBar } from "./components/DiscoveryBar"
 import { appReducer, initialState } from "./state"
-import { listPRs, listPRsFromRepos } from "./providers/github"
+import { listPRs, listPRsFromRepos, listRecentPRsFromRepos } from "./providers/github"
 import { parseFilter, applyFilter, isFilterActive } from "./discovery"
 import {
   loadHistory,
@@ -32,6 +32,8 @@ export function App({ config }: AppProps) {
   const [state, dispatch] = useReducer(appReducer, initialState)
   const [history, setHistory] = useState<History>(() => loadHistory())
 
+
+
   // Parse and apply filter to PRs
   const filter = useMemo(
     () => parseFilter(state.discoveryQuery),
@@ -41,6 +43,11 @@ export function App({ config }: AppProps) {
     () => applyFilter(state.prs, filter),
     [state.prs, filter]
   )
+
+  // Reset selection when filter changes
+  useEffect(() => {
+    dispatch({ type: "SELECT", index: 0 })
+  }, [state.discoveryQuery])
 
   // Clear message after timeout
   useEffect(() => {
@@ -52,24 +59,63 @@ export function App({ config }: AppProps) {
     }
   }, [state.message])
 
-  // Fetch PRs on mount
-  const fetchPRs = useCallback(async () => {
-    dispatch({ type: "SET_LOADING", loading: true })
-    try {
-      const repos = config.repositories.map((r) => r.name)
-      const prs = repos.length > 0 ? await listPRsFromRepos(repos) : await listPRs()
-      dispatch({ type: "SET_PRS", prs })
-    } catch (err) {
-      dispatch({
-        type: "SET_ERROR",
-        error: err instanceof Error ? err.message : "Failed to fetch PRs",
-      })
+  // Fetch PRs on mount - fast initial load, then background load
+  const fetchPRs = useCallback(async (fullRefresh = false) => {
+    const repos = config.repositories.map((r) => r.name)
+    
+    if (repos.length === 0) {
+      // Single repo - just load normally
+      dispatch({ type: "SET_LOADING", loading: true })
+      try {
+        const prs = await listPRs()
+        dispatch({ type: "SET_PRS", prs })
+      } catch (err) {
+        dispatch({
+          type: "SET_ERROR",
+          error: err instanceof Error ? err.message : "Failed to fetch PRs",
+        })
+      }
+      return
     }
-  }, [config.repositories])
+
+    // Multi-repo: fast initial load (last 7 days), then background append older PRs
+    if (!fullRefresh && state.prs.length === 0) {
+      dispatch({ type: "SET_LOADING", loading: true })
+      try {
+        // Fast: load PRs from last 7 days
+        const recentPRs = await listRecentPRsFromRepos(repos, 7)
+        dispatch({ type: "SET_PRS", prs: recentPRs })
+        
+        // Background: load all PRs and append older ones
+        listPRsFromRepos(repos).then((allPRs) => {
+          dispatch({ type: "APPEND_PRS", prs: allPRs })
+        }).catch(() => {
+          // Silently ignore background load errors
+        })
+      } catch (err) {
+        dispatch({
+          type: "SET_ERROR",
+          error: err instanceof Error ? err.message : "Failed to fetch PRs",
+        })
+      }
+    } else {
+      // Full refresh requested or already have data
+      dispatch({ type: "SET_LOADING", loading: true })
+      try {
+        const prs = await listPRsFromRepos(repos)
+        dispatch({ type: "SET_PRS", prs })
+      } catch (err) {
+        dispatch({
+          type: "SET_ERROR",
+          error: err instanceof Error ? err.message : "Failed to fetch PRs",
+        })
+      }
+    }
+  }, [config.repositories, state.prs.length])
 
   useEffect(() => {
     fetchPRs()
-  }, [fetchPRs])
+  }, []) // Only run on mount, not when fetchPRs changes
 
   // Keyboard handling
   useKeyboard((key) => {
@@ -117,9 +163,9 @@ export function App({ config }: AppProps) {
       return
     }
 
-    // Refresh
+    // Refresh (full)
     if (key.name === config.keys.refresh) {
-      fetchPRs()
+      fetchPRs(true)
       return
     }
 
@@ -156,8 +202,8 @@ export function App({ config }: AppProps) {
       return
     }
 
-    // Open in riff (suspend TUI)
-    if (key.name === "r") {
+    // Open in riff (suspend TUI) - Enter or r
+    if (key.name === "return" || key.name === "r") {
       renderer.suspend()
       openInRiff(selectedPR).finally(() => {
         renderer.resume()
@@ -199,10 +245,9 @@ export function App({ config }: AppProps) {
       {state.discoveryVisible && (
         <DiscoveryBar
           query={state.discoveryQuery}
-          onChange={(query) =>
-            dispatch({ type: "SET_DISCOVERY_QUERY", query })
-          }
+          onChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
           onClose={() => dispatch({ type: "CLOSE_DISCOVERY" })}
+          onAccept={() => dispatch({ type: "ACCEPT_DISCOVERY" })}
           history={history}
           prs={state.prs}
           filteredCount={filteredPRs.length}
@@ -257,8 +302,8 @@ function buildHints(
   } else if (state.prs.length > 0) {
     hints.push("/: search")
     hints.push("j/k: navigate")
+    hints.push("Enter: riff")
     hints.push("o: browser")
-    hints.push("r: riff")
     hints.push("y: copy")
     hints.push("s: star")
     if (isFilterActive(filter)) {

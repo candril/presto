@@ -4,6 +4,8 @@
  * Column order: State | Draft | Checks | Review | Time | Repo | Author | ID | Title
  */
 
+import { useRef, useEffect } from "react"
+import type { ScrollBoxRenderable } from "@opentui/core"
 import { theme } from "../theme"
 import type { PR, CheckState, ReviewDecision } from "../types"
 import { getRepoName, getShortRepoName } from "../types"
@@ -23,13 +25,11 @@ const COL = {
 
 /** Unicode icons */
 const ICONS = {
-  // PR state icons (open/merged/closed)
-  prOpen: "○",      // open circle
+  // Combined PR state icons (includes draft)
+  prOpen: "○",      // open circle (ready for review)
+  prDraft: "◌",     // dotted circle (draft)
   prMerged: "●",    // filled circle (merged)
   prClosed: "✗",    // x mark (closed)
-  // Draft status icons
-  draft: "◌",       // dotted circle (draft)
-  ready: "✓",       // check mark (ready)
   // CI check icons
   checkSuccess: "✓", // check mark
   checkFailure: "✗", // x mark
@@ -47,7 +47,31 @@ interface PRListProps {
   selectedIndex: number
 }
 
+// Number of lines to keep visible above/below cursor when scrolling
+const SCROLL_MARGIN = 3
+
 export function PRList({ prs, selectedIndex }: PRListProps) {
+  const scrollRef = useRef<ScrollBoxRenderable>(null)
+
+  // Scroll to keep selected item visible with margin
+  useEffect(() => {
+    const scrollbox = scrollRef.current
+    if (!scrollbox) return
+
+    const viewportHeight = scrollbox.viewport?.height ?? 20
+    const scrollTop = scrollbox.scrollTop
+    const scrollBottom = scrollTop + viewportHeight
+
+    // Check if selected is above visible area (with margin)
+    if (selectedIndex < scrollTop + SCROLL_MARGIN) {
+      scrollbox.scrollTo(Math.max(0, selectedIndex - SCROLL_MARGIN))
+    }
+    // Check if selected is below visible area (with margin)
+    else if (selectedIndex >= scrollBottom - SCROLL_MARGIN) {
+      scrollbox.scrollTo(selectedIndex - viewportHeight + SCROLL_MARGIN + 1)
+    }
+  }, [selectedIndex])
+
   if (prs.length === 0) {
     return (
       <box flexGrow={1} justifyContent="center" alignItems="center">
@@ -59,13 +83,15 @@ export function PRList({ prs, selectedIndex }: PRListProps) {
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
       <PRHeaderRow />
-      {prs.map((pr, index) => (
-        <PRRow
-          key={`${getRepoName(pr)}#${pr.number}`}
-          pr={pr}
-          selected={index === selectedIndex}
-        />
-      ))}
+      <scrollbox ref={scrollRef} flexGrow={1}>
+        {prs.map((pr, index) => (
+          <PRRow
+            key={`${getRepoName(pr)}#${pr.number}`}
+            pr={pr}
+            selected={index === selectedIndex}
+          />
+        ))}
+      </scrollbox>
     </box>
   )
 }
@@ -80,11 +106,8 @@ function PRHeaderRow() {
       paddingRight={1}
     >
       <text fg={theme.textDim}>
-        {/* State */}
+        {/* State (combined with draft) */}
         {"S"}
-        {" "}
-        {/* Draft */}
-        {"D"}
         {" "}
         {/* Checks */}
         {"C"}
@@ -118,7 +141,6 @@ interface PRRowProps {
 
 function PRRow({ pr, selected }: PRRowProps) {
   const stateIndicator = getStateIndicator(pr)
-  const draftIndicator = getDraftIndicator(pr.isDraft)
   const checkIndicator = getCheckIndicator(pr.statusCheckRollup?.state)
   const reviewIndicator = getReviewIndicator(pr.reviewDecision)
   const timeAgo = formatRelativeTime(pr.updatedAt)
@@ -135,11 +157,8 @@ function PRRow({ pr, selected }: PRRowProps) {
       paddingRight={1}
     >
       <text>
-        {/* State (Open/Merged/Closed) */}
+        {/* State (Open/Draft/Merged/Closed) */}
         <span fg={stateIndicator.color}>{stateIndicator.icon}</span>
-        {" "}
-        {/* Draft status */}
-        <span fg={draftIndicator.color}>{draftIndicator.icon}</span>
         {" "}
         {/* Checks */}
         <span fg={checkIndicator.color}>{checkIndicator.icon}</span>
@@ -166,7 +185,7 @@ function PRRow({ pr, selected }: PRRowProps) {
   )
 }
 
-/** Get state indicator for PR (Open/Merged/Closed) */
+/** Get state indicator for PR (Open/Draft/Merged/Closed) */
 function getStateIndicator(pr: PR): { icon: string; color: string } {
   switch (pr.state) {
     case "MERGED":
@@ -175,16 +194,12 @@ function getStateIndicator(pr: PR): { icon: string; color: string } {
       return { icon: ICONS.prClosed, color: theme.prClosed }
     case "OPEN":
     default:
+      // Draft is a sub-state of Open
+      if (pr.isDraft) {
+        return { icon: ICONS.prDraft, color: theme.prDraft }
+      }
       return { icon: ICONS.prOpen, color: theme.prOpen }
   }
-}
-
-/** Get draft status indicator */
-function getDraftIndicator(isDraft: boolean): { icon: string; color: string } {
-  if (isDraft) {
-    return { icon: ICONS.draft, color: theme.prDraft }
-  }
-  return { icon: ICONS.ready, color: theme.success }
 }
 
 /** Get CI check status indicator */

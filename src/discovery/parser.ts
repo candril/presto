@@ -100,9 +100,10 @@ export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
       if (!matches) return false
     }
 
-    // Text search in title and author
+    // Text search in title, author, and repo
     if (filter.text) {
-      const searchable = `${pr.title} ${pr.author.login}`.toLowerCase()
+      const repoName = getRepoName(pr)
+      const searchable = `${pr.title} ${pr.author.login} ${repoName}`.toLowerCase()
       if (!searchable.includes(filter.text)) return false
     }
 
