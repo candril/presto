@@ -1,0 +1,32 @@
+{
+  "name": "presto",
+  "version": "0.1.0",
+  "description": "Terminal-based pull request discovery and management tool",
+  "module": "src/index.tsx",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "presto": "./dist/presto"
+  },
+  "scripts": {
+    "dev": "bun run src/index.tsx",
+    "build": "bun build src/index.tsx --compile --outfile dist/presto",
+    "build:all": "bun run build:macos-arm64 && bun run build:macos-x64 && bun run build:linux-x64",
+    "build:macos-arm64": "bun build src/index.tsx --compile --target=bun-darwin-arm64 --outfile dist/presto-darwin-arm64",
+    "build:macos-x64": "bun build src/index.tsx --compile --target=bun-darwin-x64 --outfile dist/presto-darwin-x64",
+    "build:linux-x64": "bun build src/index.tsx --compile --target=bun-linux-x64 --outfile dist/presto-linux-x64",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^18.2.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.81",
+    "@opentui/react": "^0.1.81",
+    "react": "^18.2.0"
+  }
+}
