@@ -19,6 +19,7 @@ import {
   toggleStarAuthor,
   type History,
 } from "./history"
+import { openInBrowser, openInRiff, copyPRUrl } from "./actions"
 import { theme } from "./theme"
 import type { Config } from "./config"
 
@@ -141,6 +142,40 @@ export function App({ config }: AppProps) {
       dispatch({ type: "SELECT", index: filteredPRs.length - 1 })
       return
     }
+
+    // External tools
+    const selectedPR = filteredPRs[state.selectedIndex]
+    if (!selectedPR) return
+
+    // Open in browser
+    if (key.name === "o") {
+      dispatch({ type: "SHOW_MESSAGE", message: "Opening in browser..." })
+      openInBrowser(selectedPR).catch(() => {
+        dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
+      })
+      return
+    }
+
+    // Open in riff (suspend TUI)
+    if (key.name === "r") {
+      renderer.suspend()
+      openInRiff(selectedPR).finally(() => {
+        renderer.resume()
+      })
+      return
+    }
+
+    // Copy URL
+    if (key.name === "y") {
+      copyPRUrl(selectedPR)
+        .then(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: "URL copied to clipboard" })
+        })
+        .catch(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: "Failed to copy URL" })
+        })
+      return
+    }
   })
 
   // Build status bar hints
@@ -222,7 +257,10 @@ function buildHints(
   } else if (state.prs.length > 0) {
     hints.push("/: search")
     hints.push("j/k: navigate")
-    hints.push("s: star author")
+    hints.push("o: browser")
+    hints.push("r: riff")
+    hints.push("y: copy")
+    hints.push("s: star")
     if (isFilterActive(filter)) {
       hints.push("Esc: clear filter")
     }
