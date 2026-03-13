@@ -1,10 +1,5 @@
 /**
- * Discovery bar component - search and filter PRs
- *
- * Features:
- * - Filter by @author, repo:name, or plain text
- * - Smart suggestions from history and current PRs
- * - Live filtering as you type
+ * Discovery suggestions dropdown - shows below header when filter is focused
  */
 
 import { useState, useMemo, useEffect } from "react"
@@ -14,7 +9,7 @@ import type { History } from "../history"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
 
-/** Suggestion item in the discovery bar */
+/** Suggestion item */
 interface Suggestion {
   type: "author" | "repo" | "quick" | "filter"
   value: string
@@ -23,25 +18,21 @@ interface Suggestion {
   starred?: boolean
 }
 
-interface DiscoveryBarProps {
+interface DiscoverySuggestionsProps {
   query: string
   onChange: (query: string) => void
   onClose: () => void
-  onAccept: () => void
   history: History
   prs: PR[]
-  filteredCount: number
 }
 
-export function DiscoveryBar({
+export function DiscoverySuggestions({
   query,
   onChange,
   onClose,
-  onAccept,
   history,
   prs,
-  filteredCount,
-}: DiscoveryBarProps) {
+}: DiscoverySuggestionsProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   // Build suggestions based on current query
@@ -56,25 +47,17 @@ export function DiscoveryBar({
 
   // Handle keyboard navigation
   useKeyboard((key) => {
-    // Navigate suggestions with ctrl-n/ctrl-p or arrows
-    if (key.name === "n" && key.ctrl) {
+    // Navigate suggestions
+    if (key.name === "down" || (key.name === "n" && key.ctrl)) {
       setSelectedIndex((i) => Math.min(suggestions.length - 1, i + 1))
       return
     }
-    if (key.name === "p" && key.ctrl) {
-      setSelectedIndex((i) => Math.max(0, i - 1))
-      return
-    }
-    if (key.name === "down") {
-      setSelectedIndex((i) => Math.min(suggestions.length - 1, i + 1))
-      return
-    }
-    if (key.name === "up") {
+    if (key.name === "up" || (key.name === "p" && key.ctrl)) {
       setSelectedIndex((i) => Math.max(0, i - 1))
       return
     }
 
-    // Select suggestion with Tab or ctrl-y
+    // Select suggestion with Tab or Ctrl-Y
     if (key.name === "tab" || (key.name === "y" && key.ctrl)) {
       if (suggestions[selectedIndex]) {
         onChange(suggestions[selectedIndex].value)
@@ -82,60 +65,30 @@ export function DiscoveryBar({
       return
     }
 
-    // Accept search with Enter - close but keep filter
-    if (key.name === "return") {
-      onAccept()
-      return
-    }
-
-    // Close with Escape - clears filter
+    // Escape clears filter
     if (key.name === "escape") {
       onClose()
       return
     }
   })
 
+  if (suggestions.length === 0) {
+    return null
+  }
+
   return (
     <box
-      height={Math.min(2 + suggestions.length, 12)}
-      width="100%"
       flexDirection="column"
       backgroundColor={theme.bg}
+      maxHeight={10}
     >
-      {/* Search input row */}
-      <box height={1} paddingX={1} flexDirection="row">
-        <text fg={theme.primary}>/</text>
-        <input
-          value={query}
-          onInput={onChange}
-          placeholder="@author, repo:name, or text..."
-          focused={true}
-          flexGrow={1}
-          backgroundColor={theme.bg}
-          textColor={theme.text}
-          placeholderColor={theme.textDim}
+      {suggestions.slice(0, 8).map((suggestion, index) => (
+        <SuggestionRow
+          key={`${suggestion.type}-${suggestion.value}`}
+          suggestion={suggestion}
+          selected={index === selectedIndex}
         />
-        <text fg={theme.textDim}>
-          {filteredCount}/{prs.length}
-        </text>
-      </box>
-
-      {/* Suggestions */}
-      {suggestions.length > 0 ? (
-        <box flexDirection="column" paddingX={1}>
-          {suggestions.slice(0, 8).map((suggestion, index) => (
-            <SuggestionRow
-              key={`${suggestion.type}-${suggestion.value}`}
-              suggestion={suggestion}
-              selected={index === selectedIndex}
-            />
-          ))}
-        </box>
-      ) : query ? (
-        <box paddingX={1}>
-          <text fg={theme.textDim}>No matches for "{query}" (prs: {prs.length})</text>
-        </box>
-      ) : null}
+      ))}
     </box>
   )
 }
@@ -159,7 +112,7 @@ function SuggestionRow({
           : ">"
 
   return (
-    <box height={1} backgroundColor={selected ? theme.headerBg : undefined}>
+    <box height={1} paddingX={1} backgroundColor={selected ? theme.headerBg : undefined}>
       <text>
         <span fg={suggestion.starred ? theme.warning : theme.textDim}>
           {icon}
@@ -306,7 +259,6 @@ function buildSuggestions(
       // Filter matching repos
       const repos = getAllRepos(prs)
       for (const repo of repos) {
-        // Match against short name (after /) or full name
         const shortName = repo.name.split("/")[1] || repo.name
         if (
           repo.name.toLowerCase().includes(lastToken) ||
@@ -337,14 +289,12 @@ function buildSuggestions(
   return items
 }
 
-/** Count PRs by a specific author */
 function countAuthorPRs(prs: PR[], author: string): number {
   return prs.filter(
     (pr) => pr.author.login.toLowerCase() === author.toLowerCase()
   ).length
 }
 
-/** Count PRs by state */
 function countByState(prs: PR[], state: string): number {
   return prs.filter((pr) => {
     switch (state) {
@@ -362,7 +312,6 @@ function countByState(prs: PR[], state: string): number {
   }).length
 }
 
-/** Get all authors from PRs and history, sorted by PR count */
 function getAllAuthors(
   prs: PR[],
   history: History
@@ -374,7 +323,6 @@ function getAllAuthors(
     counts.set(login, (counts.get(login) || 0) + 1)
   }
 
-  // Sort: starred first, then by count
   return [...counts.entries()]
     .map(([login, count]) => ({ login, count }))
     .sort((a, b) => {
@@ -386,7 +334,6 @@ function getAllAuthors(
     })
 }
 
-/** Get all repos from PRs, sorted by PR count */
 function getAllRepos(prs: PR[]): { name: string; count: number }[] {
   const counts = new Map<string, number>()
 
@@ -400,7 +347,6 @@ function getAllRepos(prs: PR[]): { name: string; count: number }[] {
     .sort((a, b) => b.count - a.count)
 }
 
-/** Get top N repos by PR count */
 function getTopRepos(prs: PR[], limit: number): { name: string; count: number }[] {
   return getAllRepos(prs).slice(0, limit)
 }

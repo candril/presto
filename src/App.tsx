@@ -9,7 +9,7 @@ import { Header } from "./components/Header"
 import { StatusBar } from "./components/StatusBar"
 import { PRList } from "./components/PRList"
 import { Loading } from "./components/Loading"
-import { DiscoveryBar } from "./components/DiscoveryBar"
+import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
 import { appReducer, initialState } from "./state"
 import { listPRs, listPRsFromRepos, listRecentPRsFromRepos } from "./providers/github"
 import { parseFilter, applyFilter, isFilterActive } from "./discovery"
@@ -227,10 +227,10 @@ export function App({ config }: AppProps) {
   // Build status bar hints
   const hints = buildHints(state, config, filter)
 
-  // Header right side: show filter indicator or position
+  // Header right side: show count info
   const headerRight = useMemo(() => {
     if (isFilterActive(filter)) {
-      return `${filteredPRs.length}/${state.prs.length} matching`
+      return `${filteredPRs.length}/${state.prs.length}`
     }
     return state.prs.length > 0
       ? `${state.selectedIndex + 1}/${state.prs.length}`
@@ -239,18 +239,23 @@ export function App({ config }: AppProps) {
 
   return (
     <Shell>
-      <Header title="presto" right={headerRight} />
+      <Header
+        title="presto"
+        filterQuery={state.discoveryQuery}
+        filterFocused={state.discoveryVisible}
+        onFilterChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
+        onFilterSubmit={() => dispatch({ type: "ACCEPT_DISCOVERY" })}
+        right={headerRight}
+      />
 
-      {/* Discovery bar */}
+      {/* Suggestions dropdown (when filter focused) */}
       {state.discoveryVisible && (
-        <DiscoveryBar
+        <DiscoverySuggestions
           query={state.discoveryQuery}
           onChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
           onClose={() => dispatch({ type: "CLOSE_DISCOVERY" })}
-          onAccept={() => dispatch({ type: "ACCEPT_DISCOVERY" })}
           history={history}
           prs={state.prs}
-          filteredCount={filteredPRs.length}
         />
       )}
 
@@ -292,22 +297,22 @@ function buildHints(
   const hints: string[] = []
 
   if (state.discoveryVisible) {
-    hints.push("Type to filter")
-    hints.push("Esc: close")
+    hints.push("Tab: complete")
+    hints.push("Enter/Esc: done")
     return hints
   }
 
   if (state.loading) {
     hints.push("Loading...")
   } else if (state.prs.length > 0) {
-    hints.push("/: search")
+    hints.push("/: filter")
     hints.push("j/k: navigate")
     hints.push("Enter: riff")
     hints.push("o: browser")
     hints.push("y: copy")
     hints.push("s: star")
     if (isFilterActive(filter)) {
-      hints.push("Esc: clear filter")
+      hints.push("Esc: clear")
     }
   }
 
