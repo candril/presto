@@ -1,11 +1,46 @@
 /**
- * PR List component - displays pull requests in a scrollable list
+ * PR List component - displays pull requests in a table-like layout
+ * 
+ * Column order: State | Draft | Checks | Review | Time | Repo | Author | ID | Title
  */
 
 import { theme } from "../theme"
 import type { PR, CheckState, ReviewDecision } from "../types"
 import { getRepoName, getShortRepoName } from "../types"
 import { formatRelativeTime } from "../utils/time"
+
+/** Column widths for table-like layout */
+const COL = {
+  state: 1,      // Nerd font icon
+  checks: 1,     // Nerd font icon
+  review: 1,     // Nerd font icon
+  time: 9,       // "just now" or "12h ago"
+  id: 6,         // #1234
+  repo: 16,      // Short repo name
+  author: 16,    // @username
+  // title: remaining space
+}
+
+/** Unicode icons */
+const ICONS = {
+  // PR state icons (open/merged/closed)
+  prOpen: "○",      // open circle
+  prMerged: "●",    // filled circle (merged)
+  prClosed: "✗",    // x mark (closed)
+  // Draft status icons
+  draft: "◌",       // dotted circle (draft)
+  ready: "✓",       // check mark (ready)
+  // CI check icons
+  checkSuccess: "✓", // check mark
+  checkFailure: "✗", // x mark
+  checkPending: "◔", // circle with upper right quadrant
+  checkNone: "─",    // horizontal line
+  // Review icons
+  reviewApproved: "✓", // check mark
+  reviewChanges: "!",  // exclamation
+  reviewRequired: "?", // question mark
+  reviewNone: "─",     // horizontal line
+}
 
 interface PRListProps {
   prs: PR[]
@@ -23,6 +58,7 @@ export function PRList({ prs, selectedIndex }: PRListProps) {
 
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
+      <PRHeaderRow />
       {prs.map((pr, index) => (
         <PRRow
           key={`${getRepoName(pr)}#${pr.number}`}
@@ -34,6 +70,47 @@ export function PRList({ prs, selectedIndex }: PRListProps) {
   )
 }
 
+/** Header row with column labels */
+function PRHeaderRow() {
+  return (
+    <box
+      height={1}
+      width="100%"
+      paddingLeft={1}
+      paddingRight={1}
+    >
+      <text fg={theme.textDim}>
+        {/* State */}
+        {"S"}
+        {" "}
+        {/* Draft */}
+        {"D"}
+        {" "}
+        {/* Checks */}
+        {"C"}
+        {" "}
+        {/* Review */}
+        {"R"}
+        {"  "}
+        {/* Time */}
+        {padLeft("Updated", COL.time)}
+        {"  "}
+        {/* Repo */}
+        {padRight("Repository", COL.repo)}
+        {" "}
+        {/* Author */}
+        {padRight("Author", COL.author)}
+        {" "}
+        {/* ID */}
+        {padRight("PR", COL.id)}
+        {" "}
+        {/* Title */}
+        {"Title"}
+      </text>
+    </box>
+  )
+}
+
 interface PRRowProps {
   pr: PR
   selected: boolean
@@ -41,12 +118,13 @@ interface PRRowProps {
 
 function PRRow({ pr, selected }: PRRowProps) {
   const stateIndicator = getStateIndicator(pr)
+  const draftIndicator = getDraftIndicator(pr.isDraft)
   const checkIndicator = getCheckIndicator(pr.statusCheckRollup?.state)
   const reviewIndicator = getReviewIndicator(pr.reviewDecision)
   const timeAgo = formatRelativeTime(pr.updatedAt)
-
-  // Get short repo name (just the repo part, not owner)
   const repoName = getShortRepoName(pr)
+  const prId = `#${pr.number}`
+  const author = `@${pr.author.login}`
 
   return (
     <box
@@ -57,62 +135,70 @@ function PRRow({ pr, selected }: PRRowProps) {
       paddingRight={1}
     >
       <text>
-        {/* State indicator (O/M/C/D) */}
+        {/* State (Open/Merged/Closed) */}
         <span fg={stateIndicator.color}>{stateIndicator.icon}</span>
         {" "}
-        {/* CI status */}
+        {/* Draft status */}
+        <span fg={draftIndicator.color}>{draftIndicator.icon}</span>
+        {" "}
+        {/* Checks */}
         <span fg={checkIndicator.color}>{checkIndicator.icon}</span>
         {" "}
-        {/* Review status */}
+        {/* Review */}
         <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>
         {"  "}
-        {/* PR number */}
-        <span fg={theme.textDim}>#{pr.number}</span>
+        {/* Time - right-aligned in fixed width */}
+        <span fg={theme.textMuted}>{padLeft(timeAgo, COL.time)}</span>
+        {"  "}
+        {/* Repo - fixed width */}
+        <span fg={theme.primary}>{padRight(truncate(repoName, COL.repo), COL.repo)}</span>
         {" "}
-        {/* Title */}
-        <span fg={theme.text}>{truncate(pr.title, 50)}</span>
-        {"  "}
-        {/* Repo */}
-        <span fg={theme.textMuted}>{repoName}</span>
-        {"  "}
-        {/* Author */}
-        <span fg={theme.textMuted}>@{pr.author.login}</span>
-        {"  "}
-        {/* Time */}
-        <span fg={theme.textMuted}>{timeAgo}</span>
+        {/* Author - fixed width */}
+        <span fg={theme.textMuted}>{padRight(truncate(author, COL.author), COL.author)}</span>
+        {" "}
+        {/* PR ID */}
+        <span fg={theme.textDim}>{padRight(prId, COL.id)}</span>
+        {" "}
+        {/* Title - takes remaining space */}
+        <span fg={theme.text}>{pr.title}</span>
       </text>
     </box>
   )
 }
 
-/** Get state indicator for PR (Open/Merged/Closed/Draft) */
+/** Get state indicator for PR (Open/Merged/Closed) */
 function getStateIndicator(pr: PR): { icon: string; color: string } {
-  if (pr.isDraft) {
-    return { icon: "D", color: theme.prDraft }
-  }
   switch (pr.state) {
     case "MERGED":
-      return { icon: "M", color: theme.prMerged }
+      return { icon: ICONS.prMerged, color: theme.prMerged }
     case "CLOSED":
-      return { icon: "C", color: theme.prClosed }
+      return { icon: ICONS.prClosed, color: theme.prClosed }
     case "OPEN":
     default:
-      return { icon: "O", color: theme.prOpen }
+      return { icon: ICONS.prOpen, color: theme.prOpen }
   }
+}
+
+/** Get draft status indicator */
+function getDraftIndicator(isDraft: boolean): { icon: string; color: string } {
+  if (isDraft) {
+    return { icon: ICONS.draft, color: theme.prDraft }
+  }
+  return { icon: ICONS.ready, color: theme.success }
 }
 
 /** Get CI check status indicator */
 function getCheckIndicator(state?: CheckState): { icon: string; color: string } {
   switch (state) {
     case "SUCCESS":
-      return { icon: "+", color: theme.success }
+      return { icon: ICONS.checkSuccess, color: theme.success }
     case "FAILURE":
     case "ERROR":
-      return { icon: "x", color: theme.error }
+      return { icon: ICONS.checkFailure, color: theme.error }
     case "PENDING":
-      return { icon: "o", color: theme.warning }
+      return { icon: ICONS.checkPending, color: theme.warning }
     default:
-      return { icon: "-", color: theme.textMuted }
+      return { icon: ICONS.checkNone, color: theme.textMuted }
   }
 }
 
@@ -120,13 +206,13 @@ function getCheckIndicator(state?: CheckState): { icon: string; color: string } 
 function getReviewIndicator(decision?: ReviewDecision | null): { icon: string; color: string } {
   switch (decision) {
     case "APPROVED":
-      return { icon: "+", color: theme.success }
+      return { icon: ICONS.reviewApproved, color: theme.success }
     case "CHANGES_REQUESTED":
-      return { icon: "!", color: theme.error }
+      return { icon: ICONS.reviewChanges, color: theme.error }
     case "REVIEW_REQUIRED":
-      return { icon: "?", color: theme.warning }
+      return { icon: ICONS.reviewRequired, color: theme.warning }
     default:
-      return { icon: "-", color: theme.textMuted }
+      return { icon: ICONS.reviewNone, color: theme.textMuted }
   }
 }
 
@@ -134,4 +220,16 @@ function getReviewIndicator(decision?: ReviewDecision | null): { icon: string; c
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text
   return text.slice(0, maxLength - 1) + "…"
+}
+
+/** Pad string to the right (left-align) */
+function padRight(text: string, width: number): string {
+  if (text.length >= width) return text.slice(0, width)
+  return text + " ".repeat(width - text.length)
+}
+
+/** Pad string to the left (right-align) */
+function padLeft(text: string, width: number): string {
+  if (text.length >= width) return text.slice(0, width)
+  return " ".repeat(width - text.length) + text
 }

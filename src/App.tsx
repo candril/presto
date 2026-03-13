@@ -46,7 +46,7 @@ export function App({ config }: AppProps) {
     // Quit
     if (key.name === config.keys.quit) {
       renderer.destroy()
-      return
+      process.exit(0)
     }
 
     // Refresh
