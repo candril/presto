@@ -8,6 +8,7 @@ import type { AppState, PR, View } from "./types"
 export type AppAction =
   | { type: "SET_VIEW"; view: View }
   | { type: "SET_LOADING"; loading: boolean }
+  | { type: "SET_REFRESHING"; refreshing: boolean }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_PRS"; prs: PR[] }
   | { type: "APPEND_PRS"; prs: PR[] }
@@ -26,6 +27,7 @@ export const initialState: AppState = {
   prs: [],
   selectedIndex: 0,
   loading: true,
+  refreshing: false,
   error: null,
   discoveryVisible: false,
   discoveryQuery: "",
@@ -41,6 +43,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "SET_LOADING":
       return { ...state, loading: action.loading }
 
+    case "SET_REFRESHING":
+      return { ...state, refreshing: action.refreshing }
+
     case "SET_ERROR":
       return { ...state, error: action.error, loading: false }
 
@@ -49,6 +54,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         prs: action.prs,
         loading: false,
+        refreshing: false,
         error: null,
         // Reset selection if out of bounds
         selectedIndex: Math.min(state.selectedIndex, Math.max(0, action.prs.length - 1)),

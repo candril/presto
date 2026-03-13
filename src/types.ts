@@ -108,7 +108,10 @@ export interface AppState {
   view: View
   prs: PR[]
   selectedIndex: number
+  /** Initial loading (shows full screen spinner) */
   loading: boolean
+  /** Background refresh (shows ↻ in header) */
+  refreshing: boolean
   error: string | null
   /** Discovery bar visibility */
   discoveryVisible: boolean

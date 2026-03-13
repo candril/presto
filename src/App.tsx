@@ -20,6 +20,7 @@ import {
   type History,
 } from "./history"
 import { openInBrowser, openInRiff, copyPRUrl } from "./actions"
+import { loadCache, saveCache, saveFilterQuery, isCacheValidForRepos } from "./cache"
 import { theme } from "./theme"
 import type { Config } from "./config"
 
@@ -59,8 +60,8 @@ export function App({ config }: AppProps) {
     }
   }, [state.message])
 
-  // Fetch PRs on mount - fast initial load, then background load
-  const fetchPRs = useCallback(async (fullRefresh = false) => {
+  // Fetch PRs from GitHub
+  const fetchPRs = useCallback(async (showAsRefresh = false) => {
     const repos = config.repositories.map((r) => r.name)
     
     if (repos.length === 0) {
@@ -78,44 +79,55 @@ export function App({ config }: AppProps) {
       return
     }
 
-    // Multi-repo: fast initial load (last 7 days), then background append older PRs
-    if (!fullRefresh && state.prs.length === 0) {
-      dispatch({ type: "SET_LOADING", loading: true })
-      try {
-        // Fast: load PRs from last 7 days
-        const recentPRs = await listRecentPRsFromRepos(repos, 7)
-        dispatch({ type: "SET_PRS", prs: recentPRs })
-        
-        // Background: load all PRs and append older ones
-        listPRsFromRepos(repos).then((allPRs) => {
-          dispatch({ type: "APPEND_PRS", prs: allPRs })
-        }).catch(() => {
-          // Silently ignore background load errors
-        })
-      } catch (err) {
-        dispatch({
-          type: "SET_ERROR",
-          error: err instanceof Error ? err.message : "Failed to fetch PRs",
-        })
-      }
+    // Show refreshing indicator or full loading screen
+    if (showAsRefresh) {
+      dispatch({ type: "SET_REFRESHING", refreshing: true })
     } else {
-      // Full refresh requested or already have data
       dispatch({ type: "SET_LOADING", loading: true })
-      try {
-        const prs = await listPRsFromRepos(repos)
-        dispatch({ type: "SET_PRS", prs })
-      } catch (err) {
+    }
+
+    try {
+      const prs = await listPRsFromRepos(repos)
+      dispatch({ type: "SET_PRS", prs })
+      // Save to cache for next startup
+      saveCache(prs, repos)
+    } catch (err) {
+      dispatch({ type: "SET_REFRESHING", refreshing: false })
+      dispatch({ type: "SET_LOADING", loading: false })
+      if (!showAsRefresh) {
         dispatch({
           type: "SET_ERROR",
           error: err instanceof Error ? err.message : "Failed to fetch PRs",
         })
       }
     }
-  }, [config.repositories, state.prs.length])
+  }, [config.repositories])
 
+  // Load cached data on mount, then revalidate
   useEffect(() => {
-    fetchPRs()
-  }, []) // Only run on mount, not when fetchPRs changes
+    const repos = config.repositories.map((r) => r.name)
+    
+    // Try to load from cache first
+    const cache = loadCache()
+    if (isCacheValidForRepos(cache, repos) && cache.prs.length > 0) {
+      // Show cached data immediately, disable loading spinner
+      dispatch({ type: "SET_PRS", prs: cache.prs })
+      // Restore filter query if present
+      if (cache.filterQuery) {
+        dispatch({ type: "SET_DISCOVERY_QUERY", query: cache.filterQuery })
+      }
+      // Then revalidate in background (show as refresh, not full load)
+      fetchPRs(true)
+    } else {
+      // No valid cache, do full load
+      fetchPRs(false)
+    }
+  }, []) // Only run on mount
+
+  // Save filter query when it changes
+  useEffect(() => {
+    saveFilterQuery(state.discoveryQuery)
+  }, [state.discoveryQuery])
 
   // Keyboard handling
   useKeyboard((key) => {
@@ -163,8 +175,8 @@ export function App({ config }: AppProps) {
       return
     }
 
-    // Refresh (full)
-    if (key.name === config.keys.refresh) {
+    // Refresh (full) - R or Shift+r
+    if (key.name === config.keys.refresh || (key.name === "r" && key.shift)) {
       fetchPRs(true)
       return
     }
@@ -245,6 +257,7 @@ export function App({ config }: AppProps) {
         filterFocused={state.discoveryVisible}
         onFilterChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
         onFilterSubmit={() => dispatch({ type: "ACCEPT_DISCOVERY" })}
+        loading={state.refreshing}
         right={headerRight}
       />
 

@@ -1,4 +1,5 @@
 import { theme } from "../theme"
+import { Spinner } from "./Loading"
 
 interface HeaderProps {
   title: string
@@ -10,10 +11,12 @@ interface HeaderProps {
   onFilterChange: (query: string) => void
   /** Called when Enter is pressed (accept filter) */
   onFilterSubmit: () => void
+  /** Whether data is being loaded/refreshed */
+  loading?: boolean
   right?: string
 }
 
-export function Header({ title, filterQuery, filterFocused, onFilterChange, onFilterSubmit, right }: HeaderProps) {
+export function Header({ title, filterQuery, filterFocused, onFilterChange, onFilterSubmit, loading, right }: HeaderProps) {
   return (
     <box height={1} backgroundColor={theme.headerBg} paddingX={1} flexDirection="row">
       <text>
@@ -33,6 +36,11 @@ export function Header({ title, filterQuery, filterFocused, onFilterChange, onFi
           placeholderColor={theme.textDim}
         />
       </box>
+      {loading && (
+        <box marginRight={1}>
+          <Spinner />
+        </box>
+      )}
       {right && (
         <box>
           <text>
