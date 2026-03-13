@@ -5,6 +5,9 @@
 // View modes for the application
 export type View = "list" | "detail"
 
+// Preview panel position
+export type PreviewPosition = "right" | "bottom" | null
+
 /**
  * Pull Request from GitHub API
  */
@@ -190,8 +193,8 @@ export interface AppState {
   message: string | null
 
   // Preview state (spec 014)
-  /** Preview mode enabled */
-  previewMode: boolean
+  /** Preview panel position: null = off, 'right' = side panel, 'bottom' = bottom panel */
+  previewPosition: PreviewPosition
   /** Cache of loaded previews, keyed by "owner/repo#number" */
   previewCache: Map<string, PRPreview>
   /** Currently loading preview for this PR key */

@@ -8,20 +8,22 @@ import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions"
 import { toggleStarAuthor, saveHistory, type History } from "../history"
 import { isFilterActive, type ParsedFilter } from "../discovery"
 import type { Config } from "../config"
-import type { PR } from "../types"
+import type { PR, PreviewPosition } from "../types"
 
-interface UseKeyboardNavOptions {
+export interface UseKeyboardNavOptions {
   config: Config
   filter: ParsedFilter
   filteredPRs: PR[]
   selectedIndex: number
   discoveryVisible: boolean
-  previewMode: boolean
+  previewPosition: PreviewPosition
   history: History
   setHistory: (history: History) => void
   dispatch: (action: any) => void
   fetchPRs: (showAsRefresh?: boolean) => void
   terminalHeight: number
+  showHelp: boolean
+  setShowHelp: (show: boolean) => void
 }
 
 export function useKeyboardNav({
@@ -30,23 +32,37 @@ export function useKeyboardNav({
   filteredPRs,
   selectedIndex,
   discoveryVisible,
-  previewMode,
+  previewPosition,
   history,
   setHistory,
   dispatch,
   fetchPRs,
   terminalHeight,
+  showHelp,
+  setShowHelp,
 }: UseKeyboardNavOptions) {
   const renderer = useRenderer()
 
   useKeyboard((key) => {
+    // Help overlay - ? toggles, Esc closes
+    if (key.name === "?" || (key.name === "/" && key.shift)) {
+      setShowHelp(!showHelp)
+      return
+    }
+    if (showHelp) {
+      if (key.name === "escape") {
+        setShowHelp(false)
+      }
+      return
+    }
+
     // Discovery bar is open - let it handle its own keys
     if (discoveryVisible) {
       return
     }
 
     // Preview mode: Ctrl-d/Ctrl-u for scrolling
-    if (previewMode) {
+    if (previewPosition) {
       const halfPage = Math.floor((terminalHeight - 6) / 2)
       if (key.ctrl && key.name === "d") {
         dispatch({ type: "SCROLL_PREVIEW", delta: halfPage })
@@ -58,9 +74,13 @@ export function useKeyboardNav({
       }
     }
 
-    // Toggle preview mode with p
-    if (key.name === "p") {
-      dispatch({ type: "TOGGLE_PREVIEW_MODE" })
+    // Preview controls: p = toggle on/off, P = cycle position
+    if (key.name === "p" && !key.shift) {
+      dispatch({ type: "TOGGLE_PREVIEW" })
+      return
+    }
+    if (key.name === "p" && key.shift) {
+      dispatch({ type: "CYCLE_PREVIEW_POSITION" })
       return
     }
 

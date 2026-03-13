@@ -3,11 +3,12 @@
  */
 
 import { useRef, useEffect } from "react"
+import { useTerminalDimensions } from "@opentui/react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { SyntaxStyle, RGBA } from "@opentui/core"
 import { theme } from "../theme"
 import { Spinner } from "./Loading"
-import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile } from "../types"
+import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile, PreviewPosition } from "../types"
 
 // Shared syntax style for markdown rendering (lazy init)
 let sharedSyntaxStyle: SyntaxStyle | null = null
@@ -44,10 +45,20 @@ interface PreviewPanelProps {
   preview: PRPreview | null
   loading: boolean
   scrollOffset: number
+  position: PreviewPosition
 }
 
-export function PreviewPanel({ preview, loading, scrollOffset }: PreviewPanelProps) {
+export function PreviewPanel({ preview, loading, scrollOffset, position }: PreviewPanelProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
+  const { width: terminalWidth } = useTerminalDimensions()
+  const isBottom = position === "bottom"
+  
+  // Calculate available width for content
+  // Right mode: 50% of terminal minus borders/padding (~4 chars)
+  // Bottom mode: full width minus borders/padding (~4 chars)
+  const contentWidth = isBottom 
+    ? terminalWidth - 4
+    : Math.floor(terminalWidth / 2) - 4
 
   // Sync scroll position
   useEffect(() => {
@@ -56,21 +67,36 @@ export function PreviewPanel({ preview, loading, scrollOffset }: PreviewPanelPro
     }
   }, [scrollOffset])
 
+  // Container props based on position
+  const containerProps = isBottom
+    ? {
+        height: "50%" as const,
+        width: "100%" as const,
+        flexDirection: "column" as const,
+        border: ["top"] as ("top" | "bottom" | "left" | "right")[],
+        borderStyle: "single" as const,
+        borderColor: theme.border,
+      }
+    : {
+        width: "50%" as const,
+        flexDirection: "column" as const,
+        border: ["left"] as ("top" | "bottom" | "left" | "right")[],
+        borderStyle: "single" as const,
+        borderColor: theme.border,
+      }
+
+  const positionHint = isBottom ? "right" : "bottom"
+  const footerHint = `Ctrl-d/u: scroll  p: close  P: ${positionHint}`
+
   // Show loading state
   if (loading) {
     return (
-      <box
-        width="50%"
-        flexDirection="column"
-        border={["left"]}
-        borderStyle="single"
-        borderColor={theme.border}
-      >
+      <box {...containerProps}>
         <box flexGrow={1} justifyContent="center" alignItems="center">
           <Spinner />
         </box>
         <box height={1} paddingLeft={1} border={["top"]} borderStyle="single" borderColor={theme.border}>
-          <text fg={theme.textDim}>Ctrl-d/u: scroll  p: close</text>
+          <text fg={theme.textDim}>{footerHint}</text>
         </box>
       </box>
     )
@@ -79,18 +105,12 @@ export function PreviewPanel({ preview, loading, scrollOffset }: PreviewPanelPro
   // Show empty state when no preview
   if (!preview) {
     return (
-      <box
-        width="50%"
-        flexDirection="column"
-        border={["left"]}
-        borderStyle="single"
-        borderColor={theme.border}
-      >
+      <box {...containerProps}>
         <box flexGrow={1} justifyContent="center" alignItems="center">
           <text fg={theme.textDim}>No preview available</text>
         </box>
         <box height={1} paddingLeft={1} border={["top"]} borderStyle="single" borderColor={theme.border}>
-          <text fg={theme.textDim}>Ctrl-d/u: scroll  p: close</text>
+          <text fg={theme.textDim}>{footerHint}</text>
         </box>
       </box>
     )
@@ -98,13 +118,7 @@ export function PreviewPanel({ preview, loading, scrollOffset }: PreviewPanelPro
 
   // Show preview content
   return (
-    <box
-      width="50%"
-      flexDirection="column"
-      border={["left"]}
-      borderStyle="single"
-      borderColor={theme.border}
-    >
+    <box {...containerProps}>
 
       <scrollbox ref={scrollRef} flexGrow={1} paddingLeft={1} paddingRight={1}>
           {/* Branch info */}
@@ -142,48 +156,9 @@ export function PreviewPanel({ preview, loading, scrollOffset }: PreviewPanelPro
             </box>
           )}
 
-          {/* Files section */}
-          <box flexDirection="column" marginTop={1}>
-            <text fg={theme.textMuted}>
-              Files ({preview.files.length}):
-            </text>
-            <FilesList files={preview.files.slice(0, 15)} />
-            {preview.files.length > 15 && (
-              <box height={1}>
-                <text fg={theme.textDim}>
-                  +{preview.files.length - 15} more files
-                </text>
-              </box>
-            )}
-          </box>
-
-          {/* Commits section */}
-          {preview.commits.length > 0 && (
-            <box flexDirection="column" marginTop={1}>
-              <text fg={theme.textMuted}>
-                Commits ({preview.commits.length}):
-              </text>
-              {preview.commits.slice(0, 8).map((commit) => (
-                <box key={commit.oid} height={1}>
-                  <text>
-                    <span fg={theme.warning}>{commit.oid}</span>
-                    <span fg={theme.text}> {truncate(commit.message, 45)}</span>
-                  </text>
-                </box>
-              ))}
-              {preview.commits.length > 8 && (
-                <box height={1}>
-                  <text fg={theme.textDim}>
-                    +{preview.commits.length - 8} more commits
-                  </text>
-                </box>
-              )}
-            </box>
-          )}
-
-          {/* Description */}
+          {/* Description - right after metadata */}
           {preview.body && preview.body.trim() && (
-            <box flexDirection="column" marginTop={1} marginBottom={1}>
+            <box flexDirection="column" marginTop={1}>
               <text fg={theme.textMuted}>Description:</text>
               <markdown
                 content={preview.body}
@@ -191,13 +166,32 @@ export function PreviewPanel({ preview, loading, scrollOffset }: PreviewPanelPro
               />
             </box>
           )}
+
+          {/* Files section */}
+          <box flexDirection="column" marginTop={1}>
+            <text fg={theme.textMuted}>Files:</text>
+            <FilesList files={preview.files} maxWidth={contentWidth} />
+          </box>
+
+          {/* Commits section */}
+          {preview.commits.length > 0 && (
+            <box flexDirection="column" marginTop={1}>
+              <text fg={theme.textMuted}>Commits:</text>
+              {preview.commits.map((commit) => (
+                <box key={commit.oid} height={1}>
+                  <text>
+                    <span fg={theme.warning}>{commit.oid}</span>
+                    <span fg={theme.text}> {truncate(commit.message, contentWidth - 9)}</span>
+                  </text>
+                </box>
+              ))}
+            </box>
+          )}
         </scrollbox>
 
       {/* Footer */}
       <box height={1} paddingLeft={1} border={["top"]} borderStyle="single" borderColor={theme.border}>
-        <text fg={theme.textDim}>
-          Ctrl-d/u: scroll  p: close
-        </text>
+        <text fg={theme.textDim}>{footerHint}</text>
       </box>
     </box>
   )
@@ -258,15 +252,14 @@ function ReviewBadge({ review }: { review: PRReview }) {
   return (
     <span>
       <span fg={color}>{icon}</span>
-      <span fg={theme.text}>{review.author}</span>
+      <span fg={theme.text}> {review.author}</span>
     </span>
   )
 }
 
-function FilesList({ files }: { files: ChangedFile[] }) {
-  // Calculate max path length that fits, leaving room for stats (roughly 12 chars: " +999/-999")
-  // Use a reasonable max that leaves space for the stats column
-  const maxPathLen = 50
+function FilesList({ files, maxWidth }: { files: ChangedFile[]; maxWidth: number }) {
+  // Reserve space for: status icon (1) + space (1) + stats (~12: " +999/-999")
+  const maxPathLen = Math.max(20, maxWidth - 14)
   
   return (
     <>

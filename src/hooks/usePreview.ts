@@ -1,20 +1,27 @@
 /**
- * Preview hook with caching and debounce (spec 014)
+ * Preview hook with caching, debounce, and smart prefetching (spec 014)
  */
 
 import { useEffect, useRef } from "react"
 import { fetchPRPreview } from "../providers/github"
-import type { PR, PRPreview } from "../types"
+import type { PR, PRPreview, PreviewPosition } from "../types"
 import type { AppAction } from "../state"
 
 /** Debounce delay in ms */
 const DEBOUNCE_MS = 150
 
+/** Idle time before prefetching adjacent PRs */
+const PREFETCH_IDLE_MS = 500
+
 interface UsePreviewOptions {
-  previewMode: boolean
+  previewPosition: PreviewPosition
   previewCache: Map<string, PRPreview>
   dispatch: React.Dispatch<AppAction>
   selectedPR: PR | null
+  /** All PRs for prefetching adjacent */
+  allPRs: PR[]
+  /** Current selected index for prefetching */
+  selectedIndex: number
 }
 
 interface UsePreviewResult {
@@ -36,15 +43,18 @@ function getRepoFromPR(pr: PR): string {
 }
 
 /**
- * Hook to manage PR preview loading with caching and debounce
+ * Hook to manage PR preview loading with caching, debounce, and smart prefetching
  */
 export function usePreview({
-  previewMode,
+  previewPosition,
   previewCache,
   dispatch,
   selectedPR,
+  allPRs,
+  selectedIndex,
 }: UsePreviewOptions): UsePreviewResult {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fetchingKeyRef = useRef<string | null>(null)
   const loadingKeyRef = useRef<string | null>(null)
 
@@ -54,6 +64,7 @@ export function usePreview({
   // Check if already cached
   const isCached = cacheKey ? previewCache.has(cacheKey) : false
 
+  // Main fetch effect
   useEffect(() => {
     // Clear any pending debounce
     if (debounceRef.current) {
@@ -61,8 +72,8 @@ export function usePreview({
       debounceRef.current = null
     }
 
-    // Only fetch if preview mode is on and we have a selected PR
-    if (!previewMode || !selectedPR || !cacheKey) {
+    // Only fetch if preview is on and we have a selected PR
+    if (!previewPosition || !selectedPR || !cacheKey) {
       loadingKeyRef.current = null
       return
     }
@@ -119,7 +130,58 @@ export function usePreview({
         debounceRef.current = null
       }
     }
-  }, [previewMode, cacheKey, isCached, dispatch, selectedPR])
+  }, [previewPosition, cacheKey, isCached, dispatch, selectedPR])
+
+  // Smart prefetching effect - prefetch adjacent PRs after idle
+  useEffect(() => {
+    // Clear any pending prefetch
+    if (prefetchRef.current) {
+      clearTimeout(prefetchRef.current)
+      prefetchRef.current = null
+    }
+
+    // Only prefetch if preview is on and current PR is cached
+    if (!previewPosition || !isCached || allPRs.length === 0) {
+      return
+    }
+
+    // Schedule prefetch after idle time
+    prefetchRef.current = setTimeout(async () => {
+      // Get adjacent PRs (prev 2 and next 2)
+      const adjacentIndices = [
+        selectedIndex - 2,
+        selectedIndex - 1,
+        selectedIndex + 1,
+        selectedIndex + 2,
+      ].filter(i => i >= 0 && i < allPRs.length)
+
+      for (const idx of adjacentIndices) {
+        const pr = allPRs[idx]
+        if (!pr) continue
+
+        const key = getCacheKey(pr)
+        // Skip if already cached
+        if (previewCache.has(key)) continue
+
+        const repo = getRepoFromPR(pr)
+        if (!repo) continue
+
+        try {
+          const preview = await fetchPRPreview(repo, pr.number)
+          dispatch({ type: "SET_PREVIEW_CACHE", key, data: preview })
+        } catch {
+          // Silent fail for prefetch
+        }
+      }
+    }, PREFETCH_IDLE_MS)
+
+    return () => {
+      if (prefetchRef.current) {
+        clearTimeout(prefetchRef.current)
+        prefetchRef.current = null
+      }
+    }
+  }, [previewPosition, isCached, selectedIndex, allPRs, previewCache, dispatch])
 
   // Get current preview from cache
   const preview = cacheKey ? previewCache.get(cacheKey) ?? null : null

@@ -13,6 +13,7 @@ import { PreviewPanel } from "./components/PreviewPanel"
 import { Loading } from "./components/Loading"
 import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
 import { CommandLine } from "./components/CommandLine"
+import { HelpOverlay } from "./components/HelpOverlay"
 import { appReducer, createInitialState } from "./state"
 import { loadHistory, type History } from "./history"
 import { theme } from "./theme"
@@ -22,7 +23,6 @@ import {
   useFiltering,
   useKeyboardNav,
   useMessage,
-  useStatusBar,
   useHeaderInfo,
   usePreview,
 } from "./hooks"
@@ -34,6 +34,7 @@ interface AppProps {
 export function App({ config }: AppProps) {
   const [state, dispatch] = useReducer(appReducer, null, createInitialState)
   const [history, setHistory] = useState<History>(() => loadHistory())
+  const [showHelp, setShowHelp] = useState(false)
   const { height: terminalHeight } = useTerminalDimensions()
 
   // Feature: Filtering
@@ -60,38 +61,31 @@ export function App({ config }: AppProps) {
     filteredPRs,
     selectedIndex: state.selectedIndex,
     discoveryVisible: state.discoveryVisible,
-    previewMode: state.previewMode,
+    previewPosition: state.previewPosition,
     history,
     setHistory,
     dispatch,
     fetchPRs,
     terminalHeight,
+    showHelp,
+    setShowHelp,
   })
 
   // Feature: PR Preview
   const selectedPR = filteredPRs[state.selectedIndex] ?? null
   const { preview, loading: previewLoading } = usePreview({
-    previewMode: state.previewMode,
+    previewPosition: state.previewPosition,
     previewCache: state.previewCache,
     dispatch,
     selectedPR,
+    allPRs: filteredPRs,
+    selectedIndex: state.selectedIndex,
   })
 
   // Feature: Message toast
   useMessage({
     message: state.message,
     dispatch,
-  })
-
-  // Feature: Status bar hints
-  const hints = useStatusBar({
-    config,
-    filter,
-    hiddenCount,
-    loading: state.loading,
-    discoveryVisible: state.discoveryVisible,
-    previewMode: state.previewMode,
-    prsCount: state.prs.length,
   })
 
   // Feature: Header info
@@ -112,9 +106,15 @@ export function App({ config }: AppProps) {
       />
 
       {/* Main content area */}
-      <box flexGrow={1} flexDirection="row">
-        {/* Left side: PR List */}
-        <box flexGrow={1} position="relative" width={state.previewMode ? "50%" : "100%"} overflow="hidden">
+      <box flexGrow={1} flexDirection={state.previewPosition === "bottom" ? "column" : "row"}>
+        {/* PR List */}
+        <box
+          flexGrow={1}
+          position="relative"
+          width={state.previewPosition === "right" ? "50%" : "100%"}
+          height={state.previewPosition === "bottom" ? "50%" : "100%"}
+          overflow="hidden"
+        >
           {state.loading ? (
             <Loading message="Fetching pull requests..." />
           ) : state.error ? (
@@ -151,12 +151,13 @@ export function App({ config }: AppProps) {
           )}
         </box>
 
-        {/* Right side: Preview Panel */}
-        {state.previewMode && (
+        {/* Preview Panel - right or bottom based on position */}
+        {state.previewPosition && (
           <PreviewPanel
             preview={preview}
             loading={previewLoading}
             scrollOffset={state.previewScrollOffset}
+            position={state.previewPosition}
           />
         )}
       </box>
@@ -170,7 +171,10 @@ export function App({ config }: AppProps) {
         />
       )}
 
-      <StatusBar hints={hints} />
+      <StatusBar filterQuery={state.discoveryQuery} />
+
+      {/* Help overlay */}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </Shell>
   )
 }

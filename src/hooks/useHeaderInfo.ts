@@ -21,13 +21,14 @@ export function useHeaderInfo({
   hiddenCount,
 }: UseHeaderInfoOptions): string {
   return useMemo(() => {
-    const hidden = hiddenCount > 0 ? ` +${hiddenCount}` : ""
+    // Only show info when filtering or when there are hidden PRs
     if (isFilterActive(filter)) {
+      const hidden = hiddenCount > 0 ? ` +${hiddenCount}` : ""
       return `${filteredCount}/${totalCount}${hidden}`
     }
     if (hiddenCount > 0) {
-      return `${filteredCount} (${hidden} hidden)`
+      return `+${hiddenCount} hidden`
     }
-    return totalCount > 0 ? `${selectedIndex + 1}/${totalCount}` : ""
-  }, [filter, filteredCount, totalCount, selectedIndex, hiddenCount])
+    return ""
+  }, [filter, filteredCount, totalCount, hiddenCount])
 }

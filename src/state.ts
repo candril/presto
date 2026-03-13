@@ -2,7 +2,7 @@
  * Application state management
  */
 
-import type { AppState, PR, View } from "./types"
+import type { AppState, PR, View, PreviewPosition } from "./types"
 import { loadCache } from "./cache"
 
 /** Action types for the reducer */
@@ -22,7 +22,8 @@ export type AppAction =
   | { type: "SHOW_MESSAGE"; message: string }
   | { type: "CLEAR_MESSAGE" }
   // Preview actions (spec 014)
-  | { type: "TOGGLE_PREVIEW_MODE" }
+  | { type: "TOGGLE_PREVIEW" }
+  | { type: "CYCLE_PREVIEW_POSITION" }
   | { type: "SET_PREVIEW_CACHE"; key: string; data: import("./types").PRPreview }
   | { type: "SET_PREVIEW_LOADING"; key: string | null }
   | { type: "CLEAR_PREVIEW_CACHE" }
@@ -42,7 +43,7 @@ export function createInitialState(): AppState {
     discoveryQuery: cache.filterQuery || "",
     message: null,
     // Preview state (spec 014)
-    previewMode: false,
+    previewPosition: null,
     previewCache: new Map(),
     previewLoading: null,
     previewScrollOffset: 0,
@@ -141,12 +142,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
 
     // Preview actions (spec 014)
-    case "TOGGLE_PREVIEW_MODE":
+    case "TOGGLE_PREVIEW": {
+      // Toggle preview on/off, keeping last position (default to right)
       return {
         ...state,
-        previewMode: !state.previewMode,
+        previewPosition: state.previewPosition ? null : "right",
         previewScrollOffset: 0,
       }
+    }
+
+    case "CYCLE_PREVIEW_POSITION": {
+      // Cycle position: right -> bottom -> right (only when preview is on)
+      if (!state.previewPosition) return state
+      return {
+        ...state,
+        previewPosition: state.previewPosition === "right" ? "bottom" : "right",
+        previewScrollOffset: 0,
+      }
+    }
 
     case "SET_PREVIEW_CACHE": {
       const newCache = new Map(state.previewCache)
