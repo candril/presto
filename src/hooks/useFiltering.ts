@@ -3,7 +3,7 @@
  * Handles parsing, applying filters, and starred-only filtering
  */
 
-import { useMemo, useEffect } from "react"
+import { useMemo, useEffect, useRef } from "react"
 import { parseFilter, applyFilter, applyStarredOnlyFilter } from "../discovery"
 import { saveFilterQuery } from "../cache"
 import type { Config } from "../config"
@@ -52,8 +52,13 @@ export function useFiltering({
     dispatch({ type: "SELECT", index: 0 })
   }, [discoveryQuery, dispatch])
 
-  // Save filter query when it changes
+  // Save filter query when it changes (skip initial mount to avoid unnecessary write)
+  const isInitialMount = useRef(true)
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
     saveFilterQuery(discoveryQuery)
   }, [discoveryQuery])
 

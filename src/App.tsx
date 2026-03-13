@@ -13,7 +13,7 @@ import { PreviewPanel } from "./components/PreviewPanel"
 import { Loading } from "./components/Loading"
 import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
 import { CommandLine } from "./components/CommandLine"
-import { appReducer, initialState } from "./state"
+import { appReducer, createInitialState } from "./state"
 import { loadHistory, type History } from "./history"
 import { theme } from "./theme"
 import type { Config } from "./config"
@@ -32,7 +32,7 @@ interface AppProps {
 }
 
 export function App({ config }: AppProps) {
-  const [state, dispatch] = useReducer(appReducer, initialState)
+  const [state, dispatch] = useReducer(appReducer, null, createInitialState)
   const [history, setHistory] = useState<History>(() => loadHistory())
   const { height: terminalHeight } = useTerminalDimensions()
 

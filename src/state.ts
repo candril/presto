@@ -3,6 +3,7 @@
  */
 
 import type { AppState, PR, View } from "./types"
+import { loadCache } from "./cache"
 
 /** Action types for the reducer */
 export type AppAction =
@@ -27,22 +28,25 @@ export type AppAction =
   | { type: "CLEAR_PREVIEW_CACHE" }
   | { type: "SCROLL_PREVIEW"; delta: number }
 
-/** Initial application state */
-export const initialState: AppState = {
-  view: "list",
-  prs: [],
-  selectedIndex: 0,
-  loading: true,
-  refreshing: false,
-  error: null,
-  discoveryVisible: false,
-  discoveryQuery: "",
-  message: null,
-  // Preview state (spec 014)
-  previewMode: false,
-  previewCache: new Map(),
-  previewLoading: null,
-  previewScrollOffset: 0,
+/** Create initial state, loading persisted filter from cache */
+export function createInitialState(): AppState {
+  const cache = loadCache()
+  return {
+    view: "list",
+    prs: [],
+    selectedIndex: 0,
+    loading: true,
+    refreshing: false,
+    error: null,
+    discoveryVisible: false,
+    discoveryQuery: cache.filterQuery || "",
+    message: null,
+    // Preview state (spec 014)
+    previewMode: false,
+    previewCache: new Map(),
+    previewLoading: null,
+    previewScrollOffset: 0,
+  }
 }
 
 /** State reducer */

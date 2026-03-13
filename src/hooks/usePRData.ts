@@ -71,10 +71,9 @@ export function usePRData({ config, filter, prs, dispatch }: UsePRDataOptions) {
 
     const cache = loadCache()
     if (isCacheValidForRepos(cache, repos) && cache.prs.length > 0) {
+      // Load cached PRs for instant display, then refresh in background
+      // Note: filter query is loaded in createInitialState()
       dispatch({ type: "SET_PRS", prs: cache.prs })
-      if (cache.filterQuery) {
-        dispatch({ type: "SET_DISCOVERY_QUERY", query: cache.filterQuery })
-      }
       fetchPRs(true)
     } else {
       fetchPRs(false)
