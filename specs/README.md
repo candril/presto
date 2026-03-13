@@ -32,7 +32,7 @@ Specs are numbered sequentially: `NNN-feature-name.md`
 | 002 | [PR List](./002-pr-list.md) | Ready | Fetch and display list of PRs |
 | 003 | [PR Detail](./003-pr-detail.md) | Ready | View PR details, checks, comments |
 | 004 | [External Tools](./004-external-tools.md) | Ready | Open PRs in browser, riff, or other tools |
-| 005 | [Search & Filter](./005-search-filter.md) | Ready | Filter PRs by status, author, repo |
+| 005 | [Smart Discovery](./005-smart-discovery.md) | Draft | Discovery bar with author/repo filters, starring, history |
 | 006 | [Configuration](./006-configuration.md) | Done | Config file loading, repos, tools, keybindings |
 | 007 | [Multi-Repo](./007-multi-repo.md) | Draft | Watch multiple repos, aggregate PRs |
 | 008 | [Keyboard Shortcuts](./008-keyboard-shortcuts.md) | Draft | Help modal, vim navigation, configurable keys |
@@ -48,7 +48,7 @@ The recommended implementation order for MVP:
 2. **002 - PR List** (P1) - Display PRs from GitHub
 3. **003 - PR Detail** (P1) - Show PR info inline
 4. **004 - External Tools** (P1) - Open in browser/riff
-5. **005 - Search & Filter** (P2) - Filter and search PRs
+5. **005 - Smart Discovery** (P2) - Discovery bar with smart suggestions
 
 ## Post-MVP Features
 
