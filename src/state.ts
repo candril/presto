@@ -31,6 +31,9 @@ export type AppAction =
   // Command palette actions (spec 010)
   | { type: "OPEN_COMMAND_PALETTE" }
   | { type: "CLOSE_COMMAND_PALETTE" }
+  // Optimistic PR updates
+  | { type: "UPDATE_PR"; url: string; updates: Partial<PR> }
+  | { type: "REMOVE_PR"; url: string }
 
 /** Create initial state, loading persisted filter from cache */
 export function createInitialState(): AppState {
@@ -196,6 +199,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         commandPaletteVisible: false,
       }
+
+    // Optimistic PR updates
+    case "UPDATE_PR": {
+      const prs = state.prs.map((pr) =>
+        pr.url === action.url ? { ...pr, ...action.updates } : pr
+      )
+      return { ...state, prs }
+    }
+
+    case "REMOVE_PR": {
+      const prs = state.prs.filter((pr) => pr.url !== action.url)
+      return {
+        ...state,
+        prs,
+        // Adjust selection if needed
+        selectedIndex: Math.min(state.selectedIndex, Math.max(0, prs.length - 1)),
+      }
+    }
 
     default:
       return state

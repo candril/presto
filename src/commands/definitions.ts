@@ -160,6 +160,7 @@ export const commands: Command[] = [
 
   // ============================================================================
   // STATE CHANGES
+  // These use optimistic UI updates - update state immediately, then call API
   // ============================================================================
   {
     id: "state.ready",
@@ -170,8 +171,10 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const repo = getRepoName(pr)
+      // Optimistic update
+      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { isDraft: false } })
+      // API call
       await $`gh pr ready ${pr.number} -R ${repo}`.quiet()
-      ctx.fetchPRs(true)
       return { type: "success", message: `Marked #${pr.number} as ready` }
     },
   },
@@ -185,8 +188,10 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const repo = getRepoName(pr)
+      // Optimistic update
+      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { isDraft: true } })
+      // API call
       await $`gh pr ready ${pr.number} -R ${repo} --undo`.quiet()
-      ctx.fetchPRs(true)
       return { type: "success", message: `Converted #${pr.number} to draft` }
     },
   },
@@ -200,8 +205,10 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const repo = getRepoName(pr)
+      // Optimistic update
+      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "CLOSED" } })
+      // API call
       await $`gh pr close ${pr.number} -R ${repo}`.quiet()
-      ctx.fetchPRs(true)
       return { type: "success", message: `Closed #${pr.number}` }
     },
   },
@@ -214,8 +221,10 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const repo = getRepoName(pr)
+      // Optimistic update
+      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "OPEN" } })
+      // API call
       await $`gh pr reopen ${pr.number} -R ${repo}`.quiet()
-      ctx.fetchPRs(true)
       return { type: "success", message: `Reopened #${pr.number}` }
     },
   },
@@ -230,8 +239,10 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const repo = getRepoName(pr)
+      // Optimistic update - mark as merged
+      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
+      // API call
       await $`gh pr merge ${pr.number} -R ${repo} --merge`.quiet()
-      ctx.fetchPRs(true)
       return { type: "success", message: `Merged #${pr.number}` }
     },
   },
@@ -246,8 +257,10 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const repo = getRepoName(pr)
+      // Optimistic update - mark as merged
+      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
+      // API call
       await $`gh pr merge ${pr.number} -R ${repo} --squash`.quiet()
-      ctx.fetchPRs(true)
       return { type: "success", message: `Squash merged #${pr.number}` }
     },
   },
@@ -262,8 +275,10 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const repo = getRepoName(pr)
+      // Optimistic update - mark as merged
+      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
+      // API call
       await $`gh pr merge ${pr.number} -R ${repo} --rebase`.quiet()
-      ctx.fetchPRs(true)
       return { type: "success", message: `Rebase merged #${pr.number}` }
     },
   },
