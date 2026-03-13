@@ -121,11 +121,17 @@ export function PreviewPanel({ preview, loading, scrollOffset, position }: Previ
     <box {...containerProps}>
 
       <scrollbox ref={scrollRef} flexGrow={1} paddingLeft={1} paddingRight={1}>
-          {/* Branch info */}
+          {/* Repo name */}
           <box height={1} marginTop={1}>
             <text>
-              <span fg={theme.primary}>{preview.author.login}</span>
-              <span fg={theme.textDim}> wants to merge </span>
+              <span fg={theme.primary}>{preview.repo}</span>
+            </text>
+          </box>
+
+          {/* Branch info */}
+          <box height={1}>
+            <text>
+              <span fg={theme.textDim}>{preview.author.login} wants to merge </span>
               <span fg={theme.success}>{preview.headRef}</span>
               <span fg={theme.textDim}> → </span>
               <span fg={theme.primary}>{preview.baseRef}</span>

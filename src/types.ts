@@ -89,6 +89,9 @@ export type CheckState = "SUCCESS" | "FAILURE" | "PENDING" | "NONE"
 
 /** Full preview data for a PR */
 export interface PRPreview {
+  /** Repository name (owner/repo) */
+  repo: string
+
   /** Files changed with line counts */
   files: ChangedFile[]
 

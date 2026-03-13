@@ -176,6 +176,7 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
   const result = await $`gh pr view ${number} -R ${repo} --json ${PREVIEW_FIELDS}`.json()
 
   return {
+    repo,
     files: parseFiles(result.files),
     commits: parseCommits(result.commits),
     author: {
