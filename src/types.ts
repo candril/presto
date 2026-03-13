@@ -201,4 +201,8 @@ export interface AppState {
   previewLoading: string | null
   /** Scroll offset for preview panel */
   previewScrollOffset: number
+
+  // Command palette state (spec 010)
+  /** Command palette visibility */
+  commandPaletteVisible: boolean
 }

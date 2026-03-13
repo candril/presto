@@ -16,6 +16,7 @@ export interface UseKeyboardNavOptions {
   filteredPRs: PR[]
   selectedIndex: number
   discoveryVisible: boolean
+  commandPaletteVisible: boolean
   previewPosition: PreviewPosition
   history: History
   setHistory: (history: History) => void
@@ -32,6 +33,7 @@ export function useKeyboardNav({
   filteredPRs,
   selectedIndex,
   discoveryVisible,
+  commandPaletteVisible,
   previewPosition,
   history,
   setHistory,
@@ -44,6 +46,11 @@ export function useKeyboardNav({
   const renderer = useRenderer()
 
   useKeyboard((key) => {
+    // Command palette is open - let it handle its own keys
+    if (commandPaletteVisible) {
+      return
+    }
+
     // Help overlay - ? toggles, Esc closes
     if (key.name === "?" || (key.name === "/" && key.shift)) {
       setShowHelp(!showHelp)
@@ -58,6 +65,12 @@ export function useKeyboardNav({
 
     // Discovery bar is open - let it handle its own keys
     if (discoveryVisible) {
+      return
+    }
+
+    // Open command palette with Ctrl-p
+    if (key.ctrl && key.name === "p") {
+      dispatch({ type: "OPEN_COMMAND_PALETTE" })
       return
     }
 

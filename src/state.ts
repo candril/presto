@@ -28,6 +28,9 @@ export type AppAction =
   | { type: "SET_PREVIEW_LOADING"; key: string | null }
   | { type: "CLEAR_PREVIEW_CACHE" }
   | { type: "SCROLL_PREVIEW"; delta: number }
+  // Command palette actions (spec 010)
+  | { type: "OPEN_COMMAND_PALETTE" }
+  | { type: "CLOSE_COMMAND_PALETTE" }
 
 /** Create initial state, loading persisted filter from cache */
 export function createInitialState(): AppState {
@@ -47,6 +50,8 @@ export function createInitialState(): AppState {
     previewCache: new Map(),
     previewLoading: null,
     previewScrollOffset: 0,
+    // Command palette state (spec 010)
+    commandPaletteVisible: false,
   }
 }
 
@@ -177,6 +182,19 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         previewScrollOffset: Math.max(0, state.previewScrollOffset + action.delta),
+      }
+
+    // Command palette actions (spec 010)
+    case "OPEN_COMMAND_PALETTE":
+      return {
+        ...state,
+        commandPaletteVisible: true,
+      }
+
+    case "CLOSE_COMMAND_PALETTE":
+      return {
+        ...state,
+        commandPaletteVisible: false,
       }
 
     default:

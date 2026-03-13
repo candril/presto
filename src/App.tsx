@@ -5,6 +5,7 @@
 
 import { useReducer, useState } from "react"
 import { useTerminalDimensions } from "@opentui/react"
+import { useRenderer } from "@opentui/react"
 import { Shell } from "./components/Shell"
 import { Header } from "./components/Header"
 import { StatusBar } from "./components/StatusBar"
@@ -14,6 +15,8 @@ import { Loading } from "./components/Loading"
 import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
 import { CommandLine } from "./components/CommandLine"
 import { HelpOverlay } from "./components/HelpOverlay"
+import { CommandPalette } from "./components/CommandPalette"
+import type { CommandContext, CommandResult } from "./commands"
 import { appReducer, createInitialState } from "./state"
 import { loadHistory, type History } from "./history"
 import { theme } from "./theme"
@@ -36,6 +39,7 @@ export function App({ config }: AppProps) {
   const [history, setHistory] = useState<History>(() => loadHistory())
   const [showHelp, setShowHelp] = useState(false)
   const { height: terminalHeight } = useTerminalDimensions()
+  const renderer = useRenderer()
 
   // Feature: Filtering
   const { filter, filteredPRs, hiddenCount } = useFiltering({
@@ -61,6 +65,7 @@ export function App({ config }: AppProps) {
     filteredPRs,
     selectedIndex: state.selectedIndex,
     discoveryVisible: state.discoveryVisible,
+    commandPaletteVisible: state.commandPaletteVisible,
     previewPosition: state.previewPosition,
     history,
     setHistory,
@@ -96,6 +101,28 @@ export function App({ config }: AppProps) {
     selectedIndex: state.selectedIndex,
     hiddenCount,
   })
+
+  // Command palette context
+  const commandContext: CommandContext = {
+    selectedPR,
+    dispatch,
+    config,
+    history,
+    setHistory,
+    renderer,
+    fetchPRs,
+  }
+
+  // Handle command palette results
+  const handleCommandResult = (result: CommandResult) => {
+    if (result.type === "success" && result.message) {
+      dispatch({ type: "SHOW_MESSAGE", message: result.message })
+    } else if (result.type === "error") {
+      dispatch({ type: "SHOW_MESSAGE", message: `Error: ${result.message}` })
+    } else if (result.type === "refresh") {
+      fetchPRs(true)
+    }
+  }
 
   return (
     <Shell>
@@ -175,6 +202,14 @@ export function App({ config }: AppProps) {
 
       {/* Help overlay */}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+
+      {/* Command palette */}
+      <CommandPalette
+        visible={state.commandPaletteVisible}
+        context={commandContext}
+        onClose={() => dispatch({ type: "CLOSE_COMMAND_PALETTE" })}
+        onResult={handleCommandResult}
+      />
     </Shell>
   )
 }

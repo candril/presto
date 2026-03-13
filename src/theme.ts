@@ -3,6 +3,11 @@ export const theme = {
   // Backgrounds
   bg: "#1a1b26",
   headerBg: "#24283b",
+  
+  // Modal/overlay backgrounds (darker, like Catppuccin mantle)
+  modalBg: "#16161e",
+  overlayBg: "#00000080",
+  selection: "#33467c",
 
   // Text
   text: "#c0caf5",
@@ -11,6 +16,7 @@ export const theme = {
 
   // Accents
   primary: "#7aa2f7",
+  secondary: "#bb9af7",
   success: "#9ece6a",
   warning: "#e0af68",
   error: "#f7768e",
