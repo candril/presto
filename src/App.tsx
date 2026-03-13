@@ -202,7 +202,7 @@ export function App({ config, currentUser }: AppProps) {
         />
       )}
 
-      <StatusBar filterQuery={state.discoveryQuery} />
+      <StatusBar filterQuery={state.discoveryVisible ? undefined : state.discoveryQuery} />
 
       {/* Help overlay */}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}

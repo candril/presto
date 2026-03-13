@@ -81,7 +81,7 @@ export function DiscoverySuggestions({
   }
 
   // Show suggestions in reverse order (selected at bottom, closest to input)
-  const visibleSuggestions = suggestions.slice(0, 10)
+  const visibleSuggestions = suggestions.slice(0, 20)
 
   return (
     <box
@@ -332,7 +332,13 @@ function buildSuggestions(
     }
   }
 
-  return items
+  // Dedupe by value
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    if (seen.has(item.value)) return false
+    seen.add(item.value)
+    return true
+  })
 }
 
 function countAuthorPRs(prs: PR[], author: string): number {

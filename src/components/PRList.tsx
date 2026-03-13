@@ -1,10 +1,11 @@
 /**
  * PR List component - displays pull requests in a table-like layout
  * 
- * Column order: State | Draft | Checks | Review | Time | Repo | Author | ID | Title
+ * Column order: State | Checks | Review | Time | ID | Title (flex) | Author | Repo
  */
 
 import { useRef, useEffect } from "react"
+import { useTerminalDimensions } from "@opentui/react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { theme } from "../theme"
 import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
@@ -13,14 +14,27 @@ import { formatRelativeTime } from "../utils/time"
 
 /** Column widths for table-like layout */
 const COL = {
-  state: 1,      // Nerd font icon
-  checks: 1,     // Nerd font icon
-  review: 1,     // Nerd font icon
-  time: 9,       // "just now" or "12h ago"
+  state: 2,      // icon + space
+  checks: 2,     // icon + space
+  review: 1,     // icon (no trailing space)
+  time: 4,       // "1d" or "2mo" (without "ago")
   id: 6,         // #1234
   repo: 16,      // Short repo name
   author: 16,    // @username
   // title: remaining space
+}
+
+/** Calculate total fixed width (everything except title) */
+function getFixedColumnsWidth(v: ColumnVisibility): number {
+  let width = 2 // padding left + right
+  if (v.state) width += COL.state // icon + space
+  if (v.checks) width += COL.checks // icon + space
+  if (v.review) width += COL.review + 1 // icon + space
+  if (v.time) width += COL.time + 1 // time + space
+  if (v.id) width += COL.id + 1 // id + space
+  if (v.author) width += COL.author + 1 // space + author
+  if (v.repo) width += COL.repo + 1 // space + repo
+  return width
 }
 
 /** Unicode icons */
@@ -53,6 +67,7 @@ const SCROLL_MARGIN = 3
 
 export function PRList({ prs, selectedIndex, columnVisibility }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
+  const { width: terminalWidth } = useTerminalDimensions()
 
   // Scroll to keep selected item visible with margin
   useEffect(() => {
@@ -81,9 +96,14 @@ export function PRList({ prs, selectedIndex, columnVisibility }: PRListProps) {
     )
   }
 
+  // Calculate available title width (account for preview panel taking ~50%)
+  const listWidth = terminalWidth // Will be constrained by parent
+  const fixedWidth = getFixedColumnsWidth(columnVisibility)
+  const titleWidth = Math.max(10, listWidth - fixedWidth)
+
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
-      <PRHeaderRow columnVisibility={columnVisibility} />
+      <PRHeaderRow columnVisibility={columnVisibility} titleWidth={titleWidth} />
       <scrollbox ref={scrollRef} flexGrow={1}>
         {prs.map((pr, index) => (
           <PRRow
@@ -91,6 +111,7 @@ export function PRList({ prs, selectedIndex, columnVisibility }: PRListProps) {
             pr={pr}
             selected={index === selectedIndex}
             columnVisibility={columnVisibility}
+            titleWidth={titleWidth}
           />
         ))}
       </scrollbox>
@@ -99,8 +120,9 @@ export function PRList({ prs, selectedIndex, columnVisibility }: PRListProps) {
 }
 
 /** Header row with column labels */
-function PRHeaderRow({ columnVisibility }: { columnVisibility: ColumnVisibility }) {
+function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: ColumnVisibility; titleWidth: number }) {
   const v = columnVisibility
+  
   return (
     <box
       height={1}
@@ -109,29 +131,18 @@ function PRHeaderRow({ columnVisibility }: { columnVisibility: ColumnVisibility 
       paddingRight={1}
     >
       <text fg={theme.textDim}>
-        {/* State (combined with draft) */}
-        {v.state && "S"}
-        {v.state && " "}
-        {/* Checks */}
-        {v.checks && "C"}
-        {v.checks && " "}
-        {/* Review */}
-        {v.review && "R"}
-        {v.review && "  "}
-        {/* Time */}
-        {v.time && padLeft("Updated", COL.time)}
-        {v.time && "  "}
-        {/* Repo */}
-        {v.repo && padRight("Repository", COL.repo)}
-        {v.repo && " "}
-        {/* Author */}
-        {v.author && padRight("Author", COL.author)}
-        {v.author && " "}
-        {/* ID */}
+        {v.state && "S "}
+        {v.checks && "C "}
+        {v.review && "R "}
+        {v.time && padRight("", COL.time)}
+        {v.time && " "}
         {v.id && padRight("PR", COL.id)}
         {v.id && " "}
-        {/* Title - always visible */}
-        {"Title"}
+        {padRight("Title", titleWidth)}
+        {v.author && " "}
+        {v.author && padRight("Author", COL.author)}
+        {v.repo && " "}
+        {v.repo && padRight("Repo", COL.repo)}
       </text>
     </box>
   )
@@ -141,17 +152,21 @@ interface PRRowProps {
   pr: PR
   selected: boolean
   columnVisibility: ColumnVisibility
+  titleWidth: number
 }
 
-function PRRow({ pr, selected, columnVisibility }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility, titleWidth }: PRRowProps) {
   const v = columnVisibility
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(computeCheckState(pr.statusCheckRollup))
   const reviewIndicator = getReviewIndicator(pr.reviewDecision)
-  const timeAgo = formatRelativeTime(pr.updatedAt)
+  const timeAgo = formatRelativeTime(pr.updatedAt).replace(" ago", "")
   const repoName = getShortRepoName(pr)
   const prId = `#${pr.number}`
   const author = `@${pr.author.login}`
+  
+  // Truncate title to fit
+  const title = truncate(pr.title, titleWidth)
 
   return (
     <box
@@ -162,29 +177,21 @@ function PRRow({ pr, selected, columnVisibility }: PRRowProps) {
       paddingRight={1}
     >
       <text>
-        {/* State (Open/Draft/Merged/Closed) */}
         {v.state && <span fg={stateIndicator.color}>{stateIndicator.icon}</span>}
         {v.state && " "}
-        {/* Checks */}
         {v.checks && <span fg={checkIndicator.color}>{checkIndicator.icon}</span>}
         {v.checks && " "}
-        {/* Review */}
         {v.review && <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>}
-        {v.review && "  "}
-        {/* Time - right-aligned in fixed width */}
-        {v.time && <span fg={theme.textMuted}>{padLeft(timeAgo, COL.time)}</span>}
-        {v.time && "  "}
-        {/* Repo - fixed width */}
-        {v.repo && <span fg={theme.primary}>{padRight(truncate(repoName, COL.repo), COL.repo)}</span>}
-        {v.repo && " "}
-        {/* Author - fixed width */}
-        {v.author && <span fg={theme.textMuted}>{padRight(truncate(author, COL.author), COL.author)}</span>}
-        {v.author && " "}
-        {/* PR ID */}
+        {v.review && " "}
+        {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
+        {v.time && " "}
         {v.id && <span fg={theme.textDim}>{padRight(prId, COL.id)}</span>}
         {v.id && " "}
-        {/* Title - takes remaining space */}
-        <span fg={theme.text}>{pr.title}</span>
+        <span fg={theme.text}>{padRight(title, titleWidth)}</span>
+        {v.author && " "}
+        {v.author && <span fg={theme.textMuted}>{padRight(truncate(author, COL.author), COL.author)}</span>}
+        {v.repo && " "}
+        {v.repo && <span fg={theme.primary}>{padRight(truncate(repoName, COL.repo), COL.repo)}</span>}
       </text>
     </box>
   )
