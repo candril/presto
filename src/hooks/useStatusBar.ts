@@ -12,6 +12,7 @@ interface UseStatusBarOptions {
   hiddenCount: number
   loading: boolean
   discoveryVisible: boolean
+  previewMode: boolean
   prsCount: number
 }
 
@@ -21,6 +22,7 @@ export function useStatusBar({
   hiddenCount,
   loading,
   discoveryVisible,
+  previewMode,
   prsCount,
 }: UseStatusBarOptions): string[] {
   return useMemo(() => {
@@ -32,11 +34,20 @@ export function useStatusBar({
       return hints
     }
 
+    if (previewMode) {
+      hints.push("p: close preview")
+      hints.push("Ctrl-d/u: scroll")
+      hints.push("j/k: navigate")
+      hints.push(`${config.keys.quit}: quit`)
+      return hints
+    }
+
     if (loading) {
       hints.push("Loading...")
     } else if (prsCount > 0) {
       hints.push("/: filter")
       hints.push("j/k: navigate")
+      hints.push("p: preview")
       hints.push("Enter: riff")
       hints.push("o: browser")
       hints.push("y: id")
@@ -53,5 +64,5 @@ export function useStatusBar({
     hints.push(`${config.keys.quit}: quit`)
 
     return hints
-  }, [config.keys.quit, filter, hiddenCount, loading, discoveryVisible, prsCount])
+  }, [config.keys.quit, filter, hiddenCount, loading, discoveryVisible, previewMode, prsCount])
 }

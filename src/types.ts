@@ -67,6 +67,75 @@ export type StatusCheckRollup = CheckRun[]
 /** Computed overall check state for display */
 export type CheckState = "SUCCESS" | "FAILURE" | "PENDING" | "NONE"
 
+// ============================================================================
+// PR Preview Types (spec 014)
+// ============================================================================
+
+/** Full preview data for a PR */
+export interface PRPreview {
+  /** Files changed with line counts */
+  files: ChangedFile[]
+
+  /** Commits in the PR */
+  commits: PRCommit[]
+
+  /** Author details */
+  author: {
+    login: string
+    createdAt: string // ISO date
+  }
+
+  /** Review status per reviewer */
+  reviews: PRReview[]
+
+  /** CI/check status */
+  checks: PreviewCheckStatus
+
+  /** PR description body */
+  body: string
+
+  /** Branch info */
+  baseRef: string
+  headRef: string
+
+  /** Merge state */
+  mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
+
+  /** Comment counts */
+  commentCount: number
+  reviewCommentCount: number
+}
+
+export interface ChangedFile {
+  path: string
+  additions: number
+  deletions: number
+  status: "added" | "modified" | "deleted" | "renamed"
+}
+
+export interface PRCommit {
+  oid: string // Short SHA
+  message: string // First line only
+  author: string
+  committedAt: string
+}
+
+export interface PRReview {
+  author: string
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "PENDING"
+  submittedAt: string
+}
+
+export interface PreviewCheckStatus {
+  overall: "success" | "failure" | "pending" | "neutral"
+  checks: PreviewCheck[]
+}
+
+export interface PreviewCheck {
+  name: string
+  status: "success" | "failure" | "pending" | "neutral"
+}
+
 /**
  * Compute overall check state from array of check runs
  * - FAILURE if any check failed
@@ -119,4 +188,14 @@ export interface AppState {
   discoveryQuery: string
   /** Temporary message to show (e.g., "Starred @user") */
   message: string | null
+
+  // Preview state (spec 014)
+  /** Preview mode enabled */
+  previewMode: boolean
+  /** Cache of loaded previews, keyed by "owner/repo#number" */
+  previewCache: Map<string, PRPreview>
+  /** Currently loading preview for this PR key */
+  previewLoading: string | null
+  /** Scroll offset for preview panel */
+  previewScrollOffset: number
 }

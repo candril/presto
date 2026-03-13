@@ -44,6 +44,9 @@ export function usePRData({ config, filter, prs, dispatch }: UsePRDataOptions) {
       dispatch({ type: "SET_LOADING", loading: true })
     }
 
+    // Clear preview cache on refresh
+    dispatch({ type: "CLEAR_PREVIEW_CACHE" })
+
     try {
       const fetchedPRs = await listPRsFromRepos(repos)
       dispatch({ type: "SET_PRS", prs: fetchedPRs })

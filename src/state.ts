@@ -20,6 +20,12 @@ export type AppAction =
   | { type: "SET_DISCOVERY_QUERY"; query: string }
   | { type: "SHOW_MESSAGE"; message: string }
   | { type: "CLEAR_MESSAGE" }
+  // Preview actions (spec 014)
+  | { type: "TOGGLE_PREVIEW_MODE" }
+  | { type: "SET_PREVIEW_CACHE"; key: string; data: import("./types").PRPreview }
+  | { type: "SET_PREVIEW_LOADING"; key: string | null }
+  | { type: "CLEAR_PREVIEW_CACHE" }
+  | { type: "SCROLL_PREVIEW"; delta: number }
 
 /** Initial application state */
 export const initialState: AppState = {
@@ -32,6 +38,11 @@ export const initialState: AppState = {
   discoveryVisible: false,
   discoveryQuery: "",
   message: null,
+  // Preview state (spec 014)
+  previewMode: false,
+  previewCache: new Map(),
+  previewLoading: null,
+  previewScrollOffset: 0,
 }
 
 /** State reducer */
@@ -123,6 +134,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         message: null,
+      }
+
+    // Preview actions (spec 014)
+    case "TOGGLE_PREVIEW_MODE":
+      return {
+        ...state,
+        previewMode: !state.previewMode,
+        previewScrollOffset: 0,
+      }
+
+    case "SET_PREVIEW_CACHE": {
+      const newCache = new Map(state.previewCache)
+      newCache.set(action.key, action.data)
+      return { ...state, previewCache: newCache }
+    }
+
+    case "SET_PREVIEW_LOADING":
+      return { ...state, previewLoading: action.key }
+
+    case "CLEAR_PREVIEW_CACHE":
+      return { ...state, previewCache: new Map() }
+
+    case "SCROLL_PREVIEW":
+      return {
+        ...state,
+        previewScrollOffset: Math.max(0, state.previewScrollOffset + action.delta),
       }
 
     default:

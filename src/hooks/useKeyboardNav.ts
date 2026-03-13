@@ -16,10 +16,12 @@ interface UseKeyboardNavOptions {
   filteredPRs: PR[]
   selectedIndex: number
   discoveryVisible: boolean
+  previewMode: boolean
   history: History
   setHistory: (history: History) => void
   dispatch: (action: any) => void
   fetchPRs: (showAsRefresh?: boolean) => void
+  terminalHeight: number
 }
 
 export function useKeyboardNav({
@@ -28,16 +30,37 @@ export function useKeyboardNav({
   filteredPRs,
   selectedIndex,
   discoveryVisible,
+  previewMode,
   history,
   setHistory,
   dispatch,
   fetchPRs,
+  terminalHeight,
 }: UseKeyboardNavOptions) {
   const renderer = useRenderer()
 
   useKeyboard((key) => {
     // Discovery bar is open - let it handle its own keys
     if (discoveryVisible) {
+      return
+    }
+
+    // Preview mode: Ctrl-d/Ctrl-u for scrolling
+    if (previewMode) {
+      const halfPage = Math.floor((terminalHeight - 6) / 2)
+      if (key.ctrl && key.name === "d") {
+        dispatch({ type: "SCROLL_PREVIEW", delta: halfPage })
+        return
+      }
+      if (key.ctrl && key.name === "u") {
+        dispatch({ type: "SCROLL_PREVIEW", delta: -halfPage })
+        return
+      }
+    }
+
+    // Toggle preview mode with p
+    if (key.name === "p") {
+      dispatch({ type: "TOGGLE_PREVIEW_MODE" })
       return
     }
 

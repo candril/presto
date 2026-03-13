@@ -3,7 +3,7 @@
  */
 
 import { $ } from "bun"
-import type { PR } from "../types"
+import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck } from "../types"
 
 /** Fields to fetch from GitHub */
 const PR_FIELDS = [
@@ -148,4 +148,157 @@ export async function getCurrentRepo(): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+// ============================================================================
+// PR Preview (spec 014)
+// ============================================================================
+
+/** Fields to fetch for PR preview */
+const PREVIEW_FIELDS = [
+  "files",
+  "commits",
+  "author",
+  "reviews",
+  "statusCheckRollup",
+  "body",
+  "baseRefName",
+  "headRefName",
+  "mergeable",
+  "comments",
+  "createdAt",
+].join(",")
+
+/**
+ * Fetch detailed PR preview data
+ */
+export async function fetchPRPreview(repo: string, number: number): Promise<PRPreview> {
+  const result = await $`gh pr view ${number} -R ${repo} --json ${PREVIEW_FIELDS}`.json()
+
+  return {
+    files: parseFiles(result.files),
+    commits: parseCommits(result.commits),
+    author: {
+      login: result.author?.login ?? "unknown",
+      createdAt: result.createdAt ?? "",
+    },
+    reviews: dedupeReviews(result.reviews ?? []),
+    checks: parsePreviewChecks(result.statusCheckRollup),
+    body: result.body ?? "",
+    baseRef: result.baseRefName ?? "",
+    headRef: result.headRefName ?? "",
+    mergeable: result.mergeable ?? "UNKNOWN",
+    commentCount: result.comments?.length ?? 0,
+    reviewCommentCount: 0, // Not available via gh CLI
+  }
+}
+
+function parseFiles(files: any[]): ChangedFile[] {
+  if (!files) return []
+  return files.map((f) => ({
+    path: f.path ?? "",
+    additions: f.additions ?? 0,
+    deletions: f.deletions ?? 0,
+    status: mapFileStatus(f.status),
+  }))
+}
+
+function mapFileStatus(status: string): ChangedFile["status"] {
+  switch (status?.toLowerCase()) {
+    case "added":
+      return "added"
+    case "deleted":
+    case "removed":
+      return "deleted"
+    case "renamed":
+      return "renamed"
+    default:
+      return "modified"
+  }
+}
+
+function parseCommits(commits: any[]): PRCommit[] {
+  if (!commits) return []
+  return commits.map((c) => ({
+    oid: (c.oid ?? "").slice(0, 7),
+    message: c.messageHeadline ?? c.message?.split("\n")[0] ?? "",
+    author: c.authors?.[0]?.login ?? c.author?.login ?? "unknown",
+    committedAt: c.committedDate ?? "",
+  }))
+}
+
+/** Keep only latest review per author */
+function dedupeReviews(reviews: any[]): PRReview[] {
+  const byAuthor = new Map<string, any>()
+  for (const r of reviews) {
+    if (!r.author?.login) continue
+    const existing = byAuthor.get(r.author.login)
+    if (!existing || new Date(r.submittedAt) > new Date(existing.submittedAt)) {
+      byAuthor.set(r.author.login, r)
+    }
+  }
+  return [...byAuthor.values()].map((r) => ({
+    author: r.author.login,
+    state: r.state ?? "PENDING",
+    submittedAt: r.submittedAt ?? "",
+  }))
+}
+
+function parsePreviewChecks(rollup: any[]): PreviewCheckStatus {
+  if (!rollup || rollup.length === 0) {
+    return { overall: "neutral", checks: [] }
+  }
+
+  const checks: PreviewCheck[] = rollup.map((c) => ({
+    name: c.name || c.context || "unknown",
+    status: mapPreviewCheckStatus(c.status, c.conclusion, c.state),
+  }))
+
+  const hasFailure = checks.some((c) => c.status === "failure")
+  const hasPending = checks.some((c) => c.status === "pending")
+  const overall = hasFailure ? "failure" : hasPending ? "pending" : "success"
+
+  return { overall, checks }
+}
+
+function mapPreviewCheckStatus(
+  status?: string,
+  conclusion?: string,
+  state?: string
+): PreviewCheck["status"] {
+  // Handle StatusContext (has state instead of status/conclusion)
+  if (state) {
+    switch (state) {
+      case "SUCCESS":
+        return "success"
+      case "FAILURE":
+      case "ERROR":
+        return "failure"
+      case "PENDING":
+      case "EXPECTED":
+        return "pending"
+      default:
+        return "neutral"
+    }
+  }
+
+  // Handle CheckRun
+  if (status === "COMPLETED") {
+    switch (conclusion) {
+      case "SUCCESS":
+        return "success"
+      case "FAILURE":
+      case "TIMED_OUT":
+      case "STARTUP_FAILURE":
+        return "failure"
+      default:
+        return "neutral"
+    }
+  }
+
+  if (status === "IN_PROGRESS" || status === "QUEUED" || status === "PENDING" || status === "WAITING") {
+    return "pending"
+  }
+
+  return "neutral"
 }
