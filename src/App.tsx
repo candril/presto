@@ -5,17 +5,29 @@ import { Header } from "./components/Header"
 import { StatusBar } from "./components/StatusBar"
 import { appReducer, initialState } from "./state"
 import { theme } from "./theme"
+import type { Config } from "./config"
 
-export function App() {
+interface AppProps {
+  config: Config
+}
+
+export function App({ config }: AppProps) {
   const renderer = useRenderer()
   const [state, dispatch] = useReducer(appReducer, initialState)
 
   useKeyboard((key) => {
-    if (key.name === "q") {
+    // Use configured quit key (default: "q")
+    if (key.name === config.keys.quit) {
       renderer.destroy()
       return
     }
   })
+
+  // Build status hints from config keys
+  const hints = [
+    `${config.keys.quit}: quit`,
+    `${config.keys.help}: help`,
+  ]
 
   return (
     <Shell>
@@ -27,11 +39,13 @@ export function App() {
           <span fg={theme.textDim}>A terminal-based pull request discovery tool.</span>
           {"\n"}
           <span fg={theme.textDim}>Press </span>
-          <span fg={theme.primary}>q</span>
+          <span fg={theme.primary}>{config.keys.quit}</span>
           <span fg={theme.textDim}> to quit.</span>
+          {"\n\n"}
+          <span fg={theme.textMuted}>Config: {config.display.theme} theme, refresh every {config.refresh.interval}s</span>
         </text>
       </box>
-      <StatusBar hints={["q: quit", "?: help"]} />
+      <StatusBar hints={hints} />
     </Shell>
   )
 }

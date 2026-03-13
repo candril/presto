@@ -27,6 +27,7 @@
   "dependencies": {
     "@opentui/core": "^0.1.81",
     "@opentui/react": "^0.1.81",
-    "react": "^18.2.0"
+    "react": "19",
+    "smol-toml": "^1.6.0"
   }
 }

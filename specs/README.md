@@ -33,7 +33,7 @@ Specs are numbered sequentially: `NNN-feature-name.md`
 | 003 | [PR Detail](./003-pr-detail.md) | Ready | View PR details, checks, comments |
 | 004 | [External Tools](./004-external-tools.md) | Ready | Open PRs in browser, riff, or other tools |
 | 005 | [Search & Filter](./005-search-filter.md) | Ready | Filter PRs by status, author, repo |
-| 006 | [Configuration](./006-configuration.md) | Draft | Config file loading, repos, tools, keybindings |
+| 006 | [Configuration](./006-configuration.md) | Done | Config file loading, repos, tools, keybindings |
 | 007 | [Multi-Repo](./007-multi-repo.md) | Draft | Watch multiple repos, aggregate PRs |
 | 008 | [Keyboard Shortcuts](./008-keyboard-shortcuts.md) | Draft | Help modal, vim navigation, configurable keys |
 | 009 | [Auto-Refresh](./009-auto-refresh.md) | Draft | Periodic refresh, manual refresh, stale indicators |
