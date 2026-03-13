@@ -4,7 +4,7 @@
 
 ## Description
 
-Quick inline preview of a PR without leaving the list view. Press `p` on any PR row to expand a preview panel showing key details: changed files, commits, author, reviewers, CI status, description, and more. Press `p` again or `Escape` to collapse.
+Right-side preview panel showing PR details while navigating the list. Press `p` to toggle preview mode - once enabled, navigating with `j`/`k` automatically loads the preview for the selected PR. Previews are cached until the next refresh.
 
 This provides a middle ground between the minimal list view and opening the full PR detail or external tool.
 
@@ -19,30 +19,76 @@ This provides a middle ground between the minimal list view and opening the full
 
 ### P1 - Must Have
 
-- **Toggle preview**: `p` on PR row opens/closes preview panel
+- **Toggle preview mode**: `p` toggles preview panel on/off
+- **Right side panel**: Preview appears in right panel, list stays on left
+- **Auto-load on navigate**: When preview mode is on, `j`/`k` navigation loads preview for selected PR
 - **Changed files**: List of files with `+N -M` line counts
 - **Author info**: Author name, when PR was created
 - **CI/Check status**: Overall status (pass/fail/pending) with failed check names
 - **Reviewers**: Who reviewed, their verdict (approved/changes requested/pending)
-- **Base branch**: Target branch (e.g., `main`)
-- **Close preview**: `Escape` or `p` closes preview
+- **Branch info**: Source and target branch (e.g., `feature-branch → main`)
+- **Scroll preview**: `Ctrl-d`/`Ctrl-u` to scroll preview content half-page
+- **Cache until refresh**: Preview data cached in memory, cleared on PR list refresh
 
 ### P2 - Should Have
 
 - **Commits list**: List of commits with short messages
-- **PR description**: Body text (truncated if long, expandable)
+- **PR description**: Body text (truncated if long)
 - **Merge conflicts**: Show warning if PR has conflicts
 - **Comments count**: Number of review comments
-- **Head branch**: Source branch name
-- **Scrollable content**: If preview content exceeds height, allow scrolling with `j`/`k`
+- **Debounced loading**: 100-150ms debounce on navigation to avoid excessive API calls
+- **Loading indicator**: Show spinner/loading state while fetching, keep previous preview visible
 
 ### P3 - Nice to Have
 
+- **Prefetch adjacent**: While idle, prefetch prev/next PR previews
 - **File tree view**: Group changed files by directory
 - **Expandable sections**: Collapse/expand commits, files, description
 - **Copy file path**: Shortcut to copy file path to clipboard
 - **Jump to file in diff**: Select file and press Enter to open in external diff tool
-- **Syntax highlighting**: Highlight file extensions with colors
+
+## Layout
+
+```
+┌─ Header ───────────────────────────────────────────────────────────────┐
+│ presto                                                    ↻ 2m ago    │
+├─ PR List ─────────────────────────────┬─ Preview ──────────────────────┤
+│ > #123 Fix auth bug      @alice  ✓ 2h │ alice → main                  │
+│   #124 Add feature       @bob    ○ 1d │                               │
+│   #125 Refactor utils    @carol  ✗ 3h │ ✓ Checks  ✓ Mergeable  💬 3   │
+│   #126 Update docs       @dave   ✓ 4h │                               │
+│   #127 Fix typo          @eve    ✓ 5h │ Reviews: ✓bob ○carol          │
+│                                       │                               │
+│                                       │ Files (4):                    │
+│                                       │  M src/auth.ts      +30 -10   │
+│                                       │  M src/login.ts     +15  -5   │
+│                                       │  A src/utils.ts     +12  -0   │
+│                                       │  D old/legacy.ts     +0 -25   │
+│                                       │                               │
+│                                       │ Commits (3):                  │
+│                                       │  a1b2c3d Fix auth flow        │
+│                                       │  e4f5g6h Add tests            │
+│                                       │  i7j8k9l Cleanup              │
+│                                       │                               │
+│                                       │ Description:                  │
+│                                       │  This PR fixes the auth...    │
+├───────────────────────────────────────┴────────────────────────────────┤
+│ p: close preview  Ctrl-d/u: scroll  Enter: open                       │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Panel width**: ~45-50% of terminal width, or fixed ~50 characters minimum.
+
+## Keyboard Bindings
+
+| Key | Context | Action |
+|-----|---------|--------|
+| `p` | List | Toggle preview mode on/off |
+| `j`/`k` | List (preview on) | Navigate list + load preview |
+| `Ctrl-d` | Preview | Scroll preview down half page |
+| `Ctrl-u` | Preview | Scroll preview up half page |
+| `Enter` | Preview | Open PR in external tool |
+| `Escape` | Preview | Close preview mode |
 
 ## Technical Notes
 
@@ -117,6 +163,152 @@ export interface Check {
 }
 ```
 
+### State
+
+```typescript
+// src/state.ts additions
+export interface AppState {
+  // ... existing
+  
+  /** Preview mode enabled */
+  previewMode: boolean
+  
+  /** Cache of loaded previews, keyed by "owner/repo#number" */
+  previewCache: Map<string, PRPreview>
+  
+  /** Currently loading preview for this PR key */
+  previewLoading: string | null
+  
+  /** Scroll offset for preview panel */
+  previewScrollOffset: number
+}
+
+export type AppAction =
+  // ... existing
+  | { type: "TOGGLE_PREVIEW_MODE" }
+  | { type: "SET_PREVIEW_CACHE"; key: string; data: PRPreview }
+  | { type: "SET_PREVIEW_LOADING"; key: string | null }
+  | { type: "CLEAR_PREVIEW_CACHE" }
+  | { type: "SCROLL_PREVIEW"; delta: number }
+
+function reducer(state: AppState, action: AppAction): AppState {
+  switch (action.type) {
+    case "TOGGLE_PREVIEW_MODE":
+      return { 
+        ...state, 
+        previewMode: !state.previewMode,
+        previewScrollOffset: 0,
+      }
+    
+    case "SET_PREVIEW_CACHE":
+      const newCache = new Map(state.previewCache)
+      newCache.set(action.key, action.data)
+      return { ...state, previewCache: newCache }
+    
+    case "SET_PREVIEW_LOADING":
+      return { ...state, previewLoading: action.key }
+    
+    case "CLEAR_PREVIEW_CACHE":
+      return { ...state, previewCache: new Map() }
+    
+    case "SCROLL_PREVIEW":
+      return { 
+        ...state, 
+        previewScrollOffset: Math.max(0, state.previewScrollOffset + action.delta)
+      }
+    
+    // ... existing cases
+  }
+}
+```
+
+### Preview Hook with Caching and Debounce
+
+```typescript
+// src/hooks/usePreview.ts
+import { useEffect, useRef } from "react"
+import { fetchPRPreview } from "../providers/github"
+import type { PR } from "../types"
+import type { AppState, AppAction } from "../state"
+
+interface UsePreviewOptions {
+  state: AppState
+  dispatch: React.Dispatch<AppAction>
+  selectedPR: PR | null
+}
+
+export function usePreview({ state, dispatch, selectedPR }: UsePreviewOptions) {
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  
+  useEffect(() => {
+    // Clear any pending debounce
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+    
+    // Only fetch if preview mode is on and we have a selected PR
+    if (!state.previewMode || !selectedPR) {
+      return
+    }
+    
+    const cacheKey = `${selectedPR.repository.nameWithOwner}#${selectedPR.number}`
+    
+    // If already cached, no need to fetch
+    if (state.previewCache.has(cacheKey)) {
+      dispatch({ type: "SET_PREVIEW_LOADING", key: null })
+      return
+    }
+    
+    // Debounce the fetch
+    debounceRef.current = setTimeout(async () => {
+      dispatch({ type: "SET_PREVIEW_LOADING", key: cacheKey })
+      
+      try {
+        const preview = await fetchPRPreview(
+          selectedPR.repository.nameWithOwner,
+          selectedPR.number
+        )
+        dispatch({ type: "SET_PREVIEW_CACHE", key: cacheKey, data: preview })
+      } catch (error) {
+        console.error("Failed to fetch preview:", error)
+      } finally {
+        dispatch({ type: "SET_PREVIEW_LOADING", key: null })
+      }
+    }, 150) // 150ms debounce
+    
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+      }
+    }
+  }, [state.previewMode, selectedPR?.number, selectedPR?.repository.nameWithOwner])
+  
+  // Get current preview from cache
+  const currentKey = selectedPR 
+    ? `${selectedPR.repository.nameWithOwner}#${selectedPR.number}`
+    : null
+  
+  return {
+    preview: currentKey ? state.previewCache.get(currentKey) ?? null : null,
+    loading: state.previewLoading === currentKey,
+  }
+}
+```
+
+### Clear Cache on Refresh
+
+```typescript
+// When refreshing PR list, clear preview cache
+async function handleRefresh() {
+  dispatch({ type: "CLEAR_PREVIEW_CACHE" })
+  dispatch({ type: "SET_LOADING", loading: true })
+  
+  const prs = await fetchPRs(config.repositories)
+  dispatch({ type: "SET_PRS", prs })
+  dispatch({ type: "SET_LOADING", loading: false })
+}
+```
+
 ### GitHub CLI Query
 
 ```typescript
@@ -124,7 +316,7 @@ export interface Check {
 export async function fetchPRPreview(repo: string, number: number): Promise<PRPreview> {
   const result = await $`gh pr view ${number} \
     --repo ${repo} \
-    --json files,commits,author,reviews,statusCheckRollup,body,baseRefName,headRefName,mergeable,comments,reviewComments`.json()
+    --json files,commits,author,reviews,statusCheckRollup,body,baseRefName,headRefName,mergeable,comments,reviewComments,createdAt`.json()
   
   return {
     files: result.files.map((f: any) => ({
@@ -143,19 +335,31 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
       login: result.author.login,
       createdAt: result.createdAt,
     },
-    reviews: result.reviews.map((r: any) => ({
-      author: r.author.login,
-      state: r.state,
-      submittedAt: r.submittedAt,
-    })),
+    reviews: dedupeReviews(result.reviews),
     checks: parseChecks(result.statusCheckRollup),
     body: result.body ?? "",
     baseRef: result.baseRefName,
     headRef: result.headRefName,
     mergeable: result.mergeable,
-    commentCount: result.comments.length,
-    reviewCommentCount: result.reviewComments.length,
+    commentCount: result.comments?.length ?? 0,
+    reviewCommentCount: result.reviewComments?.length ?? 0,
   }
+}
+
+/** Keep only latest review per author */
+function dedupeReviews(reviews: any[]): Review[] {
+  const byAuthor = new Map<string, any>()
+  for (const r of reviews) {
+    const existing = byAuthor.get(r.author.login)
+    if (!existing || new Date(r.submittedAt) > new Date(existing.submittedAt)) {
+      byAuthor.set(r.author.login, r)
+    }
+  }
+  return [...byAuthor.values()].map(r => ({
+    author: r.author.login,
+    state: r.state,
+    submittedAt: r.submittedAt,
+  }))
 }
 
 function parseChecks(rollup: any[]): CheckStatus {
@@ -165,8 +369,7 @@ function parseChecks(rollup: any[]): CheckStatus {
   
   const checks: Check[] = rollup.map((c) => ({
     name: c.name || c.context,
-    status: mapCheckStatus(c.status || c.state),
-    failureMessage: c.conclusion === "FAILURE" ? c.name : undefined,
+    status: mapCheckStatus(c.status || c.state, c.conclusion),
   }))
   
   const hasFailure = checks.some(c => c.status === "failure")
@@ -175,274 +378,193 @@ function parseChecks(rollup: any[]): CheckStatus {
   
   return { overall, checks }
 }
+
+function mapCheckStatus(status: string, conclusion?: string): Check["status"] {
+  if (status === "COMPLETED") {
+    if (conclusion === "SUCCESS") return "success"
+    if (conclusion === "FAILURE") return "failure"
+    return "neutral"
+  }
+  if (status === "IN_PROGRESS" || status === "QUEUED" || status === "PENDING") {
+    return "pending"
+  }
+  return "neutral"
+}
 ```
 
-### Preview Component
+### Preview Panel Component
 
 ```tsx
-// src/components/PRPreview.tsx
+// src/components/PreviewPanel.tsx
+import { useKeyboard } from "@opentui/react"
 import type { PRPreview } from "../types"
 import { theme } from "../theme"
-import { formatRelativeTime } from "../utils/time"
 
-interface PRPreviewProps {
+interface PreviewPanelProps {
   preview: PRPreview | null
   loading: boolean
-  onClose: () => void
+  scrollOffset: number
+  onScroll: (delta: number) => void
+  terminalHeight: number
 }
 
-export function PRPreviewPanel({ preview, loading, onClose }: PRPreviewProps) {
-  const [scrollOffset, setScrollOffset] = useState(0)
+export function PreviewPanel({ 
+  preview, 
+  loading, 
+  scrollOffset, 
+  onScroll,
+  terminalHeight,
+}: PreviewPanelProps) {
+  const halfPage = Math.floor((terminalHeight - 4) / 2)
   
   useKeyboard((key) => {
-    if (key.name === "escape" || key.name === "p") {
-      onClose()
-      return
+    if (key.ctrl && key.name === "d") {
+      onScroll(halfPage)
     }
-    if (key.name === "j") setScrollOffset(s => s + 1)
-    if (key.name === "k") setScrollOffset(s => Math.max(0, s - 1))
+    if (key.ctrl && key.name === "u") {
+      onScroll(-halfPage)
+    }
   })
   
-  if (loading) {
+  if (loading && !preview) {
     return (
-      <box border={{ type: "rounded", fg: theme.border }} padding={1}>
-        <text fg={theme.textDim}>Loading preview...</text>
+      <box 
+        width="50%" 
+        border={{ type: "rounded", fg: theme.border }}
+        padding={1}
+      >
+        <text fg={theme.textDim}>Loading...</text>
       </box>
     )
   }
   
-  if (!preview) return null
+  if (!preview) {
+    return (
+      <box 
+        width="50%" 
+        border={{ type: "rounded", fg: theme.border }}
+        padding={1}
+      >
+        <text fg={theme.textDim}>No preview</text>
+      </box>
+    )
+  }
   
   return (
-    <box
+    <box 
+      width="50%"
       border={{ type: "rounded", fg: theme.primary }}
       flexDirection="column"
       padding={1}
-      maxHeight={20}
     >
-      {/* Header: Author + Branch */}
-      <box height={1} marginBottom={1}>
-        <text>
-          <span fg={theme.primary}>{preview.author.login}</span>
-          <span fg={theme.textDim}> wants to merge </span>
-          <span fg={theme.secondary}>{preview.headRef}</span>
-          <span fg={theme.textDim}> into </span>
-          <span fg={theme.secondary}>{preview.baseRef}</span>
-        </text>
-      </box>
-      
-      {/* Status Row: Checks + Mergeable + Comments */}
-      <box height={1} marginBottom={1}>
-        <ChecksIndicator checks={preview.checks} />
-        <MergeableIndicator state={preview.mergeable} />
-        {(preview.commentCount > 0 || preview.reviewCommentCount > 0) && (
-          <text fg={theme.textDim}>
-            {" "}💬 {preview.commentCount + preview.reviewCommentCount}
-          </text>
-        )}
-      </box>
-      
-      {/* Reviewers */}
-      {preview.reviews.length > 0 && (
+      <scrollbox scrollOffset={scrollOffset} flexGrow={1}>
+        {/* Header: Branch info */}
         <box height={1} marginBottom={1}>
-          <text fg={theme.textDim}>Reviews: </text>
-          {preview.reviews.map((r, i) => (
-            <ReviewBadge key={r.author} review={r} />
-          ))}
-        </box>
-      )}
-      
-      {/* Files Changed */}
-      <box flexDirection="column" marginBottom={1}>
-        <text fg={theme.textMuted}>
-          Files changed ({preview.files.length}):
-        </text>
-        <scrollbox height={5} scrollOffset={scrollOffset}>
-          {preview.files.map((file) => (
-            <box key={file.path} height={1}>
-              <text>
-                <FileStatusIcon status={file.status} />
-                <span fg={theme.text}> {file.path} </span>
-                <span fg={theme.success}>+{file.additions}</span>
-                <span fg={theme.textDim}>/</span>
-                <span fg={theme.error}>-{file.deletions}</span>
-              </text>
-            </box>
-          ))}
-        </scrollbox>
-      </box>
-      
-      {/* Commits (P2) */}
-      {preview.commits.length > 0 && (
-        <box flexDirection="column" marginBottom={1}>
-          <text fg={theme.textMuted}>
-            Commits ({preview.commits.length}):
+          <text>
+            <span fg={theme.primary}>{preview.author.login}</span>
+            <span fg={theme.textDim}> → </span>
+            <span fg={theme.secondary}>{preview.baseRef}</span>
+            {loading && <span fg={theme.warning}> ↻</span>}
           </text>
-          {preview.commits.slice(0, 5).map((commit) => (
-            <box key={commit.oid} height={1}>
-              <text>
-                <span fg={theme.secondary}>{commit.oid}</span>
-                <span fg={theme.text}> {truncate(commit.message, 50)}</span>
-              </text>
-            </box>
-          ))}
-          {preview.commits.length > 5 && (
-            <text fg={theme.textDim}>
-              ... and {preview.commits.length - 5} more
+        </box>
+        
+        {/* Status Row */}
+        <box height={1} marginBottom={1}>
+          <ChecksIndicator checks={preview.checks} />
+          <MergeableIndicator state={preview.mergeable} />
+          <CommentsIndicator count={preview.commentCount + preview.reviewCommentCount} />
+        </box>
+        
+        {/* Reviewers */}
+        {preview.reviews.length > 0 && (
+          <box height={1} marginBottom={1}>
+            <text>
+              <span fg={theme.textDim}>Reviews: </span>
+              {preview.reviews.map((r) => (
+                <ReviewBadge key={r.author} review={r} />
+              ))}
             </text>
-          )}
+          </box>
+        )}
+        
+        {/* Files */}
+        <box flexDirection="column" marginBottom={1}>
+          <text fg={theme.textMuted}>Files ({preview.files.length}):</text>
+          {preview.files.map((file) => (
+            <FileRow key={file.path} file={file} />
+          ))}
         </box>
-      )}
+        
+        {/* Commits */}
+        {preview.commits.length > 0 && (
+          <box flexDirection="column" marginBottom={1}>
+            <text fg={theme.textMuted}>Commits ({preview.commits.length}):</text>
+            {preview.commits.slice(0, 8).map((commit) => (
+              <box key={commit.oid} height={1}>
+                <text>
+                  <span fg={theme.secondary}>{commit.oid}</span>
+                  <span fg={theme.text}> {truncate(commit.message, 40)}</span>
+                </text>
+              </box>
+            ))}
+            {preview.commits.length > 8 && (
+              <text fg={theme.textDim}>
+                +{preview.commits.length - 8} more
+              </text>
+            )}
+          </box>
+        )}
+        
+        {/* Description */}
+        {preview.body && (
+          <box flexDirection="column">
+            <text fg={theme.textMuted}>Description:</text>
+            <text fg={theme.text}>{formatDescription(preview.body)}</text>
+          </box>
+        )}
+      </scrollbox>
       
-      {/* Description (P2) */}
-      {preview.body && (
-        <box flexDirection="column">
-          <text fg={theme.textMuted}>Description:</text>
-          <text fg={theme.text}>{truncate(preview.body, 200)}</text>
-        </box>
-      )}
-      
-      {/* Footer hint */}
-      <box height={1} marginTop={1}>
+      {/* Footer */}
+      <box height={1} borderTop={{ type: "single", fg: theme.border }}>
         <text fg={theme.textDim}>
-          p/Esc: close  j/k: scroll  Enter: open in tool
+          Ctrl-d/u: scroll  p: close
         </text>
       </box>
     </box>
   )
 }
 
-function ChecksIndicator({ checks }: { checks: CheckStatus }) {
-  const icon = checks.overall === "success" ? "✓" 
-    : checks.overall === "failure" ? "✗"
-    : checks.overall === "pending" ? "○"
-    : "−"
-  
-  const color = checks.overall === "success" ? theme.success
-    : checks.overall === "failure" ? theme.error
-    : theme.warning
-  
-  const failedCount = checks.checks.filter(c => c.status === "failure").length
-  
-  return (
-    <text>
-      <span fg={color}>{icon}</span>
-      <span fg={theme.textDim}> Checks</span>
-      {failedCount > 0 && (
-        <span fg={theme.error}> ({failedCount} failed)</span>
-      )}
-    </text>
-  )
+function truncate(str: string, len: number): string {
+  return str.length > len ? str.slice(0, len - 1) + "…" : str
 }
 
-function MergeableIndicator({ state }: { state: string }) {
-  if (state === "CONFLICTING") {
-    return <text fg={theme.error}> ⚠ Conflicts</text>
-  }
-  if (state === "MERGEABLE") {
-    return <text fg={theme.success}> ✓ Mergeable</text>
-  }
-  return null
+function formatDescription(body: string): string {
+  // Collapse multiple newlines, truncate
+  return body.replace(/\n{3,}/g, "\n\n").slice(0, 500)
 }
-
-function ReviewBadge({ review }: { review: Review }) {
-  const icon = review.state === "APPROVED" ? "✓"
-    : review.state === "CHANGES_REQUESTED" ? "✗"
-    : "○"
-  
-  const color = review.state === "APPROVED" ? theme.success
-    : review.state === "CHANGES_REQUESTED" ? theme.error
-    : theme.warning
-  
-  return (
-    <text>
-      <span fg={color}>{icon}</span>
-      <span fg={theme.text}>{review.author} </span>
-    </text>
-  )
-}
-
-function FileStatusIcon({ status }: { status: string }) {
-  switch (status) {
-    case "added": return <span fg={theme.success}>A</span>
-    case "deleted": return <span fg={theme.error}>D</span>
-    case "renamed": return <span fg={theme.warning}>R</span>
-    default: return <span fg={theme.secondary}>M</span>
-  }
-}
-```
-
-### State Integration
-
-```typescript
-// src/state.ts additions
-export interface AppState {
-  // ... existing
-  
-  /** Currently previewing PR number, null if closed */
-  previewPR: number | null
-  
-  /** Loaded preview data */
-  previewData: PRPreview | null
-  
-  /** Preview loading state */
-  previewLoading: boolean
-}
-
-export type AppAction =
-  // ... existing
-  | { type: "OPEN_PREVIEW"; prNumber: number }
-  | { type: "CLOSE_PREVIEW" }
-  | { type: "SET_PREVIEW_DATA"; data: PRPreview }
-  | { type: "SET_PREVIEW_LOADING"; loading: boolean }
-```
-
-### Keyboard Handler
-
-```typescript
-// In App.tsx or useKeyboard hook
-useKeyboard((key) => {
-  // Toggle preview
-  if (key.name === "p" && !state.discoveryVisible) {
-    if (state.previewPR !== null) {
-      dispatch({ type: "CLOSE_PREVIEW" })
-    } else {
-      const pr = state.prs[state.selectedIndex]
-      if (pr) {
-        dispatch({ type: "OPEN_PREVIEW", prNumber: pr.number })
-        dispatch({ type: "SET_PREVIEW_LOADING", loading: true })
-        
-        fetchPRPreview(pr.repository.nameWithOwner, pr.number)
-          .then(data => {
-            dispatch({ type: "SET_PREVIEW_DATA", data })
-            dispatch({ type: "SET_PREVIEW_LOADING", loading: false })
-          })
-          .catch(() => {
-            dispatch({ type: "SET_PREVIEW_LOADING", loading: false })
-          })
-      }
-    }
-    return
-  }
-})
 ```
 
 ### Layout Integration
 
 ```tsx
-// In App.tsx - preview appears below selected PR row
-<box flexDirection="column" flexGrow={1}>
-  <PRList
-    prs={filteredPRs}
-    selectedIndex={state.selectedIndex}
-    previewingPR={state.previewPR}
-  />
+// In App.tsx
+<box flexDirection="row" flexGrow={1}>
+  {/* PR List - shrinks when preview is open */}
+  <box width={state.previewMode ? "50%" : "100%"} flexDirection="column">
+    <PRList
+      prs={filteredPRs}
+      selectedIndex={state.selectedIndex}
+    />
+  </box>
   
-  {state.previewPR !== null && (
-    <PRPreviewPanel
-      preview={state.previewData}
-      loading={state.previewLoading}
-      onClose={() => dispatch({ type: "CLOSE_PREVIEW" })}
+  {/* Preview Panel - only when preview mode is on */}
+  {state.previewMode && (
+    <PreviewPanel
+      preview={preview}
+      loading={previewLoading}
+      scrollOffset={state.previewScrollOffset}
+      onScroll={(delta) => dispatch({ type: "SCROLL_PREVIEW", delta })}
+      terminalHeight={terminalHeight}
     />
   )}
 </box>
@@ -453,23 +575,25 @@ useKeyboard((key) => {
 ```
 src/
 ├── types.ts                    # Add PRPreview types
-├── state.ts                    # Add preview state
+├── state.ts                    # Add preview state + cache
 ├── providers/
 │   └── github.ts               # Add fetchPRPreview
+├── hooks/
+│   └── usePreview.ts           # Preview loading + caching hook
 ├── components/
-│   ├── PRPreview.tsx           # New: preview panel component
-│   └── PRList.tsx              # Update: highlight previewing row
-└── App.tsx                     # Wire up preview toggle
+│   └── PreviewPanel.tsx        # Right-side preview panel
+└── App.tsx                     # Wire up preview mode
 ```
 
 ## User Experience Flow
 
-1. User navigates to PR row with `j`/`k`
-2. User presses `p` - preview panel expands below the row
-3. Preview shows loading state briefly, then content
-4. User can scroll preview content with `j`/`k`
-5. User presses `p` or `Escape` to close preview
-6. User can move to different PR and press `p` to preview that one instead
+1. User navigates PR list with `j`/`k`
+2. User presses `p` → preview mode enabled, right panel appears
+3. Preview loads for current PR (debounced 150ms)
+4. User presses `j` → moves to next PR, preview loads (from cache or API)
+5. User presses `Ctrl-d` → scrolls preview down half page
+6. User presses `p` or `Escape` → preview mode off, panel closes
+7. User presses `r` to refresh → cache cleared, fresh data on next preview
 
 ## Data Fetched from GitHub
 
@@ -480,6 +604,7 @@ All data comes from a single `gh pr view` call with these JSON fields:
 | `files` | Changed files with additions/deletions |
 | `commits` | Commit list |
 | `author` | Author info |
+| `createdAt` | When PR was created |
 | `reviews` | Reviewer verdicts |
 | `statusCheckRollup` | CI/check status |
 | `body` | PR description |
