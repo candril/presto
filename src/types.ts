@@ -56,4 +56,10 @@ export interface AppState {
   selectedIndex: number
   loading: boolean
   error: string | null
+  /** Discovery bar visibility */
+  discoveryVisible: boolean
+  /** Current discovery query */
+  discoveryQuery: string
+  /** Temporary message to show (e.g., "Starred @user") */
+  message: string | null
 }

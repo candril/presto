@@ -15,6 +15,9 @@ export const theme = {
   warning: "#e0af68",
   error: "#f7768e",
 
+  // Borders
+  border: "#414868",
+
   // Semantic PR colors
   prOpen: "#9ece6a",
   prMerged: "#bb9af7",

@@ -12,6 +12,11 @@ export type AppAction =
   | { type: "SET_PRS"; prs: PR[] }
   | { type: "SELECT"; index: number }
   | { type: "MOVE"; delta: number }
+  | { type: "OPEN_DISCOVERY" }
+  | { type: "CLOSE_DISCOVERY" }
+  | { type: "SET_DISCOVERY_QUERY"; query: string }
+  | { type: "SHOW_MESSAGE"; message: string }
+  | { type: "CLEAR_MESSAGE" }
 
 /** Initial application state */
 export const initialState: AppState = {
@@ -20,6 +25,9 @@ export const initialState: AppState = {
   selectedIndex: 0,
   loading: true,
   error: null,
+  discoveryVisible: false,
+  discoveryQuery: "",
+  message: null,
 }
 
 /** State reducer */
@@ -54,6 +62,38 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         selectedIndex: Math.max(0, Math.min(state.prs.length - 1, state.selectedIndex + action.delta)),
+      }
+
+    case "OPEN_DISCOVERY":
+      return {
+        ...state,
+        discoveryVisible: true,
+        discoveryQuery: "",
+      }
+
+    case "CLOSE_DISCOVERY":
+      return {
+        ...state,
+        discoveryVisible: false,
+        discoveryQuery: "",
+      }
+
+    case "SET_DISCOVERY_QUERY":
+      return {
+        ...state,
+        discoveryQuery: action.query,
+      }
+
+    case "SHOW_MESSAGE":
+      return {
+        ...state,
+        message: action.message,
+      }
+
+    case "CLEAR_MESSAGE":
+      return {
+        ...state,
+        message: null,
       }
 
     default:

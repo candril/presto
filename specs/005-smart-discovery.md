@@ -6,6 +6,8 @@
 
 Unified discovery bar for finding PRs by author, repo, state, or text search. Features smart suggestions showing recent and starred authors without needing to remember names. Tracks viewing history and allows starring favorite authors for quick access.
 
+**Note**: P1 filters the locally-loaded PR list only (instant, no API calls). P2 adds GitHub API fallback for PR references not found locally.
+
 ## Out of Scope
 
 - Saved/named searches
@@ -39,6 +41,11 @@ Unified discovery bar for finding PRs by author, repo, state, or text search. Fe
   - "My PRs" - authored by current user
   - "Needs my review" - review requested from me
 - **Clear indicators**: Show active filters in status bar with easy clear option
+- **GitHub fallback search**: When no local results found, offer to search GitHub API
+  - Detect PR references: `#123`, `repo#123`, `owner/repo#123`, GitHub URLs
+  - Show "Search GitHub for #123?" suggestion
+  - On select: fetch from API, add to list, select the PR
+  - Only triggers on explicit user action (not automatic)
 
 ### P3 - Nice to Have
 
@@ -214,6 +221,35 @@ export function parseFilter(query: string): ParsedFilter {
   
   result.text = textParts.join(" ").toLowerCase()
   return result
+}
+
+/** Parse PR reference patterns like #123, repo#123, owner/repo#123, or GitHub URLs */
+export function parsePRReference(query: string): { repo?: string; number: number } | null {
+  // GitHub URL: https://github.com/owner/repo/pull/123
+  const urlMatch = query.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/)
+  if (urlMatch) {
+    return { repo: urlMatch[1], number: parseInt(urlMatch[2], 10) }
+  }
+  
+  // Fully qualified: owner/repo#123
+  const fullMatch = query.match(/^([^/]+\/[^#]+)#(\d+)$/)
+  if (fullMatch) {
+    return { repo: fullMatch[1], number: parseInt(fullMatch[2], 10) }
+  }
+  
+  // Repo shorthand: repo#123
+  const repoMatch = query.match(/^([^#]+)#(\d+)$/)
+  if (repoMatch) {
+    return { repo: repoMatch[1], number: parseInt(repoMatch[2], 10) }
+  }
+  
+  // Just number: #123
+  const numMatch = query.match(/^#(\d+)$/)
+  if (numMatch) {
+    return { number: parseInt(numMatch[1], 10) }
+  }
+  
+  return null
 }
 
 export function applyFilter(prs: PR[], filter: ParsedFilter, currentUser?: string): PR[] {
