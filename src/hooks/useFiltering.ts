@@ -16,6 +16,7 @@ interface UseFilteringOptions {
   discoveryQuery: string
   history: History
   dispatch: (action: any) => void
+  currentUser: string | null
 }
 
 export function useFiltering({
@@ -24,12 +25,19 @@ export function useFiltering({
   discoveryQuery,
   history,
   dispatch,
+  currentUser,
 }: UseFilteringOptions) {
-  // Parse filter from query string
-  const filter = useMemo(
-    () => parseFilter(discoveryQuery),
-    [discoveryQuery]
-  )
+  // Parse filter from query string, resolving @me to current user
+  const filter = useMemo(() => {
+    const parsed = parseFilter(discoveryQuery)
+    // Resolve @me to actual username
+    if (currentUser && parsed.authors.includes("me")) {
+      parsed.authors = parsed.authors.map((a) =>
+        a === "me" ? currentUser.toLowerCase() : a
+      )
+    }
+    return parsed
+  }, [discoveryQuery, currentUser])
 
   // Build repo config map for starred-only filtering
   const repoConfig = useMemo(

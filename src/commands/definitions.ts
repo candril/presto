@@ -29,7 +29,6 @@ export const commands: Command[] = [
     category: "filter",
     shortcut: "@me",
     execute: async (ctx) => {
-      // TODO: Get actual GitHub username
       ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: "@me" })
       return { type: "success" }
     },

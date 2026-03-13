@@ -32,9 +32,10 @@ import {
 
 interface AppProps {
   config: Config
+  currentUser: string | null
 }
 
-export function App({ config }: AppProps) {
+export function App({ config, currentUser }: AppProps) {
   const [state, dispatch] = useReducer(appReducer, null, createInitialState)
   const [history, setHistory] = useState<History>(() => loadHistory())
   const [showHelp, setShowHelp] = useState(false)
@@ -48,6 +49,7 @@ export function App({ config }: AppProps) {
     discoveryQuery: state.discoveryQuery,
     history,
     dispatch,
+    currentUser,
   })
 
   // Feature: PR data fetching
