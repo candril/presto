@@ -60,12 +60,13 @@ interface PRListProps {
   prs: PR[]
   selectedIndex: number
   columnVisibility: ColumnVisibility
+  previewPosition: "right" | "bottom" | null
 }
 
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex, columnVisibility }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility, previewPosition }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
 
@@ -96,8 +97,8 @@ export function PRList({ prs, selectedIndex, columnVisibility }: PRListProps) {
     )
   }
 
-  // Calculate available title width (account for preview panel taking ~50%)
-  const listWidth = terminalWidth // Will be constrained by parent
+  // Calculate available title width (account for preview panel taking 50% when on right)
+  const listWidth = previewPosition === "right" ? Math.floor(terminalWidth / 2) : terminalWidth
   const fixedWidth = getFixedColumnsWidth(columnVisibility)
   const titleWidth = Math.max(10, listWidth - fixedWidth)
 

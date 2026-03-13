@@ -159,7 +159,7 @@ export function App({ config, currentUser }: AppProps) {
               <text fg={theme.textDim}>Press {config.keys.refresh} to retry</text>
             </box>
           ) : (
-            <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} columnVisibility={state.columnVisibility} />
+            <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} columnVisibility={state.columnVisibility} previewPosition={state.previewPosition} />
           )}
 
           {/* Suggestions popup - anchored to bottom of content area */}
