@@ -1,6 +1,6 @@
 # Keyboard Shortcuts
 
-**Status**: Draft
+**Status**: Done
 
 ## Description
 

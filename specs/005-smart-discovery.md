@@ -1,6 +1,6 @@
 # Smart Discovery
 
-**Status**: Draft
+**Status**: Done
 
 ## Description
 

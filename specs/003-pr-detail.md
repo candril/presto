@@ -1,6 +1,6 @@
 # PR Detail
 
-**Status**: Ready
+**Status**: Superseded by 014-pr-preview
 
 ## Description
 

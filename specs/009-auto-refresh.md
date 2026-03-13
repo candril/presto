@@ -1,6 +1,6 @@
 # Auto-Refresh
 
-**Status**: Draft
+**Status**: In Progress (P1 partial: manual refresh works, no auto-interval yet)
 
 ## Description
 

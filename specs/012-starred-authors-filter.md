@@ -1,6 +1,6 @@
 # Starred Authors Filter
 
-**Status**: Draft
+**Status**: Done
 
 ## Description
 
