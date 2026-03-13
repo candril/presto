@@ -109,8 +109,6 @@ export function App({ config }: AppProps) {
         title="PResto"
         loading={state.refreshing}
         right={headerRight}
-        previewMode={state.previewMode}
-        previewLoading={previewLoading}
       />
 
       {/* Main content area */}
