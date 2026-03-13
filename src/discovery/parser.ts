@@ -15,6 +15,7 @@ export interface ParsedFilter {
   repos: string[]        // repo:name entries
   states: string[]       // state:open entries
   text: string           // Remaining text for title search
+  showAll: boolean       // * modifier - bypass starred-only filter
 }
 
 export const emptyFilter: ParsedFilter = {
@@ -22,6 +23,7 @@ export const emptyFilter: ParsedFilter = {
   repos: [],
   states: [],
   text: "",
+  showAll: false,
 }
 
 /** Check if a filter has any active criteria */
@@ -30,7 +32,8 @@ export function isFilterActive(filter: ParsedFilter): boolean {
     filter.authors.length > 0 ||
     filter.repos.length > 0 ||
     filter.states.length > 0 ||
-    filter.text.length > 0
+    filter.text.length > 0 ||
+    filter.showAll
   )
 }
 
@@ -41,13 +44,16 @@ export function parseFilter(query: string): ParsedFilter {
     repos: [],
     states: [],
     text: "",
+    showAll: false,
   }
 
   const tokens = query.split(/\s+/).filter(Boolean)
   const textParts: string[] = []
 
   for (const token of tokens) {
-    if (token.startsWith("@")) {
+    if (token === "*") {
+      result.showAll = true
+    } else if (token.startsWith("@")) {
       result.authors.push(token.slice(1).toLowerCase())
     } else if (token.startsWith("repo:")) {
       result.repos.push(token.slice(5).toLowerCase())

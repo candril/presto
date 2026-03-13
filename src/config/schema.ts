@@ -9,6 +9,10 @@ export interface Repository {
   name: string
   /** Optional short display name */
   alias?: string
+  /** Only show PRs from starred authors (default: false) */
+  starredOnly?: boolean
+  /** Don't fetch by default, only when explicitly filtered with repo:name (default: false) */
+  disabled?: boolean
 }
 
 /** Custom tool definition */

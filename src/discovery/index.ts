@@ -6,3 +6,9 @@ export {
   emptyFilter,
   type ParsedFilter,
 } from "./parser"
+
+export {
+  applyStarredOnlyFilter,
+  type StarredFilterContext,
+  type StarredFilterResult,
+} from "./starredFilter"

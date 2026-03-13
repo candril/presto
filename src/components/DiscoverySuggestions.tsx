@@ -8,6 +8,7 @@ import { theme } from "../theme"
 import type { History } from "../history"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
+import type { Repository } from "../config"
 
 /** Suggestion item */
 interface Suggestion {
@@ -24,6 +25,8 @@ interface DiscoverySuggestionsProps {
   onClose: () => void
   history: History
   prs: PR[]
+  /** All configured repositories (including disabled ones) */
+  repositories: Repository[]
 }
 
 export function DiscoverySuggestions({
@@ -32,13 +35,14 @@ export function DiscoverySuggestions({
   onClose,
   history,
   prs,
+  repositories,
 }: DiscoverySuggestionsProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   // Build suggestions based on current query
   const suggestions = useMemo(() => {
-    return buildSuggestions(query, history, prs)
-  }, [query, history, prs])
+    return buildSuggestions(query, history, prs, repositories)
+  }, [query, history, prs, repositories])
 
   // Reset selection when suggestions change
   useEffect(() => {
@@ -131,7 +135,8 @@ function SuggestionRow({
 function buildSuggestions(
   query: string,
   history: History,
-  prs: PR[]
+  prs: PR[],
+  repositories: Repository[]
 ): Suggestion[] {
   const items: Suggestion[] = []
   const q = query.toLowerCase().trim()
@@ -139,8 +144,8 @@ function buildSuggestions(
   if (!q) {
     // Empty query - show defaults
 
-    // Starred authors first
-    for (const author of history.starredAuthors.slice(0, 3)) {
+    // Show all starred authors first (these are the important ones)
+    for (const author of history.starredAuthors) {
       items.push({
         type: "author",
         value: `@${author}`,
@@ -150,35 +155,30 @@ function buildSuggestions(
       })
     }
 
-    // Recent authors (not already starred)
-    for (const recent of history.recentAuthors.slice(0, 3)) {
-      if (!history.starredAuthors.includes(recent.login)) {
-        items.push({
-          type: "author",
-          value: `@${recent.login}`,
-          label: recent.login,
-          count: countAuthorPRs(prs, recent.login),
-        })
-      }
+    // Show * to reveal all PRs (useful when starredOnly repos are configured)
+    items.push({
+      type: "quick",
+      value: "*",
+      label: "Show all PRs",
+    })
+
+    // Show all configured repos with PR counts
+    const prCountByRepo = new Map<string, number>()
+    for (const pr of prs) {
+      const name = getRepoName(pr)
+      prCountByRepo.set(name, (prCountByRepo.get(name) || 0) + 1)
     }
 
-    // Top repos by PR count
-    const repos = getTopRepos(prs, 3)
-    for (const repo of repos) {
+    for (const repo of repositories) {
+      const count = prCountByRepo.get(repo.name) || 0
+      const label = repo.disabled
+        ? `${repo.alias || repo.name} (not loaded)`
+        : repo.alias || repo.name
       items.push({
         type: "repo",
         value: `repo:${repo.name}`,
-        label: repo.name,
-        count: repo.count,
-      })
-    }
-
-    // Recent filters
-    for (const filter of history.recentFilters.slice(0, 2)) {
-      items.push({
-        type: "filter",
-        value: filter,
-        label: filter,
+        label,
+        count: repo.disabled ? undefined : count,
       })
     }
   } else {
@@ -205,11 +205,13 @@ function buildSuggestions(
         }
       }
     } else if (lastToken.startsWith("repo:")) {
-      // Typing repo: - suggest repos
+      // Typing repo: - suggest repos (including disabled ones from config)
       const partial = lastToken.slice(5)
-      const repos = getAllRepos(prs)
+      const reposFromPRs = getAllRepos(prs)
+      const seenRepos = new Set(reposFromPRs.map((r) => r.name))
 
-      for (const repo of repos) {
+      // First show repos we have PRs for
+      for (const repo of reposFromPRs) {
         if (repo.name.toLowerCase().includes(partial)) {
           items.push({
             type: "repo",
@@ -217,6 +219,23 @@ function buildSuggestions(
             label: repo.name,
             count: repo.count,
           })
+        }
+      }
+
+      // Then show disabled repos from config (no PRs loaded yet)
+      for (const repo of repositories) {
+        if (repo.disabled && !seenRepos.has(repo.name)) {
+          const shortName = repo.alias || repo.name.split("/")[1] || repo.name
+          if (
+            repo.name.toLowerCase().includes(partial) ||
+            shortName.toLowerCase().includes(partial)
+          ) {
+            items.push({
+              type: "repo",
+              value: `${prefixWithSpace}repo:${repo.name}`,
+              label: `${repo.name} (not loaded)`,
+            })
+          }
         }
       }
     } else if (lastToken.startsWith("state:")) {

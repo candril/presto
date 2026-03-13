@@ -148,6 +148,8 @@ function parseRepositories(value: unknown): Repository[] {
     .map((item) => ({
       name: String(item.name || ""),
       alias: item.alias ? String(item.alias) : undefined,
+      starredOnly: item.starredOnly === true,
+      disabled: item.disabled === true,
     }))
     .filter((repo) => repo.name.length > 0)
 }

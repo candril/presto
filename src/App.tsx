@@ -12,7 +12,7 @@ import { Loading } from "./components/Loading"
 import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
 import { appReducer, initialState } from "./state"
 import { listPRs, listPRsFromRepos, listRecentPRsFromRepos } from "./providers/github"
-import { parseFilter, applyFilter, isFilterActive } from "./discovery"
+import { parseFilter, applyFilter, isFilterActive, applyStarredOnlyFilter } from "./discovery"
 import {
   loadHistory,
   saveHistory,
@@ -40,10 +40,22 @@ export function App({ config }: AppProps) {
     () => parseFilter(state.discoveryQuery),
     [state.discoveryQuery]
   )
-  const filteredPRs = useMemo(
-    () => applyFilter(state.prs, filter),
-    [state.prs, filter]
+
+  // Build repo config map for starred-only filtering
+  const repoConfig = useMemo(
+    () => new Map(config.repositories.map((r) => [r.name, r])),
+    [config.repositories]
   )
+
+  // Apply filters: first regular filter, then starred-only filter
+  const { filteredPRs, hiddenCount } = useMemo(() => {
+    const afterFilter = applyFilter(state.prs, filter)
+    const result = applyStarredOnlyFilter(afterFilter, filter, {
+      starredAuthors: history.starredAuthors,
+      repoConfig,
+    })
+    return { filteredPRs: result.filtered, hiddenCount: result.hiddenCount }
+  }, [state.prs, filter, repoConfig, history.starredAuthors])
 
   // Reset selection when filter changes
   useEffect(() => {
@@ -60,9 +72,12 @@ export function App({ config }: AppProps) {
     }
   }, [state.message])
 
-  // Fetch PRs from GitHub
+  // Fetch PRs from GitHub (only enabled repos)
   const fetchPRs = useCallback(async (showAsRefresh = false) => {
-    const repos = config.repositories.map((r) => r.name)
+    // Only fetch from enabled repos (not disabled)
+    const repos = config.repositories
+      .filter((r) => !r.disabled)
+      .map((r) => r.name)
     
     if (repos.length === 0) {
       // Single repo - just load normally
@@ -105,7 +120,10 @@ export function App({ config }: AppProps) {
 
   // Load cached data on mount, then revalidate
   useEffect(() => {
-    const repos = config.repositories.map((r) => r.name)
+    // Only consider enabled repos for cache validation
+    const repos = config.repositories
+      .filter((r) => !r.disabled)
+      .map((r) => r.name)
     
     // Try to load from cache first
     const cache = loadCache()
@@ -131,17 +149,12 @@ export function App({ config }: AppProps) {
 
   // Keyboard handling
   useKeyboard((key) => {
-    // Discovery bar is open - let it handle its own keys
+    // Discovery bar is open - let it handle its own keys (no global shortcuts)
     if (state.discoveryVisible) {
-      // Only quit works while discovery is open
-      if (key.name === config.keys.quit) {
-        renderer.destroy()
-        process.exit(0)
-      }
       return
     }
 
-    // Quit
+    // Quit (only when discovery bar is closed)
     if (key.name === config.keys.quit) {
       renderer.destroy()
       process.exit(0)
@@ -237,22 +250,26 @@ export function App({ config }: AppProps) {
   })
 
   // Build status bar hints
-  const hints = buildHints(state, config, filter)
+  const hints = buildHints(state, config, filter, hiddenCount)
 
-  // Header right side: show count info
+  // Header right side: show count info and hidden count
   const headerRight = useMemo(() => {
+    const hidden = hiddenCount > 0 ? ` +${hiddenCount}` : ""
     if (isFilterActive(filter)) {
-      return `${filteredPRs.length}/${state.prs.length}`
+      return `${filteredPRs.length}/${state.prs.length}${hidden}`
+    }
+    if (hiddenCount > 0) {
+      return `${filteredPRs.length} (${hidden} hidden)`
     }
     return state.prs.length > 0
       ? `${state.selectedIndex + 1}/${state.prs.length}`
       : ""
-  }, [filter, filteredPRs.length, state.prs.length, state.selectedIndex])
+  }, [filter, filteredPRs.length, state.prs.length, state.selectedIndex, hiddenCount])
 
   return (
     <Shell>
       <Header
-        title="presto"
+        title="PResto"
         filterQuery={state.discoveryQuery}
         filterFocused={state.discoveryVisible}
         onFilterChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
@@ -269,6 +286,7 @@ export function App({ config }: AppProps) {
           onClose={() => dispatch({ type: "CLOSE_DISCOVERY" })}
           history={history}
           prs={state.prs}
+          repositories={config.repositories}
         />
       )}
 
@@ -305,7 +323,8 @@ export function App({ config }: AppProps) {
 function buildHints(
   state: typeof initialState,
   config: Config,
-  filter: ReturnType<typeof parseFilter>
+  filter: ReturnType<typeof parseFilter>,
+  hiddenCount: number
 ): string[] {
   const hints: string[] = []
 
@@ -324,6 +343,9 @@ function buildHints(
     hints.push("o: browser")
     hints.push("y: copy")
     hints.push("s: star")
+    if (hiddenCount > 0) {
+      hints.push("*: show all")
+    }
     if (isFilterActive(filter)) {
       hints.push("Esc: clear")
     }
