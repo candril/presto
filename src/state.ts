@@ -96,7 +96,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         discoveryVisible: false,
-        discoveryQuery: "",
+        // Keep the query - Escape just closes the bar, doesn't clear filter
+        // User presses Escape again (when bar closed) to clear filter
       }
 
     case "ACCEPT_DISCOVERY":

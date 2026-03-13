@@ -28,6 +28,7 @@ Comprehensive keyboard navigation with a help modal showing all available shortc
 - **Quick filters**: `1`-`3` for filter presets
 - **Refresh**: `R` to refresh data
 - **Search**: `/` to open search
+- **Smart Escape**: Context-aware escape behavior (see below)
 
 ### P3 - Nice to Have
 
@@ -36,6 +37,34 @@ Comprehensive keyboard navigation with a help modal showing all available shortc
 - **Chord support**: Simple two-key combos (e.g., `g g` for top)
 
 ## Technical Notes
+
+### Smart Escape Behavior
+
+Escape should be context-aware with progressive behavior:
+
+| Context | First Escape | Second Escape |
+|---------|--------------|---------------|
+| Discovery bar open | Close bar, keep filter | - |
+| Discovery bar closed + filter active | Clear filter | - |
+| No filter active | No-op | - |
+
+```typescript
+// In DiscoverySuggestions.tsx - just close the bar
+if (key.name === "escape") {
+  onClose()  // Close bar, but DON'T clear the filter
+  return
+}
+
+// In App.tsx - when bar is closed, Escape clears filter
+if (key.name === "escape" && !state.discoveryVisible && isFilterActive(filter)) {
+  dispatch({ type: "SET_DISCOVERY_QUERY", query: "" })
+  return
+}
+```
+
+This allows users to:
+1. Type a filter, press Escape to close suggestions but keep the filter
+2. Press Escape again to clear the filter and see all PRs
 
 ### Default Keybindings
 
