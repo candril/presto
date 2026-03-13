@@ -40,12 +40,66 @@ export function getShortRepoName(pr: PR): string {
 /** Review decision status */
 export type ReviewDecision = "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED"
 
-/** CI/CD check status */
-export interface StatusCheckRollup {
-  state: CheckState
+/** Individual check run from GitHub */
+export interface CheckRun {
+  __typename: "CheckRun" | "StatusContext"
+  name: string
+  status: "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "WAITING" | "PENDING" | "REQUESTED"
+  conclusion: CheckConclusion | null
+  workflowName?: string
 }
 
-export type CheckState = "SUCCESS" | "FAILURE" | "PENDING" | "ERROR"
+/** Check conclusion values from GitHub */
+export type CheckConclusion =
+  | "SUCCESS"
+  | "FAILURE"
+  | "SKIPPED"
+  | "CANCELLED"
+  | "TIMED_OUT"
+  | "ACTION_REQUIRED"
+  | "NEUTRAL"
+  | "STALE"
+  | "STARTUP_FAILURE"
+
+/** CI/CD check status - array of check runs */
+export type StatusCheckRollup = CheckRun[]
+
+/** Computed overall check state for display */
+export type CheckState = "SUCCESS" | "FAILURE" | "PENDING" | "NONE"
+
+/**
+ * Compute overall check state from array of check runs
+ * - FAILURE if any check failed
+ * - PENDING if any check is still running
+ * - SUCCESS if all checks passed (ignoring skipped)
+ * - NONE if no checks
+ */
+export function computeCheckState(checks: StatusCheckRollup | null): CheckState {
+  if (!checks || checks.length === 0) return "NONE"
+
+  let hasSuccess = false
+  for (const check of checks) {
+    // Check if still running
+    if (check.status !== "COMPLETED") {
+      return "PENDING"
+    }
+    // Check conclusion
+    switch (check.conclusion) {
+      case "FAILURE":
+      case "TIMED_OUT":
+      case "STARTUP_FAILURE":
+        return "FAILURE"
+      case "ACTION_REQUIRED":
+        return "PENDING"
+      case "SUCCESS":
+        hasSuccess = true
+        break
+      // SKIPPED, CANCELLED, NEUTRAL, STALE are ignored
+    }
+  }
+
+  return hasSuccess ? "SUCCESS" : "NONE"
+}
 
 /**
  * Application state

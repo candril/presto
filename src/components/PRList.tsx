@@ -8,7 +8,7 @@ import { useRef, useEffect } from "react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { theme } from "../theme"
 import type { PR, CheckState, ReviewDecision } from "../types"
-import { getRepoName, getShortRepoName } from "../types"
+import { getRepoName, getShortRepoName, computeCheckState } from "../types"
 import { formatRelativeTime } from "../utils/time"
 
 /** Column widths for table-like layout */
@@ -141,7 +141,7 @@ interface PRRowProps {
 
 function PRRow({ pr, selected }: PRRowProps) {
   const stateIndicator = getStateIndicator(pr)
-  const checkIndicator = getCheckIndicator(pr.statusCheckRollup?.state)
+  const checkIndicator = getCheckIndicator(computeCheckState(pr.statusCheckRollup))
   const reviewIndicator = getReviewIndicator(pr.reviewDecision)
   const timeAgo = formatRelativeTime(pr.updatedAt)
   const repoName = getShortRepoName(pr)
@@ -203,15 +203,15 @@ function getStateIndicator(pr: PR): { icon: string; color: string } {
 }
 
 /** Get CI check status indicator */
-function getCheckIndicator(state?: CheckState): { icon: string; color: string } {
+function getCheckIndicator(state: CheckState): { icon: string; color: string } {
   switch (state) {
     case "SUCCESS":
       return { icon: ICONS.checkSuccess, color: theme.success }
     case "FAILURE":
-    case "ERROR":
       return { icon: ICONS.checkFailure, color: theme.error }
     case "PENDING":
       return { icon: ICONS.checkPending, color: theme.warning }
+    case "NONE":
     default:
       return { icon: ICONS.checkNone, color: theme.textMuted }
   }
