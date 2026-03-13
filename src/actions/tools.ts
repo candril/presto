@@ -33,20 +33,32 @@ export async function openInRiff(pr: PR): Promise<void> {
 }
 
 /**
- * Copy PR URL to clipboard
+ * Copy text to clipboard
  * Uses pbcopy on macOS, xclip on Linux
  */
-export async function copyPRUrl(pr: PR): Promise<void> {
-  const url = pr.url
-  
+async function copyToClipboard(text: string): Promise<void> {
   if (process.platform === "darwin") {
-    await $`printf ${url} | pbcopy`.quiet()
+    await $`printf ${text} | pbcopy`.quiet()
   } else {
     // Linux - try xclip first, fall back to xsel
     try {
-      await $`printf ${url} | xclip -selection clipboard`.quiet()
+      await $`printf ${text} | xclip -selection clipboard`.quiet()
     } catch {
-      await $`printf ${url} | xsel --clipboard`.quiet()
+      await $`printf ${text} | xsel --clipboard`.quiet()
     }
   }
+}
+
+/**
+ * Copy PR URL to clipboard
+ */
+export async function copyPRUrl(pr: PR): Promise<void> {
+  await copyToClipboard(pr.url)
+}
+
+/**
+ * Copy PR number to clipboard (e.g., "#123")
+ */
+export async function copyPRNumber(pr: PR): Promise<void> {
+  await copyToClipboard(`#${pr.number}`)
 }

@@ -6,6 +6,7 @@
  * - Using * modifier (show all)
  * - Explicit repo filter (repo:name)
  * - Explicit author filter (@author)
+ * - Direct PR reference (URL, #123, etc.)
  */
 
 import type { PR } from "../types"
@@ -38,10 +39,12 @@ export function applyStarredOnlyFilter(
   // 1. showAll modifier (*)
   // 2. explicit repo filter (repo:X)
   // 3. explicit author filter (@X)
+  // 4. direct PR reference (URL, #123, etc.)
   const bypass =
     filter.showAll ||
     filter.repos.length > 0 ||
-    filter.authors.length > 0
+    filter.authors.length > 0 ||
+    filter.prRef !== null
 
   if (bypass) {
     return { filtered: prs, hiddenCount: 0 }

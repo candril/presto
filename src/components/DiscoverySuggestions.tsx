@@ -1,5 +1,5 @@
 /**
- * Discovery suggestions dropdown - shows below header when filter is focused
+ * Discovery suggestions popup - anchored to bottom of content area, above command line
  */
 
 import { useState, useMemo, useEffect } from "react"
@@ -80,13 +80,19 @@ export function DiscoverySuggestions({
     return null
   }
 
+  // Show suggestions in reverse order (selected at bottom, closest to input)
+  const visibleSuggestions = suggestions.slice(0, 10)
+
   return (
     <box
+      position="absolute"
+      bottom={0}
+      left={0}
+      right={0}
       flexDirection="column"
-      backgroundColor={theme.bg}
-      maxHeight={10}
+      backgroundColor={theme.headerBg}
     >
-      {suggestions.slice(0, 8).map((suggestion, index) => (
+      {visibleSuggestions.map((suggestion, index) => (
         <SuggestionRow
           key={`${suggestion.type}-${suggestion.value}`}
           suggestion={suggestion}
@@ -141,28 +147,57 @@ function buildSuggestions(
   const items: Suggestion[] = []
   const q = query.toLowerCase().trim()
 
-  if (!q) {
-    // Empty query - show defaults
+  // Parse existing query to understand what's already filtered
+  const tokens = q.split(/\s+/).filter(Boolean)
+  const lastToken = tokens[tokens.length - 1] || ""
+  
+  // Get the prefix (everything except what user is currently typing)
+  // If last token is a complete filter (ends with recognized pattern), include it
+  const isLastTokenComplete = 
+    lastToken.startsWith("@") || 
+    lastToken.startsWith("repo:") || 
+    lastToken.startsWith("state:") ||
+    lastToken === "*"
+  
+  // For appending new suggestions
+  const existingQuery = q ? q + " " : ""
+
+  if (!q || isLastTokenComplete) {
+    // Empty query OR user just finished a token - show things to add
 
     // Show all starred authors first (these are the important ones)
+    // Skip if already filtering by this author
+    const existingAuthors = tokens
+      .filter(t => t.startsWith("@"))
+      .map(t => t.slice(1).toLowerCase())
+    
     for (const author of history.starredAuthors) {
+      if (!existingAuthors.includes(author.toLowerCase())) {
+        items.push({
+          type: "author",
+          value: `${existingQuery}@${author}`,
+          label: author,
+          count: countAuthorPRs(prs, author),
+          starred: true,
+        })
+      }
+    }
+
+    // Show * to reveal all PRs (if not already present)
+    if (!tokens.includes("*")) {
       items.push({
-        type: "author",
-        value: `@${author}`,
-        label: author,
-        count: countAuthorPRs(prs, author),
-        starred: true,
+        type: "quick",
+        value: `${existingQuery}*`,
+        label: "Show all PRs",
       })
     }
 
-    // Show * to reveal all PRs (useful when starredOnly repos are configured)
-    items.push({
-      type: "quick",
-      value: "*",
-      label: "Show all PRs",
-    })
-
     // Show all configured repos with PR counts
+    // Skip if already filtering by this repo
+    const existingRepos = tokens
+      .filter(t => t.startsWith("repo:"))
+      .map(t => t.slice(5).toLowerCase())
+    
     const prCountByRepo = new Map<string, number>()
     for (const pr of prs) {
       const name = getRepoName(pr)
@@ -170,16 +205,18 @@ function buildSuggestions(
     }
 
     for (const repo of repositories) {
-      const count = prCountByRepo.get(repo.name) || 0
-      const label = repo.disabled
-        ? `${repo.alias || repo.name} (not loaded)`
-        : repo.alias || repo.name
-      items.push({
-        type: "repo",
-        value: `repo:${repo.name}`,
-        label,
-        count: repo.disabled ? undefined : count,
-      })
+      if (!existingRepos.some(r => repo.name.toLowerCase().includes(r))) {
+        const count = prCountByRepo.get(repo.name) || 0
+        const label = repo.disabled
+          ? `${repo.alias || repo.name} (not loaded)`
+          : repo.alias || repo.name
+        items.push({
+          type: "repo",
+          value: `${existingQuery}repo:${repo.name}`,
+          label,
+          count: repo.disabled ? undefined : count,
+        })
+      }
     }
   } else {
     // Check the last token being typed for special prefixes
@@ -260,6 +297,7 @@ function buildSuggestions(
       }
     } else {
       // Plain text - filter all suggestion types that match
+      // Replace the last token (what user is typing) with the selected suggestion
 
       // Filter matching authors
       const authors = getAllAuthors(prs, history)
@@ -267,7 +305,7 @@ function buildSuggestions(
         if (author.login.toLowerCase().includes(lastToken)) {
           items.push({
             type: "author",
-            value: `@${author.login}`,
+            value: `${prefixWithSpace}@${author.login}`,
             label: author.login,
             count: author.count,
             starred: history.starredAuthors.includes(author.login),
@@ -285,20 +323,9 @@ function buildSuggestions(
         ) {
           items.push({
             type: "repo",
-            value: `repo:${repo.name}`,
+            value: `${prefixWithSpace}repo:${repo.name}`,
             label: repo.name,
             count: repo.count,
-          })
-        }
-      }
-
-      // Filter matching recent filters
-      for (const filter of history.recentFilters) {
-        if (filter.toLowerCase().includes(lastToken)) {
-          items.push({
-            type: "filter",
-            value: filter,
-            label: filter,
           })
         }
       }

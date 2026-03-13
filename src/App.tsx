@@ -10,8 +10,9 @@ import { StatusBar } from "./components/StatusBar"
 import { PRList } from "./components/PRList"
 import { Loading } from "./components/Loading"
 import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
+import { CommandLine } from "./components/CommandLine"
 import { appReducer, initialState } from "./state"
-import { listPRs, listPRsFromRepos, listRecentPRsFromRepos } from "./providers/github"
+import { listPRs, listPRsFromRepos, listRecentPRsFromRepos, getPR } from "./providers/github"
 import { parseFilter, applyFilter, isFilterActive, applyStarredOnlyFilter } from "./discovery"
 import {
   loadHistory,
@@ -19,7 +20,7 @@ import {
   toggleStarAuthor,
   type History,
 } from "./history"
-import { openInBrowser, openInRiff, copyPRUrl } from "./actions"
+import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "./actions"
 import { loadCache, saveCache, saveFilterQuery, isCacheValidForRepos } from "./cache"
 import { theme } from "./theme"
 import type { Config } from "./config"
@@ -61,6 +62,43 @@ export function App({ config }: AppProps) {
   useEffect(() => {
     dispatch({ type: "SELECT", index: 0 })
   }, [state.discoveryQuery])
+
+  // Fetch PR on-demand when a URL/reference is pasted
+  useEffect(() => {
+    if (!filter.prRef) return
+
+    const { repo, number } = filter.prRef
+    
+    // Check if we already have this PR
+    const existingPR = state.prs.find((pr) => {
+      if (pr.number !== number) return false
+      if (repo) {
+        const prRepo = pr.url.match(/github\.com\/([^/]+\/[^/]+)\/pull/)?.[1]
+        return prRepo?.toLowerCase().includes(repo.toLowerCase())
+      }
+      return true
+    })
+
+    if (existingPR) return // Already have it
+
+    // Need to fetch - but we need a full repo name
+    if (!repo || !repo.includes("/")) {
+      // Can't fetch without full repo name
+      return
+    }
+
+    // Fetch the PR
+    dispatch({ type: "SHOW_MESSAGE", message: `Fetching PR #${number}...` })
+    getPR(repo, number).then((pr) => {
+      if (pr) {
+        // Add to the list
+        dispatch({ type: "SET_PRS", prs: [pr, ...state.prs] })
+        dispatch({ type: "SHOW_MESSAGE", message: `Loaded PR #${number}` })
+      } else {
+        dispatch({ type: "SHOW_MESSAGE", message: `PR #${number} not found` })
+      }
+    })
+  }, [filter.prRef?.repo, filter.prRef?.number])
 
   // Clear message after timeout
   useEffect(() => {
@@ -205,11 +243,11 @@ export function App({ config }: AppProps) {
     }
 
     // Jump to top/bottom
-    if (key.name === "g") {
+    if (key.name === "g" && !key.shift) {
       dispatch({ type: "SELECT", index: 0 })
       return
     }
-    if (key.name === "G") {
+    if (key.name === "g" && key.shift) {
       dispatch({ type: "SELECT", index: filteredPRs.length - 1 })
       return
     }
@@ -227,8 +265,8 @@ export function App({ config }: AppProps) {
       return
     }
 
-    // Open in riff (suspend TUI) - Enter or r
-    if (key.name === "return" || key.name === "r") {
+    // Open in riff (suspend TUI) - Enter only
+    if (key.name === "return") {
       renderer.suspend()
       openInRiff(selectedPR).finally(() => {
         renderer.resume()
@@ -236,11 +274,23 @@ export function App({ config }: AppProps) {
       return
     }
 
-    // Copy URL
-    if (key.name === "y") {
+    // Copy PR number (y)
+    if (key.name === "y" && !key.shift) {
+      copyPRNumber(selectedPR)
+        .then(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: `Copied #${selectedPR.number}` })
+        })
+        .catch(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: "Failed to copy" })
+        })
+      return
+    }
+
+    // Copy URL (Y / shift+y)
+    if (key.name === "y" && key.shift) {
       copyPRUrl(selectedPR)
         .then(() => {
-          dispatch({ type: "SHOW_MESSAGE", message: "URL copied to clipboard" })
+          dispatch({ type: "SHOW_MESSAGE", message: `Copied ${selectedPR.url}` })
         })
         .catch(() => {
           dispatch({ type: "SHOW_MESSAGE", message: "Failed to copy URL" })
@@ -270,48 +320,55 @@ export function App({ config }: AppProps) {
     <Shell>
       <Header
         title="PResto"
-        filterQuery={state.discoveryQuery}
-        filterFocused={state.discoveryVisible}
-        onFilterChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
-        onFilterSubmit={() => dispatch({ type: "ACCEPT_DISCOVERY" })}
         loading={state.refreshing}
         right={headerRight}
       />
 
-      {/* Suggestions dropdown (when filter focused) */}
+      {/* Main content area with relative positioning for popup */}
+      <box flexGrow={1} position="relative">
+        {state.loading ? (
+          <Loading message="Fetching pull requests..." />
+        ) : state.error ? (
+          <box
+            flexGrow={1}
+            justifyContent="center"
+            alignItems="center"
+            flexDirection="column"
+          >
+            <text fg={theme.error}>Error: {state.error}</text>
+            <text fg={theme.textDim}>Press {config.keys.refresh} to retry</text>
+          </box>
+        ) : (
+          <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} />
+        )}
+
+        {/* Suggestions popup - anchored to bottom of content area */}
+        {state.discoveryVisible && (
+          <DiscoverySuggestions
+            query={state.discoveryQuery}
+            onChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
+            onClose={() => dispatch({ type: "CLOSE_DISCOVERY" })}
+            history={history}
+            prs={state.prs}
+            repositories={config.repositories}
+          />
+        )}
+
+        {/* Message toast */}
+        {state.message && (
+          <box position="absolute" bottom={state.discoveryVisible ? 12 : 0} right={2}>
+            <text fg={theme.primary}>{state.message}</text>
+          </box>
+        )}
+      </box>
+
+      {/* Command line - vim style at bottom, only when filtering */}
       {state.discoveryVisible && (
-        <DiscoverySuggestions
+        <CommandLine
           query={state.discoveryQuery}
           onChange={(query) => dispatch({ type: "SET_DISCOVERY_QUERY", query })}
-          onClose={() => dispatch({ type: "CLOSE_DISCOVERY" })}
-          history={history}
-          prs={state.prs}
-          repositories={config.repositories}
+          onSubmit={() => dispatch({ type: "ACCEPT_DISCOVERY" })}
         />
-      )}
-
-      {/* Main content */}
-      {state.loading ? (
-        <Loading message="Fetching pull requests..." />
-      ) : state.error ? (
-        <box
-          flexGrow={1}
-          justifyContent="center"
-          alignItems="center"
-          flexDirection="column"
-        >
-          <text fg={theme.error}>Error: {state.error}</text>
-          <text fg={theme.textDim}>Press {config.keys.refresh} to retry</text>
-        </box>
-      ) : (
-        <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} />
-      )}
-
-      {/* Message toast */}
-      {state.message && (
-        <box position="absolute" bottom={1} right={2}>
-          <text fg={theme.primary}>{state.message}</text>
-        </box>
       )}
 
       <StatusBar hints={hints} />
@@ -341,7 +398,8 @@ function buildHints(
     hints.push("j/k: navigate")
     hints.push("Enter: riff")
     hints.push("o: browser")
-    hints.push("y: copy")
+    hints.push("y: id")
+    hints.push("Y: url")
     hints.push("s: star")
     if (hiddenCount > 0) {
       hints.push("*: show all")

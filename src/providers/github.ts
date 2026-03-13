@@ -119,6 +119,18 @@ export async function listRecentPRsFromRepos(repos: string[], days: number): Pro
 }
 
 /**
+ * Fetch a single PR by repo and number
+ */
+export async function getPR(repo: string, number: number): Promise<PR | null> {
+  try {
+    const result = await $`gh pr view ${number} -R ${repo} --json ${PR_FIELDS}`.json()
+    return result as PR
+  } catch {
+    return null
+  }
+}
+
+/**
  * Get current GitHub username
  */
 export async function getCurrentUser(): Promise<string> {

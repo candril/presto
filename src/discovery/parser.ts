@@ -16,6 +16,7 @@ export interface ParsedFilter {
   states: string[]       // state:open entries
   text: string           // Remaining text for title search
   showAll: boolean       // * modifier - bypass starred-only filter
+  prRef: { repo?: string; number: number } | null  // Direct PR reference (URL, #123, etc.)
 }
 
 export const emptyFilter: ParsedFilter = {
@@ -24,6 +25,7 @@ export const emptyFilter: ParsedFilter = {
   states: [],
   text: "",
   showAll: false,
+  prRef: null,
 }
 
 /** Check if a filter has any active criteria */
@@ -33,7 +35,8 @@ export function isFilterActive(filter: ParsedFilter): boolean {
     filter.repos.length > 0 ||
     filter.states.length > 0 ||
     filter.text.length > 0 ||
-    filter.showAll
+    filter.showAll ||
+    filter.prRef !== null
   )
 }
 
@@ -45,6 +48,14 @@ export function parseFilter(query: string): ParsedFilter {
     states: [],
     text: "",
     showAll: false,
+    prRef: null,
+  }
+
+  // Check if query is a PR reference (URL, #123, repo#123, etc.)
+  const prRef = parsePRReference(query)
+  if (prRef) {
+    result.prRef = prRef
+    return result
   }
 
   const tokens = query.split(/\s+/).filter(Boolean)
@@ -72,6 +83,18 @@ export function parseFilter(query: string): ParsedFilter {
 export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
   if (!isFilterActive(filter)) {
     return prs
+  }
+
+  // Direct PR reference - filter to exact match
+  if (filter.prRef) {
+    return prs.filter((pr) => {
+      if (pr.number !== filter.prRef!.number) return false
+      if (filter.prRef!.repo) {
+        const prRepo = getRepoName(pr).toLowerCase()
+        return prRepo.includes(filter.prRef!.repo.toLowerCase())
+      }
+      return true
+    })
   }
 
   return prs.filter((pr) => {
