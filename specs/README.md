@@ -29,7 +29,7 @@ Specs are numbered sequentially: `NNN-feature-name.md`
 |---|------|--------|-------------|
 | 000 | [Vision](./000-vision.md) | Ready | Overall product vision and goals |
 | 001 | [App Shell](./001-app-shell.md) | Done | Basic application shell with OpenTUI React |
-| 002 | [PR List](./002-pr-list.md) | Ready | Fetch and display list of PRs |
+| 002 | [PR List](./002-pr-list.md) | Done | Fetch and display list of PRs |
 | 003 | [PR Detail](./003-pr-detail.md) | Ready | View PR details, checks, comments |
 | 004 | [External Tools](./004-external-tools.md) | Ready | Open PRs in browser, riff, or other tools |
 | 005 | [Smart Discovery](./005-smart-discovery.md) | Draft | Discovery bar with author/repo filters, starring, history |
