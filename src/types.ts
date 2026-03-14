@@ -9,7 +9,7 @@ export type View = "list" | "detail"
 export type PreviewPosition = "right" | "bottom" | null
 
 // Column visibility settings
-export type ColumnId = "state" | "checks" | "review" | "time" | "repo" | "author" | "id"
+export type ColumnId = "state" | "checks" | "review" | "time" | "repo" | "author"
 
 export interface ColumnVisibility {
   state: boolean
@@ -18,7 +18,6 @@ export interface ColumnVisibility {
   time: boolean
   repo: boolean
   author: boolean
-  id: boolean
 }
 
 /**
@@ -91,6 +90,9 @@ export type CheckState = "SUCCESS" | "FAILURE" | "PENDING" | "NONE"
 export interface PRPreview {
   /** Repository name (owner/repo) */
   repo: string
+
+  /** PR number */
+  number: number
 
   /** Files changed with line counts */
   files: ChangedFile[]

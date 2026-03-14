@@ -121,10 +121,11 @@ export function PreviewPanel({ preview, loading, scrollOffset, position }: Previ
     <box {...containerProps}>
 
       <scrollbox ref={scrollRef} flexGrow={1} paddingLeft={1} paddingRight={1}>
-          {/* Repo name */}
+          {/* Repo and PR number */}
           <box height={1} marginTop={1}>
             <text>
               <span fg={theme.primary}>{preview.repo}</span>
+              <span fg={theme.textDim}> #{preview.number}</span>
             </text>
           </box>
 

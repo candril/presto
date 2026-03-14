@@ -1,7 +1,8 @@
 /**
  * PR List component - displays pull requests in a table-like layout
  * 
- * Column order: State | Checks | Review | Time | ID | Title (flex) | Author | Repo
+ * Column order: State | Checks | Review | Time | Title (flex) | Author | Repo
+ * Title column format: #1234 PR title here...
  */
 
 import { useRef, useEffect } from "react"
@@ -18,10 +19,9 @@ const COL = {
   checks: 2,     // icon + space
   review: 1,     // icon (no trailing space)
   time: 4,       // "1d" or "2mo" (without "ago")
-  id: 6,         // #1234
   repo: 16,      // Short repo name
   author: 16,    // @username
-  // title: remaining space
+  // title: remaining space (includes PR number prefix)
 }
 
 /** Calculate total fixed width (everything except title) */
@@ -31,7 +31,6 @@ function getFixedColumnsWidth(v: ColumnVisibility): number {
   if (v.checks) width += COL.checks // icon + space
   if (v.review) width += COL.review + 1 // icon + space
   if (v.time) width += COL.time + 1 // time + space
-  if (v.id) width += COL.id + 1 // id + space
   if (v.author) width += COL.author + 1 // space + author
   if (v.repo) width += COL.repo + 1 // space + repo
   return width
@@ -137,8 +136,6 @@ function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: Colum
         {v.review && "R "}
         {v.time && padRight("", COL.time)}
         {v.time && " "}
-        {v.id && padRight("PR", COL.id)}
-        {v.id && " "}
         {padRight("Title", titleWidth)}
         {v.author && " "}
         {v.author && padRight("Author", COL.author)}
@@ -166,8 +163,10 @@ function PRRow({ pr, selected, columnVisibility, titleWidth }: PRRowProps) {
   const prId = `#${pr.number}`
   const author = `@${pr.author.login}`
   
-  // Truncate title to fit
-  const title = truncate(pr.title, titleWidth)
+  // Title with PR number suffix: "Fix the bug (#123)"
+  const prSuffix = ` (${prId})`
+  const titleTextWidth = titleWidth - prSuffix.length
+  const title = truncate(pr.title, titleTextWidth)
 
   return (
     <box
@@ -186,9 +185,9 @@ function PRRow({ pr, selected, columnVisibility, titleWidth }: PRRowProps) {
         {v.review && " "}
         {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
         {v.time && " "}
-        {v.id && <span fg={theme.textDim}>{padRight(prId, COL.id)}</span>}
-        {v.id && " "}
-        <span fg={theme.text}>{padRight(title, titleWidth)}</span>
+        <span fg={theme.text}>{title}</span>
+        <span fg={theme.textDim}>{prSuffix}</span>
+        <span>{" ".repeat(Math.max(0, titleTextWidth - title.length))}</span>
         {v.author && " "}
         {v.author && <span fg={theme.textMuted}>{padRight(truncate(author, COL.author), COL.author)}</span>}
         {v.repo && " "}

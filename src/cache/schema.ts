@@ -25,7 +25,6 @@ export const defaultColumnVisibility: ColumnVisibility = {
   time: true,
   repo: true,
   author: true,
-  id: true,
 }
 
 export const defaultCache: PRCache = {

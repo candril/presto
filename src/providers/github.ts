@@ -177,6 +177,7 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
 
   return {
     repo,
+    number,
     files: parseFiles(result.files),
     commits: parseCommits(result.commits),
     author: {
