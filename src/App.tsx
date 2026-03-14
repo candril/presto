@@ -58,6 +58,8 @@ export function App({ config, currentUser }: AppProps) {
     filter,
     prs: state.prs,
     dispatch,
+    history,
+    setHistory,
   })
 
   // Feature: Keyboard navigation
@@ -159,7 +161,7 @@ export function App({ config, currentUser }: AppProps) {
               <text fg={theme.textDim}>Press {config.keys.refresh} to retry</text>
             </box>
           ) : (
-            <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} columnVisibility={state.columnVisibility} previewPosition={state.previewPosition} />
+            <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} columnVisibility={state.columnVisibility} previewPosition={state.previewPosition} history={history} />
           )}
 
           {/* Suggestions popup - anchored to bottom of content area */}

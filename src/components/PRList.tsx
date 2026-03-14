@@ -12,6 +12,7 @@ import { theme } from "../theme"
 import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
 import { getRepoName, getShortRepoName, computeCheckState } from "../types"
 import { formatRelativeTime } from "../utils/time"
+import { getPRKey, isPRMarked, getPRRecencyLevel, type History } from "../history"
 
 /** Column widths for table-like layout */
 const COL = {
@@ -38,21 +39,21 @@ function getFixedColumnsWidth(v: ColumnVisibility): number {
 
 /** Unicode icons */
 const ICONS = {
-  // Combined PR state icons (includes draft)
-  prOpen: "○",      // open circle (ready for review)
-  prDraft: "◌",     // dotted circle (draft)
-  prMerged: "●",    // filled circle (merged)
-  prClosed: "✗",    // x mark (closed)
+  // PR state icons
+  prOpen: "○",      // open circle
+  prDraft: "◌",     // dotted circle
+  prMerged: "●",    // filled circle
+  prClosed: "✗",    // x mark
   // CI check icons
   checkSuccess: "✓", // check mark
   checkFailure: "✗", // x mark
-  checkPending: "◔", // circle with upper right quadrant
-  checkNone: "─",    // horizontal line
+  checkPending: "*", // asterisk for pending
+  checkNone: "-",    // dash
   // Review icons
   reviewApproved: "✓", // check mark
   reviewChanges: "!",  // exclamation
   reviewRequired: "?", // question mark
-  reviewNone: "─",     // horizontal line
+  reviewNone: "-",     // dash
 }
 
 interface PRListProps {
@@ -60,12 +61,13 @@ interface PRListProps {
   selectedIndex: number
   columnVisibility: ColumnVisibility
   previewPosition: "right" | "bottom" | null
+  history: History
 }
 
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex, columnVisibility, previewPosition }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
 
@@ -112,6 +114,7 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition }
             selected={index === selectedIndex}
             columnVisibility={columnVisibility}
             titleWidth={titleWidth}
+            history={history}
           />
         ))}
       </scrollbox>
@@ -151,9 +154,10 @@ interface PRRowProps {
   selected: boolean
   columnVisibility: ColumnVisibility
   titleWidth: number
+  history: History
 }
 
-function PRRow({ pr, selected, columnVisibility, titleWidth }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowProps) {
   const v = columnVisibility
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(computeCheckState(pr.statusCheckRollup))
@@ -162,6 +166,37 @@ function PRRow({ pr, selected, columnVisibility, titleWidth }: PRRowProps) {
   const repoName = getShortRepoName(pr)
   const prId = `#${pr.number}`
   const author = `@${pr.author.login}`
+  
+  // Check marked/recent status
+  const prKey = getPRKey(getRepoName(pr), pr.number)
+  const isMarked = isPRMarked(history, prKey)
+  const recencyLevel = getPRRecencyLevel(history, prKey)
+  
+  // Title color based on user interaction:
+  // - Marked: bright gold (always takes priority)
+  // - Just opened (< 2h): brightest
+  // - Today (< 24h): bright
+  // - This week: semi-bright
+  // - Older/never opened: dim
+  let titleColor = theme.textOlder
+  if (isMarked) {
+    titleColor = theme.warning       // bright gold for marked
+  } else {
+    switch (recencyLevel) {
+      case "justNow":
+        titleColor = theme.textJustNow
+        break
+      case "today":
+        titleColor = theme.textToday
+        break
+      case "thisWeek":
+        titleColor = theme.textThisWeek
+        break
+      case "older":
+        titleColor = theme.textOlder
+        break
+    }
+  }
   
   // Title with PR number suffix: "Fix the bug (#123)"
   const prSuffix = ` (${prId})`
@@ -185,7 +220,7 @@ function PRRow({ pr, selected, columnVisibility, titleWidth }: PRRowProps) {
         {v.review && " "}
         {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
         {v.time && " "}
-        <span fg={theme.text}>{title}</span>
+        <span fg={titleColor}>{title}</span>
         <span fg={theme.textDim}>{prSuffix}</span>
         <span>{" ".repeat(Math.max(0, titleTextWidth - title.length))}</span>
         {v.author && " "}
@@ -206,7 +241,6 @@ function getStateIndicator(pr: PR): { icon: string; color: string } {
       return { icon: ICONS.prClosed, color: theme.prClosed }
     case "OPEN":
     default:
-      // Draft is a sub-state of Open
       if (pr.isDraft) {
         return { icon: ICONS.prDraft, color: theme.prDraft }
       }

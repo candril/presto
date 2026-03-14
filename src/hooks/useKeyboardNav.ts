@@ -5,10 +5,19 @@
 
 import { useKeyboard, useRenderer } from "@opentui/react"
 import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions"
-import { toggleStarAuthor, saveHistory, type History } from "../history"
+import {
+  toggleStarAuthor,
+  saveHistory,
+  toggleMarkPR,
+  isPRMarked,
+  getPRKey,
+  recordPRView,
+  type History,
+} from "../history"
 import { isFilterActive, type ParsedFilter } from "../discovery"
 import type { Config } from "../config"
 import type { PR, PreviewPosition } from "../types"
+import { getRepoName } from "../types"
 
 export interface UseKeyboardNavOptions {
   config: Config
@@ -74,6 +83,33 @@ export function useKeyboardNav({
       return
     }
 
+    // Special filter shortcuts (spec 015)
+    // Ctrl+M: Toggle @marked filter
+    if (key.ctrl && key.name === "m") {
+      const current = filter.marked ? "" : "@marked"
+      dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
+      return
+    }
+    // Ctrl+R: Toggle @recent filter
+    if (key.ctrl && key.name === "r") {
+      const current = filter.recent ? "" : "@recent"
+      dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
+      return
+    }
+    // Ctrl+S: Toggle @starred filter
+    if (key.ctrl && key.name === "s") {
+      const current = filter.starred ? "" : "@starred"
+      dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
+      return
+    }
+    // Ctrl+E: Toggle @me filter (my PRs)
+    if (key.ctrl && key.name === "e") {
+      const hasMe = filter.authors.includes("me") || (filter.authors.length === 1 && filter.authors[0] === "me")
+      const current = hasMe ? "" : "@me"
+      dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
+      return
+    }
+
     // Preview mode: Ctrl-d/Ctrl-u for scrolling
     if (previewPosition) {
       const halfPage = Math.floor((terminalHeight - 6) / 2)
@@ -131,6 +167,23 @@ export function useKeyboardNav({
       return
     }
 
+    // Mark/unmark PR with m (spec 015)
+    if (key.name === "m") {
+      const pr = filteredPRs[selectedIndex]
+      if (pr) {
+        const prKey = getPRKey(getRepoName(pr), pr.number)
+        const newHistory = toggleMarkPR(history, prKey)
+        setHistory(newHistory)
+        saveHistory(newHistory)
+        const isNowMarked = isPRMarked(newHistory, prKey)
+        dispatch({
+          type: "SHOW_MESSAGE",
+          message: isNowMarked ? "Marked" : "Unmarked",
+        })
+      }
+      return
+    }
+
     // Refresh
     if (key.name === config.keys.refresh || (key.name === "r" && key.shift)) {
       fetchPRs(true)
@@ -165,6 +218,16 @@ export function useKeyboardNav({
 
     // Open in browser
     if (key.name === "o") {
+      // Record to recent history (spec 015)
+      const newHistory = recordPRView(history, {
+        repo: getRepoName(selectedPR),
+        number: selectedPR.number,
+        title: selectedPR.title,
+        author: selectedPR.author.login,
+      })
+      setHistory(newHistory)
+      saveHistory(newHistory)
+
       dispatch({ type: "SHOW_MESSAGE", message: "Opening in browser..." })
       openInBrowser(selectedPR).catch(() => {
         dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
@@ -174,6 +237,16 @@ export function useKeyboardNav({
 
     // Open in riff
     if (key.name === "return") {
+      // Record to recent history (spec 015)
+      const newHistory = recordPRView(history, {
+        repo: getRepoName(selectedPR),
+        number: selectedPR.number,
+        title: selectedPR.title,
+        author: selectedPR.author.login,
+      })
+      setHistory(newHistory)
+      saveHistory(newHistory)
+
       renderer.suspend()
       openInRiff(selectedPR).finally(() => {
         renderer.resume()

@@ -114,3 +114,101 @@ export function recordFilterQuery(history: History, query: string): History {
 
   return { ...history, recentFilters }
 }
+
+// ============================================================================
+// PR Marking (spec 015)
+// ============================================================================
+
+/** Get PR key from repo and number */
+export function getPRKey(repo: string, number: number): string {
+  return `${repo}#${number}`
+}
+
+/** Toggle mark status for a PR */
+export function toggleMarkPR(history: History, prKey: string): History {
+  const marked = new Set(history.markedPRs ?? [])
+  if (marked.has(prKey)) {
+    marked.delete(prKey)
+  } else {
+    marked.add(prKey)
+  }
+  return { ...history, markedPRs: [...marked] }
+}
+
+/** Check if a PR is marked */
+export function isPRMarked(history: History, prKey: string): boolean {
+  return history.markedPRs?.includes(prKey) ?? false
+}
+
+/** Check if a PR is in recent history */
+export function isPRRecent(history: History, prKey: string): boolean {
+  const [repo, numStr] = prKey.split("#")
+  const number = parseInt(numStr, 10)
+  return history.recentlyViewed.some(
+    (r) => r.repo === repo && r.number === number
+  )
+}
+
+/** Recency levels for visual indication */
+export type RecencyLevel = "justNow" | "today" | "thisWeek" | "older"
+
+/** Time thresholds for recency levels */
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+const ONE_WEEK_MS = 7 * ONE_DAY_MS
+
+/**
+ * Get the recency level of a PR
+ * - "justNow": opened within last ~2 hours (brightest)
+ * - "today": opened within last 24 hours
+ * - "thisWeek": opened within last week
+ * - "older": never opened or opened more than a week ago (dimmest)
+ */
+export function getPRRecencyLevel(history: History, prKey: string): RecencyLevel {
+  const [repo, numStr] = prKey.split("#")
+  const number = parseInt(numStr, 10)
+  
+  const entry = history.recentlyViewed.find(
+    (r) => r.repo === repo && r.number === number
+  )
+  
+  if (!entry) {
+    return "older"
+  }
+  
+  const viewedAt = new Date(entry.viewedAt).getTime()
+  const now = Date.now()
+  const age = now - viewedAt
+  
+  if (age < TWO_HOURS_MS) {
+    return "justNow"
+  } else if (age < ONE_DAY_MS) {
+    return "today"
+  } else if (age < ONE_WEEK_MS) {
+    return "thisWeek"
+  } else {
+    return "older"
+  }
+}
+
+/** Clear all marks */
+export function clearAllMarks(history: History): History {
+  return { ...history, markedPRs: [] }
+}
+
+/** Clear recent history */
+export function clearRecentPRs(history: History): History {
+  return { ...history, recentlyViewed: [] }
+}
+
+/** Remove a specific PR from recent history */
+export function removePRFromRecent(history: History, prKey: string): History {
+  const [repo, numStr] = prKey.split("#")
+  const number = parseInt(numStr, 10)
+  return {
+    ...history,
+    recentlyViewed: history.recentlyViewed.filter(
+      (r) => !(r.repo === repo && r.number === number)
+    ),
+  }
+}

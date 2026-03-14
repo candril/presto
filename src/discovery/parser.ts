@@ -17,6 +17,10 @@ export interface ParsedFilter {
   text: string           // Remaining text for title search
   showAll: boolean       // * modifier - bypass starred-only filter
   prRef: { repo?: string; number: number } | null  // Direct PR reference (URL, #123, etc.)
+  // Special filters (spec 015)
+  marked: boolean        // marked: - show only marked PRs
+  recent: boolean        // recent: - show only recent PRs
+  starred: boolean       // @starred - show PRs from starred authors
 }
 
 export const emptyFilter: ParsedFilter = {
@@ -26,6 +30,9 @@ export const emptyFilter: ParsedFilter = {
   text: "",
   showAll: false,
   prRef: null,
+  marked: false,
+  recent: false,
+  starred: false,
 }
 
 /** Check if a filter has any active criteria */
@@ -36,7 +43,10 @@ export function isFilterActive(filter: ParsedFilter): boolean {
     filter.states.length > 0 ||
     filter.text.length > 0 ||
     filter.showAll ||
-    filter.prRef !== null
+    filter.prRef !== null ||
+    filter.marked ||
+    filter.recent ||
+    filter.starred
   )
 }
 
@@ -49,6 +59,9 @@ export function parseFilter(query: string): ParsedFilter {
     text: "",
     showAll: false,
     prRef: null,
+    marked: false,
+    recent: false,
+    starred: false,
   }
 
   // Check if query is a PR reference (URL, #123, repo#123, etc.)
@@ -62,8 +75,15 @@ export function parseFilter(query: string): ParsedFilter {
   const textParts: string[] = []
 
   for (const token of tokens) {
+    const lower = token.toLowerCase()
     if (token === "*") {
       result.showAll = true
+    } else if (lower === "@marked") {
+      result.marked = true
+    } else if (lower === "@recent") {
+      result.recent = true
+    } else if (lower === "@starred") {
+      result.starred = true
     } else if (token.startsWith("@")) {
       result.authors.push(token.slice(1).toLowerCase())
     } else if (token.startsWith("repo:")) {

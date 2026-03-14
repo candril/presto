@@ -151,21 +151,50 @@ function buildSuggestions(
   const tokens = q.split(/\s+/).filter(Boolean)
   const lastToken = tokens[tokens.length - 1] || ""
   
-  // Get the prefix (everything except what user is currently typing)
-  // If last token is a complete filter (ends with recognized pattern), include it
-  const isLastTokenComplete = 
-    lastToken.startsWith("@") || 
-    lastToken.startsWith("repo:") || 
-    lastToken.startsWith("state:") ||
-    lastToken === "*"
-  
   // For appending new suggestions
   const existingQuery = q ? q + " " : ""
+  
+  // Check what kind of token we're currently typing
+  const isTypingAuthor = lastToken.startsWith("@")
+  const isTypingSpecialFilter = lastToken.startsWith(">")
+  const isTypingRepo = lastToken.startsWith("repo:")
+  const isTypingState = lastToken.startsWith("state:")
+  const isTypingPrefix = isTypingAuthor || isTypingSpecialFilter || isTypingRepo || isTypingState
+  
+  // Check if query ends with space (ready for new token)
+  const endsWithSpace = query.endsWith(" ")
 
-  if (!q || isLastTokenComplete) {
+  if (!q || endsWithSpace || lastToken === "*") {
     // Empty query OR user just finished a token - show things to add
 
-    // Show all starred authors first (these are the important ones)
+    // Show special filter tokens first (if not already in query)
+    const specialFilters = [
+      { token: "@marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
+      { token: "@recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
+      { token: "@starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
+    ]
+    
+    for (const filter of specialFilters) {
+      if (!tokens.includes(filter.token)) {
+        items.push({
+          type: "filter",
+          value: `${existingQuery}${filter.token}`,
+          label: filter.label,
+          count: filter.count,
+        })
+      }
+    }
+
+    // Show @me first (if not already in query)
+    if (!tokens.includes("@me")) {
+      items.push({
+        type: "author",
+        value: `${existingQuery}@me`,
+        label: "me (my PRs)",
+      })
+    }
+
+    // Show all starred authors (these are the important ones)
     // Skip if already filtering by this author
     const existingAuthors = tokens
       .filter(t => t.startsWith("@"))
@@ -219,15 +248,45 @@ function buildSuggestions(
       }
     }
   } else {
-    // Check the last token being typed for special prefixes
-    const tokens = q.split(/\s+/)
-    const lastToken = tokens[tokens.length - 1] || ""
+    // User is typing a prefixed token - show filtered suggestions
     const prefix = tokens.slice(0, -1).join(" ")
     const prefixWithSpace = prefix ? prefix + " " : ""
 
-    if (lastToken.startsWith("@")) {
-      // Typing @author - suggest authors
-      const partial = lastToken.slice(1)
+    if (isTypingSpecialFilter) {
+      // Typing > - suggest special filters only
+      const partial = lastToken.slice(1).toLowerCase()
+      
+      const specialFilters = [
+        { token: "@marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
+        { token: "@recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
+        { token: "@starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
+      ]
+      
+      for (const filter of specialFilters) {
+        // Match against the token name (without @)
+        if (filter.token.slice(1).includes(partial)) {
+          items.push({
+            type: "filter",
+            value: `${prefixWithSpace}${filter.token}`,
+            label: filter.label,
+            count: filter.count,
+          })
+        }
+      }
+    } else if (isTypingAuthor) {
+      // Typing @author - suggest @me and authors
+      const partial = lastToken.slice(1).toLowerCase()
+      
+      // @me shortcut
+      if ("me".includes(partial)) {
+        items.push({
+          type: "author",
+          value: `${prefixWithSpace}@me`,
+          label: "me (my PRs)",
+        })
+      }
+      
+      // Then suggest authors
       const authors = getAllAuthors(prs, history)
 
       for (const author of authors) {
@@ -241,7 +300,7 @@ function buildSuggestions(
           })
         }
       }
-    } else if (lastToken.startsWith("repo:")) {
+    } else if (isTypingRepo) {
       // Typing repo: - suggest repos (including disabled ones from config)
       const partial = lastToken.slice(5)
       const reposFromPRs = getAllRepos(prs)
@@ -275,7 +334,7 @@ function buildSuggestions(
           }
         }
       }
-    } else if (lastToken.startsWith("state:")) {
+    } else if (isTypingState) {
       // Typing state: - suggest state options
       const partial = lastToken.slice(6)
       const states = [

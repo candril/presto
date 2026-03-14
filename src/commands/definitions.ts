@@ -5,7 +5,7 @@
 import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
 import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
-import { toggleStarAuthor, saveHistory } from "../history"
+import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent } from "../history"
 import { saveColumnVisibility } from "../cache"
 import { getRepoName, type ColumnId } from "../types"
 
@@ -97,6 +97,36 @@ export const commands: Command[] = [
       return { type: "success", message: "Filters cleared" }
     },
   },
+  {
+    id: "filter.marked",
+    label: "Show marked PRs",
+    category: "filter",
+    shortcut: "Ctrl+M",
+    execute: async (ctx) => {
+      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: "@marked" })
+      return { type: "success" }
+    },
+  },
+  {
+    id: "filter.recent",
+    label: "Show recent PRs",
+    category: "filter",
+    shortcut: "Ctrl+R",
+    execute: async (ctx) => {
+      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: "@recent" })
+      return { type: "success" }
+    },
+  },
+  {
+    id: "filter.starred",
+    label: "Show PRs from starred authors",
+    category: "filter",
+    shortcut: "Ctrl+S",
+    execute: async (ctx) => {
+      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: "@starred" })
+      return { type: "success" }
+    },
+  },
 
   // ============================================================================
   // ACTIONS
@@ -165,6 +195,42 @@ export const commands: Command[] = [
       return {
         type: "success",
         message: `${isStarred ? "★ Starred" : "☆ Unstarred"} @${author}`,
+      }
+    },
+  },
+  {
+    id: "action.mark",
+    label: "Mark/unmark PR",
+    category: "action",
+    shortcut: "m",
+    requiresPR: true,
+    execute: async (ctx) => {
+      const pr = ctx.selectedPR!
+      const prKey = getPRKey(getRepoName(pr), pr.number)
+      const newHistory = toggleMarkPR(ctx.history, prKey)
+      ctx.setHistory(newHistory)
+      saveHistory(newHistory)
+      const isMarked = isPRMarked(newHistory, prKey)
+      return {
+        type: "success",
+        message: isMarked ? "Marked" : "Unmarked",
+      }
+    },
+  },
+  {
+    id: "action.clear_recent",
+    label: "Clear from recent",
+    category: "action",
+    requiresPR: true,
+    execute: async (ctx) => {
+      const pr = ctx.selectedPR!
+      const prKey = getPRKey(getRepoName(pr), pr.number)
+      const newHistory = removePRFromRecent(ctx.history, prKey)
+      ctx.setHistory(newHistory)
+      saveHistory(newHistory)
+      return {
+        type: "success",
+        message: "Cleared from recent",
       }
     },
   },

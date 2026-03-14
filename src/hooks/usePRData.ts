@@ -6,8 +6,10 @@
 import { useEffect, useCallback } from "react"
 import { listPRs, listPRsFromRepos, getPR } from "../providers/github"
 import { loadCache, saveCache, isCacheValidForRepos } from "../cache"
+import { recordPRView, saveHistory, type History } from "../history"
 import type { Config } from "../config"
 import type { PR } from "../types"
+import { getRepoName } from "../types"
 import type { ParsedFilter } from "../discovery"
 
 interface UsePRDataOptions {
@@ -15,9 +17,11 @@ interface UsePRDataOptions {
   filter: ParsedFilter
   prs: PR[]
   dispatch: (action: any) => void
+  history: History
+  setHistory: (history: History) => void
 }
 
-export function usePRData({ config, filter, prs, dispatch }: UsePRDataOptions) {
+export function usePRData({ config, filter, prs, dispatch, history, setHistory }: UsePRDataOptions) {
   // Fetch PRs from GitHub (only enabled repos)
   const fetchPRs = useCallback(async (showAsRefresh = false) => {
     const repos = config.repositories
@@ -80,7 +84,7 @@ export function usePRData({ config, filter, prs, dispatch }: UsePRDataOptions) {
     }
   }, []) // Only run on mount
 
-  // Fetch PR on-demand when a URL/reference is pasted
+  // Fetch PR on-demand when a URL/reference is pasted in filter bar
   useEffect(() => {
     if (!filter.prRef) return
 
@@ -96,7 +100,18 @@ export function usePRData({ config, filter, prs, dispatch }: UsePRDataOptions) {
       return true
     })
 
-    if (existingPR) return
+    // If we have it, record as viewed (pasting = looking at it)
+    if (existingPR) {
+      const newHistory = recordPRView(history, {
+        repo: getRepoName(existingPR),
+        number: existingPR.number,
+        title: existingPR.title,
+        author: existingPR.author.login,
+      })
+      setHistory(newHistory)
+      saveHistory(newHistory)
+      return
+    }
 
     if (!repo || !repo.includes("/")) return
 
@@ -105,6 +120,16 @@ export function usePRData({ config, filter, prs, dispatch }: UsePRDataOptions) {
       if (pr) {
         dispatch({ type: "SET_PRS", prs: [pr, ...prs] })
         dispatch({ type: "SHOW_MESSAGE", message: `Loaded PR #${number}` })
+        
+        // Record as viewed (spec 015)
+        const newHistory = recordPRView(history, {
+          repo: getRepoName(pr),
+          number: pr.number,
+          title: pr.title,
+          author: pr.author.login,
+        })
+        setHistory(newHistory)
+        saveHistory(newHistory)
       } else {
         dispatch({ type: "SHOW_MESSAGE", message: `PR #${number} not found` })
       }

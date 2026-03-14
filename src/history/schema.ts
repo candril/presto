@@ -14,6 +14,9 @@ export interface History {
 
   /** Recently used filter queries */
   recentFilters: string[]
+
+  /** Marked/pinned PRs, keyed by "owner/repo#number" */
+  markedPRs: string[]
 }
 
 export interface RecentAuthor {
@@ -35,11 +38,12 @@ export const defaultHistory: History = {
   recentAuthors: [],
   recentlyViewed: [],
   recentFilters: [],
+  markedPRs: [],
 }
 
 /** Maximum items to keep in history */
 export const HISTORY_LIMITS = {
   recentAuthors: 20,
-  recentlyViewed: 50,
+  recentlyViewed: 30,
   recentFilters: 10,
 }

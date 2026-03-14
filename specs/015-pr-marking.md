@@ -1,6 +1,6 @@
 # PR Marking & Recent PRs
 
-**Status**: Draft
+**Status**: Done
 
 ## Description
 
@@ -31,11 +31,11 @@ Both features bypass all repo visibility settings (hidden repos, disabled repos,
 
 #### Recent PRs
 - **Track on open**: Record PR when opened via any method:
-  - Enter key (default tool)
+  - Enter key (default tool / riff)
   - `o` - open in browser
-  - `r` - open in riff
-  - Pasted GitHub URL
-- **Recent filter**: `Ctrl+R` toggles "recent PRs only" view
+  - Pasted GitHub URL in filter bar (e.g., `https://github.com/owner/repo/pull/123`)
+  - Pasted PR reference (e.g., `#123`, `repo#123`, `owner/repo#123`)
+- **Recent filter**: `Ctrl+R` sets `@recent` filter
 - **Limit**: Keep last 30 recently opened PRs (existing `recentlyViewed` in history)
 
 #### Shared
@@ -46,26 +46,23 @@ Both features bypass all repo visibility settings (hidden repos, disabled repos,
 
 ### Visual Indicators
 
-Use subtle, non-intrusive indicators that don't add visual noise:
+Use title text color to indicate PR status - subtle but noticeable:
 
-```
-Option A: Colored dot before PR number (recommended)
-  ●#123  Add user authentication       (marked - accent color)
-  ○#456  Fix pagination bug            (recent - dim color)
-  ●#789  Update dependencies           (both - accent, maybe different icon)
+| Status | Color | Hex |
+|--------|-------|-----|
+| **Marked** | Bright gold | `#e0af68` |
+| **Just opened** (< 2h) | Brightest | `#c0caf5` |
+| **Today** (< 24h) | Bright | `#a9b1d6` |
+| **This week** | Semi-bright | `#787c99` |
+| **Older / Never opened** | Dim | `#565f89` |
 
-Option B: Background tint on the row
-  Marked: very subtle accent background tint
-  Recent: very subtle gray background tint
-
-Option C: Icon in dedicated column
-  ◆ #123  Add user authentication      (marked)
-  ◇ #456  Fix pagination bug           (recent)
-```
-
-Suggested colors:
-- Marked: `theme.accent` or yellow/gold (`#f9e2af`)
-- Recent: `theme.textDim` or subtle blue (`#89b4fa` dimmed)
+This approach:
+- No extra columns or icons needed
+- Naturally draws attention to marked PRs
+- Shows recency gradient - recently opened PRs are brighter
+- Unopened PRs fade into background until you interact with them
+- Marked always takes priority (gold) regardless of recency
+- PRs older than a week look the same as never opened
 
 ### History Schema
 
@@ -280,28 +277,30 @@ export function useFiltering({
 // src/components/PRList.tsx
 
 function PRRow({ pr, selected, history }: PRRowProps) {
-  const prKey = getPRKey(pr)
+  const prKey = getPRKey(getRepoName(pr), pr.number)
   const isMarked = isPRMarked(history, prKey)
-  const isRecent = isPRRecent(history, prKey)
+  const recencyLevel = getPRRecencyLevel(history, prKey)
   
-  // Determine indicator
-  let indicator = " "  // Default: space for alignment
-  let indicatorColor = theme.textDim
-  
+  // Title color based on user interaction
+  let titleColor = theme.textOlder
   if (isMarked) {
-    indicator = "●"
-    indicatorColor = theme.accent  // or theme.yellow
-  } else if (isRecent) {
-    indicator = "○"
-    indicatorColor = theme.textMuted
+    titleColor = theme.warning  // gold - always priority
+  } else {
+    switch (recencyLevel) {
+      case "justNow":   titleColor = theme.textJustNow; break   // < 2h
+      case "today":     titleColor = theme.textToday; break     // < 24h
+      case "thisWeek":  titleColor = theme.textThisWeek; break  // < 1 week
+      case "older":     titleColor = theme.textOlder; break     // older/never
+    }
   }
   
   return (
-    <box flexDirection="row">
-      <text fg={indicatorColor}>{indicator}</text>
-      <text fg={theme.textDim}>#{pr.number}</text>
-      <text> {pr.title}</text>
-      {/* ... rest of row */}
+    <box>
+      <text>
+        {/* ... other columns ... */}
+        <span fg={titleColor}>{title}</span>
+        {/* ... */}
+      </text>
     </box>
   )
 }
@@ -346,29 +345,36 @@ src/
 
 ## UI Examples
 
-### Normal List with Indicators
+### Normal List with Title Colors
 ```
- ●#123  Add user authentication       @alice   ✓  ●  2h   (marked)
-  #456  Fix pagination bug            @bob     ✓  ●  1d   (neither)
- ○#789  Update dependencies           @alice   ⏳  ○  3h   (recent)
- ●#101  Refactor auth module          @carol   ✓  ●  4h   (marked, also recent)
+(gold)   Add user authentication (#123)    ✓ ●  2h  @alice    (marked)
+(dim)    Fix pagination bug (#456)         ✓ ●  1d  @bob      (never opened)
+(bright) Update dependencies (#789)        ⏳ ○  3h  @alice    (opened 1h ago)
+(medium) Refactor auth module (#101)       ✓ ●  4h  @carol    (opened yesterday)
 ```
+
+Title brightness indicates recency:
+- Gold = marked (always stands out)
+- Brightest = just opened (< 2h)
+- Bright = today
+- Medium = this week
+- Dim = older or never opened
 
 ### Marked-Only Mode (Ctrl+M)
 ```
-presto ● Marked (2)                                 Ctrl+M: exit
+PResto ● Marked (2)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  #123  Add user authentication       @alice   ✓  ●  2h
-  #101  Refactor auth module          @carol   ✓  ●  4h
+  Add user authentication (#123)       ✓  ●  2h  @alice
+  Refactor auth module (#101)          ✓  ●  4h  @carol
 ```
 
 ### Recent-Only Mode (Ctrl+R)
 ```
-presto ○ Recent (3)                                 Ctrl+R: exit
+PResto ○ Recent (3)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  #789  Update dependencies           @alice   ⏳  ○  3h   (opened 5m ago)
-  #101  Refactor auth module          @carol   ✓  ●  4h   (opened 1h ago)
-  #555  Add tests                     @bob     ✓  ●  2d   (opened 2h ago)
+  Update dependencies (#789)           ⏳  ○  3h  @alice
+  Refactor auth module (#101)          ✓  ●  4h  @carol
+  Add tests (#555)                     ✓  ●  2d  @bob
 ```
 
 ### Feedback Messages
@@ -382,6 +388,38 @@ Unmarked
 | Key | Action |
 |-----|--------|
 | `m` | Toggle mark on selected PR |
-| `Ctrl+M` | Toggle marked-only filter |
-| `Ctrl+R` | Toggle recent-only filter |
+| `Ctrl+M` | Filter: `@marked` |
+| `Ctrl+R` | Filter: `@recent` |
+| `Ctrl+S` | Filter: `@starred` |
+| `Ctrl+E` | Filter: `@me` |
 | `Enter` | Open PR (also records to recent) |
+| `o` | Open in browser (also records to recent) |
+
+## Filter Tokens
+
+Special filter tokens in the discovery bar:
+
+| Token | Description |
+|-------|-------------|
+| `@marked` | Show only marked PRs |
+| `@recent` | Show only recently opened PRs |
+| `@starred` | Show PRs from starred authors |
+| `@me` | Show my PRs |
+
+These tokens:
+- Can be combined with text search: `@marked fix bug`
+- Bypass repo visibility settings (hidden, starredOnly)
+- Fetch closed/merged PRs if not in main list
+
+## Command Palette
+
+All actions available via the command palette (`Ctrl+P`):
+
+**Filters:**
+- "Show marked PRs" (`Ctrl+M`) - sets `@marked`
+- "Show recent PRs" (`Ctrl+R`) - sets `@recent`
+- "Show PRs from starred authors" (`Ctrl+S`) - sets `@starred`
+
+**Actions:**
+- "Mark/unmark PR" (`m`)
+- "Clear from recent" - removes PR from recent history

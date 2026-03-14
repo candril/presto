@@ -11,6 +11,11 @@ export const theme = {
 
   // Text
   text: "#c0caf5",
+  // Recency gradient for PR titles (spec 015)
+  textJustNow: "#c0caf5",     // just opened (< 2h) - brightest
+  textToday: "#a9b1d6",       // opened today (< 24h)
+  textThisWeek: "#787c99",    // opened this week
+  textOlder: "#565f89",       // older or never opened - dimmest
   textDim: "#565f89",
   textMuted: "#414868",
 
