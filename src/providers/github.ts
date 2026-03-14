@@ -17,7 +17,27 @@ const PR_FIELDS = [
   "updatedAt",
   "reviewDecision",
   "statusCheckRollup",
+  "comments",
 ].join(",")
+
+/** Raw PR from GitHub API (comments is an array) */
+interface RawPR extends Omit<PR, "commentCount"> {
+  comments: unknown[]
+}
+
+/** Transform raw GitHub PR to our PR type */
+function transformPR(raw: RawPR): PR {
+  const { comments, ...rest } = raw
+  return {
+    ...rest,
+    commentCount: comments?.length ?? 0,
+  }
+}
+
+/** Transform array of raw PRs */
+function transformPRs(raws: RawPR[]): PR[] {
+  return raws.map(transformPR)
+}
 
 /**
  * List PRs from a specific repo or current repo
@@ -27,7 +47,7 @@ export async function listPRs(repo?: string): Promise<PR[]> {
   if (repo) args.push("-R", repo)
 
   const result = await $`gh ${args}`.json()
-  return result as PR[]
+  return transformPRs(result as RawPR[])
 }
 
 /**
@@ -35,7 +55,7 @@ export async function listPRs(repo?: string): Promise<PR[]> {
  */
 export async function listMyPRs(): Promise<PR[]> {
   const result = await $`gh pr list --author @me --json ${PR_FIELDS} --limit 50`.json()
-  return result as PR[]
+  return transformPRs(result as RawPR[])
 }
 
 /**
@@ -44,7 +64,7 @@ export async function listMyPRs(): Promise<PR[]> {
 export async function listReviewRequests(): Promise<PR[]> {
   const result =
     await $`gh pr list --search "review-requested:@me" --json ${PR_FIELDS} --limit 50`.json()
-  return result as PR[]
+  return transformPRs(result as RawPR[])
 }
 
 /**
@@ -65,7 +85,7 @@ export async function listRecentPRs(repo: string, days: number): Promise<PR[]> {
 
   try {
     const result = await $`gh ${args}`.json()
-    return result as PR[]
+    return transformPRs(result as RawPR[])
   } catch {
     return []
   }
@@ -124,7 +144,7 @@ export async function listRecentPRsFromRepos(repos: string[], days: number): Pro
 export async function getPR(repo: string, number: number): Promise<PR | null> {
   try {
     const result = await $`gh pr view ${number} -R ${repo} --json ${PR_FIELDS}`.json()
-    return result as PR
+    return transformPR(result as RawPR)
   } catch {
     return null
   }

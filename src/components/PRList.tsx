@@ -13,6 +13,7 @@ import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
 import { getRepoName, getShortRepoName, computeCheckState } from "../types"
 import { formatRelativeTime } from "../utils/time"
 import { getPRKey, isPRMarked, getPRRecencyLevel, type History } from "../history"
+import { prHasChanges } from "../notifications"
 
 /** Column widths for table-like layout */
 const COL = {
@@ -28,6 +29,7 @@ const COL = {
 /** Calculate total fixed width (everything except title) */
 function getFixedColumnsWidth(v: ColumnVisibility): number {
   let width = 2 // padding left + right
+  width += 1 // change indicator dot
   if (v.state) width += COL.state // icon + space
   if (v.checks) width += COL.checks // icon + space
   if (v.review) width += COL.review + 1 // icon + space
@@ -134,6 +136,7 @@ function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: Colum
       paddingRight={1}
     >
       <text fg={theme.textDim}>
+        {" "}{/* space for dot column */}
         {v.state && "S "}
         {v.checks && "C "}
         {v.review && "R "}
@@ -167,10 +170,11 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
   const prId = `#${pr.number}`
   const author = `@${pr.author.login}`
   
-  // Check marked/recent status
+  // Check marked/recent/changed status
   const prKey = getPRKey(getRepoName(pr), pr.number)
   const isMarked = isPRMarked(history, prKey)
   const recencyLevel = getPRRecencyLevel(history, prKey)
+  const hasChanges = prHasChanges(history, prKey)
   
   // Title color based on user interaction:
   // - Marked: bright gold (always takes priority)
@@ -212,6 +216,8 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
       paddingRight={1}
     >
       <text>
+        {/* Change indicator dot */}
+        <span fg={hasChanges ? theme.primary : undefined}>{hasChanges ? "•" : " "}</span>
         {v.state && <span fg={stateIndicator.color}>{stateIndicator.icon}</span>}
         {v.state && " "}
         {v.checks && <span fg={checkIndicator.color}>{checkIndicator.icon}</span>}

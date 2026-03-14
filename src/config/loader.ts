@@ -132,11 +132,25 @@ function mergeConfig(defaults: Config, overrides: Record<string, unknown>): Conf
       ...parseRefresh(overrides.refresh),
     },
 
+    notifications: {
+      ...defaults.notifications,
+      ...parseNotifications(overrides.notifications),
+    },
+
     keys: {
       ...defaults.keys,
       ...parseKeys(overrides.keys),
     },
   }
+}
+
+/** Parse notifications settings */
+function parseNotifications(value: unknown): Partial<Config["notifications"]> {
+  if (typeof value !== "object" || value === null) return {}
+  const obj = value as Record<string, unknown>
+  const result: Partial<Config["notifications"]> = {}
+  if (typeof obj.desktop === "boolean") result.desktop = obj.desktop
+  return result
 }
 
 /** Parse repositories array from TOML */

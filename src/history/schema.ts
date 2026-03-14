@@ -17,6 +17,27 @@ export interface History {
 
   /** Marked/pinned PRs, keyed by "owner/repo#number" */
   markedPRs: string[]
+
+  /** Snapshots of tracked PR states for change detection */
+  prSnapshots: Record<string, PRSnapshot>
+}
+
+/** Snapshot of a PR's state for change detection */
+export interface PRSnapshot {
+  /** PR state: OPEN, MERGED, CLOSED */
+  state: string
+  /** Review decision: APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, null */
+  reviewDecision: string | null
+  /** CI status: SUCCESS, FAILURE, PENDING, NONE */
+  checkState: string
+  /** Total comment count */
+  commentCount: number
+  /** When this snapshot was taken */
+  snapshotAt: string // ISO date
+  /** When user last "saw" this PR (selected or opened) */
+  seenAt: string // ISO date
+  /** Whether there are unseen changes */
+  hasChanges: boolean
 }
 
 export interface RecentAuthor {
@@ -39,6 +60,7 @@ export const defaultHistory: History = {
   recentlyViewed: [],
   recentFilters: [],
   markedPRs: [],
+  prSnapshots: {},
 }
 
 /** Maximum items to keep in history */

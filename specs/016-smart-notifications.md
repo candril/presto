@@ -1,6 +1,6 @@
 # Smart Notifications
 
-**Status**: Ready
+**Status**: Done
 
 ## Description
 

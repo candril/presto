@@ -3,7 +3,7 @@
  * Uses vertical feature slices via custom hooks
  */
 
-import { useReducer, useState } from "react"
+import { useReducer, useState, useEffect, useCallback } from "react"
 import { useTerminalDimensions } from "@opentui/react"
 import { useRenderer } from "@opentui/react"
 import { Shell } from "./components/Shell"
@@ -16,7 +16,20 @@ import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
 import { CommandLine } from "./components/CommandLine"
 import { HelpOverlay } from "./components/HelpOverlay"
 import { CommandPalette } from "./components/CommandPalette"
+import { NotificationToast } from "./components/NotificationToast"
 import type { CommandContext, CommandResult } from "./commands"
+import {
+  detectChanges,
+  updateAllSnapshots,
+  markPRSeen,
+  markPRHasChanges,
+  getPRKey,
+  sendDesktopNotification,
+  formatChangesForDesktop,
+  type PRChange,
+} from "./notifications"
+import { saveHistory } from "./history"
+import { getRepoName } from "./types"
 import { appReducer, createInitialState } from "./state"
 import { loadHistory, type History } from "./history"
 import { theme } from "./theme"
@@ -40,6 +53,8 @@ export function App({ config, currentUser }: AppProps) {
   const [state, dispatch] = useReducer(appReducer, null, createInitialState)
   const [history, setHistory] = useState<History>(() => loadHistory())
   const [showHelp, setShowHelp] = useState(false)
+  const [pendingChanges, setPendingChanges] = useState<PRChange[]>([])
+  const [initialSnapshotsDone, setInitialSnapshotsDone] = useState(false)
   const { height: terminalHeight } = useTerminalDimensions()
   const renderer = useRenderer()
 
@@ -62,6 +77,60 @@ export function App({ config, currentUser }: AppProps) {
     history,
     setHistory,
   })
+
+  // Feature: Notifications - detect changes when PRs update
+  const handlePRsUpdated = useCallback(
+    (prs: typeof state.prs, isRefresh: boolean) => {
+      // On first load, just create snapshots without showing notifications
+      if (!initialSnapshotsDone) {
+        const newHistory = updateAllSnapshots(history, prs, currentUser)
+        setHistory(newHistory)
+        saveHistory(newHistory)
+        setInitialSnapshotsDone(true)
+        return
+      }
+
+      // On refresh, detect changes first
+      if (isRefresh) {
+        const changes = detectChanges(prs, history, currentUser)
+        if (changes.length > 0) {
+          // Mark PRs as having changes
+          let newHistory = history
+          for (const change of changes) {
+            newHistory = markPRHasChanges(newHistory, change.prKey)
+          }
+          // Update snapshots with new state
+          newHistory = updateAllSnapshots(newHistory, prs, currentUser)
+          setHistory(newHistory)
+          saveHistory(newHistory)
+          // Show toast
+          setPendingChanges(changes)
+          
+          // Send desktop notification
+          if (config.notifications.desktop) {
+            const notification = formatChangesForDesktop(changes)
+            if (notification) {
+              sendDesktopNotification(notification)
+            }
+          }
+          return
+        }
+      }
+
+      // Just update snapshots
+      const newHistory = updateAllSnapshots(history, prs, currentUser)
+      setHistory(newHistory)
+      saveHistory(newHistory)
+    },
+    [history, currentUser, initialSnapshotsDone]
+  )
+
+  // Detect changes when PRs change (after refresh)
+  useEffect(() => {
+    if (state.prs.length > 0 && !state.loading) {
+      handlePRsUpdated(state.prs, state.lastRefresh !== null)
+    }
+  }, [state.prs, state.loading])
 
   // Feature: Auto-refresh
   const { isStale } = useAutoRefresh({
@@ -92,6 +161,18 @@ export function App({ config, currentUser }: AppProps) {
 
   // Feature: PR Preview
   const selectedPR = filteredPRs[state.selectedIndex] ?? null
+
+  // Mark PR as seen when selected (clears notification dot)
+  useEffect(() => {
+    if (selectedPR) {
+      const prKey = getPRKey(getRepoName(selectedPR), selectedPR.number)
+      if (history.prSnapshots?.[prKey]?.hasChanges) {
+        const newHistory = markPRSeen(history, prKey)
+        setHistory(newHistory)
+        saveHistory(newHistory)
+      }
+    }
+  }, [selectedPR?.url])
   const { preview, loading: previewLoading } = usePreview({
     previewPosition: state.previewPosition,
     previewCache: state.previewCache,
@@ -228,6 +309,14 @@ export function App({ config, currentUser }: AppProps) {
         onClose={() => dispatch({ type: "CLOSE_COMMAND_PALETTE" })}
         onResult={handleCommandResult}
       />
+
+      {/* Notification toast */}
+      {pendingChanges.length > 0 && (
+        <NotificationToast
+          changes={pendingChanges}
+          onDismiss={() => setPendingChanges([])}
+        />
+      )}
     </Shell>
   )
 }

@@ -37,6 +37,8 @@ export interface PR {
   updatedAt: string
   reviewDecision: ReviewDecision | null
   statusCheckRollup: StatusCheckRollup | null
+  /** Number of comments on the PR */
+  commentCount: number
 }
 
 /** Helper to get full repo name from PR URL */

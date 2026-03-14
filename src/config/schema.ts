@@ -66,6 +66,12 @@ export interface Config {
     onFocus: boolean
   }
 
+  /** Notification settings */
+  notifications: {
+    /** Send desktop notifications for PR changes */
+    desktop: boolean
+  }
+
   /** Keybinding overrides */
   keys: Record<string, string>
 }
@@ -94,6 +100,10 @@ export const defaultConfig: Config = {
   refresh: {
     interval: 300, // 5 minutes
     onFocus: true,
+  },
+
+  notifications: {
+    desktop: true,
   },
 
   keys: {
