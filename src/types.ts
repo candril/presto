@@ -202,6 +202,8 @@ export interface AppState {
   loading: boolean
   /** Background refresh (shows ↻ in header) */
   refreshing: boolean
+  /** Last successful refresh timestamp */
+  lastRefresh: Date | null
   error: string | null
   /** Discovery bar visibility */
   discoveryVisible: boolean

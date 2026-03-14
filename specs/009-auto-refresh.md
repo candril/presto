@@ -1,6 +1,6 @@
 # Auto-Refresh
 
-**Status**: In Progress (P1 partial: manual refresh works, no auto-interval yet)
+**Status**: Done (P1 + P2 complete)
 
 ## Description
 

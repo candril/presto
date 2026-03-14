@@ -33,6 +33,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory }
       try {
         const fetchedPRs = await listPRs()
         dispatch({ type: "SET_PRS", prs: fetchedPRs })
+        dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
       } catch (err) {
         dispatch({
           type: "SET_ERROR",
@@ -54,6 +55,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory }
     try {
       const fetchedPRs = await listPRsFromRepos(repos)
       dispatch({ type: "SET_PRS", prs: fetchedPRs })
+      dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
       saveCache(fetchedPRs, repos)
     } catch (err) {
       dispatch({ type: "SET_REFRESHING", refreshing: false })

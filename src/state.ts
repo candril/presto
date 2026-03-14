@@ -10,6 +10,7 @@ export type AppAction =
   | { type: "SET_VIEW"; view: View }
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "SET_REFRESHING"; refreshing: boolean }
+  | { type: "SET_LAST_REFRESH"; time: Date }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_PRS"; prs: PR[] }
   | { type: "APPEND_PRS"; prs: PR[] }
@@ -46,6 +47,7 @@ export function createInitialState(): AppState {
     selectedIndex: 0,
     loading: true,
     refreshing: false,
+    lastRefresh: null,
     error: null,
     discoveryVisible: false,
     discoveryQuery: cache.filterQuery || "",
@@ -73,6 +75,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "SET_REFRESHING":
       return { ...state, refreshing: action.refreshing }
+
+    case "SET_LAST_REFRESH":
+      return { ...state, lastRefresh: action.time }
 
     case "SET_ERROR":
       return { ...state, error: action.error, loading: false }

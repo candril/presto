@@ -28,6 +28,7 @@ import {
   useMessage,
   useHeaderInfo,
   usePreview,
+  useAutoRefresh,
 } from "./hooks"
 
 interface AppProps {
@@ -60,6 +61,15 @@ export function App({ config, currentUser }: AppProps) {
     dispatch,
     history,
     setHistory,
+  })
+
+  // Feature: Auto-refresh
+  const { isStale } = useAutoRefresh({
+    interval: config.refresh.interval,
+    onFocus: config.refresh.onFocus,
+    onRefresh: () => fetchPRs(true),
+    lastRefresh: state.lastRefresh,
+    onRefreshComplete: (time) => dispatch({ type: "SET_LAST_REFRESH", time }),
   })
 
   // Feature: Keyboard navigation
@@ -136,6 +146,8 @@ export function App({ config, currentUser }: AppProps) {
         title="PResto"
         loading={state.refreshing}
         right={headerRight}
+        lastRefresh={state.lastRefresh}
+        isStale={isStale}
       />
 
       {/* Main content area */}

@@ -1,6 +1,6 @@
 # Command Palette
 
-**Status**: In Progress
+**Status**: Done
 
 ## Description
 

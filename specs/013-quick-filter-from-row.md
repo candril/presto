@@ -1,6 +1,6 @@
 # Quick Filter from Row
 
-**Status**: Draft
+**Status**: Cancelled (not needed - discovery bar covers this use case)
 
 ## Description
 
