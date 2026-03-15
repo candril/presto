@@ -76,14 +76,12 @@ export function NotificationToast({ changes, onDismiss }: NotificationToastProps
   return (
     <box
       position="absolute"
-      top={2}
+      bottom={2}
       right={2}
       width={45}
       flexDirection="column"
-      backgroundColor={theme.modalBg}
-      borderStyle="rounded"
-      borderColor={theme.border}
-      paddingX={1}
+      backgroundColor={theme.headerBg}
+      paddingX={2}
       paddingY={1}
     >
       {visibleGroups.map((group) => (
@@ -140,6 +138,12 @@ function getChangeIcon(type: ChangeType): string {
       return "◆"
     case "closed":
       return "✕"
+    case "reopened":
+      return "○"
+    case "ready":
+      return "►"
+    case "draft":
+      return "◌"
     case "approved":
       return "✓"
     case "changes_requested":
@@ -151,7 +155,7 @@ function getChangeIcon(type: ChangeType): string {
     case "review_requested":
       return "→"
     case "new_comments":
-      return "○"
+      return "◇"
   }
 }
 
@@ -161,6 +165,12 @@ function getChangeColor(type: ChangeType): string {
       return theme.prMerged
     case "closed":
       return theme.textDim
+    case "reopened":
+      return theme.success
+    case "ready":
+      return theme.success
+    case "draft":
+      return theme.textMuted
     case "approved":
       return theme.success
     case "changes_requested":

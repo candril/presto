@@ -98,10 +98,19 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
       if (isRefresh) {
         const changes = detectChanges(prs, history, currentUser)
         if (changes.length > 0) {
-          // Mark PRs as having changes (with change type and message)
-          let newHistory = history
+          // Group changes by PR key
+          const changesByPR = new Map<string, typeof changes>()
           for (const change of changes) {
-            newHistory = markPRHasChanges(newHistory, change.prKey, change.changeType, change.message)
+            const existing = changesByPR.get(change.prKey) ?? []
+            existing.push(change)
+            changesByPR.set(change.prKey, existing)
+          }
+
+          // Mark PRs as having changes
+          let newHistory = history
+          for (const [prKey, prChanges] of changesByPR) {
+            const detectedChanges = prChanges.map((c) => ({ type: c.changeType, message: c.message }))
+            newHistory = markPRHasChanges(newHistory, prKey, detectedChanges)
           }
           // Update snapshots with new state
           newHistory = updateAllSnapshots(newHistory, prs, currentUser)
@@ -171,13 +180,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
   const selectedPRSnapshot = selectedPR
     ? history.prSnapshots?.[getPRKey(getRepoName(selectedPR), selectedPR.number)]
     : null
-  const selectedPRChange = selectedPRSnapshot?.hasChanges && selectedPRSnapshot?.changeType
-    ? {
-        prKey: getPRKey(getRepoName(selectedPR!), selectedPR!.number),
-        pr: selectedPR!,
-        changeType: selectedPRSnapshot.changeType,
-        message: selectedPRSnapshot.changeMessage ?? "",
-      }
+  const selectedPRChanges = selectedPRSnapshot?.hasChanges && selectedPRSnapshot?.changes?.length
+    ? selectedPRSnapshot.changes
     : null
 
   // Note: PR is marked as seen (dot cleared) when opened via p/Enter/o, not on selection
@@ -292,7 +296,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
             loading={previewLoading}
             scrollOffset={state.previewScrollOffset}
             position={state.previewPosition}
-            change={selectedPRChange}
+            changes={selectedPRChanges}
           />
         )}
       </box>

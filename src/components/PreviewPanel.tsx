@@ -9,11 +9,39 @@ import { SyntaxStyle, RGBA } from "@opentui/core"
 import { theme } from "../theme"
 import { Spinner } from "./Loading"
 import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile, PreviewPosition } from "../types"
-import type { PRChange } from "../notifications"
+import type { DetectedChange } from "../notifications"
+
+/** Get icon for change type */
+function getChangeIcon(changeType: DetectedChange["type"]): string {
+  switch (changeType) {
+    case "new_comments":
+      return "◇"
+    case "approved":
+      return "✓"
+    case "changes_requested":
+      return "●"
+    case "merged":
+      return "◆"
+    case "closed":
+      return "✕"
+    case "reopened":
+      return "○"
+    case "ready":
+      return "►"
+    case "draft":
+      return "◌"
+    case "ci_passed":
+      return "✓"
+    case "ci_failed":
+      return "✗"
+    default:
+      return "●"
+  }
+}
 
 /** Format change type into human readable message */
-function formatChangeMessage(change: PRChange): string {
-  switch (change.changeType) {
+function formatChangeMessage(change: DetectedChange): string {
+  switch (change.type) {
     case "new_comments":
       return change.message // "1 new comment" or "3 new comments"
     case "approved":
@@ -24,12 +52,46 @@ function formatChangeMessage(change: PRChange): string {
       return "PR was merged"
     case "closed":
       return "PR was closed"
+    case "reopened":
+      return "PR was reopened"
+    case "ready":
+      return "Marked ready for review"
+    case "draft":
+      return "Converted to draft"
     case "ci_passed":
       return "CI checks passed"
     case "ci_failed":
       return "CI checks failed"
     default:
       return change.message
+  }
+}
+
+/** Get color for change type */
+function getChangeColor(changeType: DetectedChange["type"]): string {
+  switch (changeType) {
+    case "new_comments":
+      return theme.primary
+    case "approved":
+      return theme.success
+    case "changes_requested":
+      return theme.warning
+    case "merged":
+      return theme.prMerged
+    case "closed":
+      return theme.textDim
+    case "reopened":
+      return theme.success
+    case "ready":
+      return theme.success
+    case "draft":
+      return theme.textMuted
+    case "ci_passed":
+      return theme.success
+    case "ci_failed":
+      return theme.error
+    default:
+      return theme.warning
   }
 }
 
@@ -69,11 +131,11 @@ interface PreviewPanelProps {
   loading: boolean
   scrollOffset: number
   position: PreviewPosition
-  /** Active change notification for this PR (if any) */
-  change?: PRChange | null
+  /** Active change notifications for this PR (if any) */
+  changes?: DetectedChange[] | null
 }
 
-export function PreviewPanel({ preview, loading, scrollOffset, position, change }: PreviewPanelProps) {
+export function PreviewPanel({ preview, loading, scrollOffset, position, changes }: PreviewPanelProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
   const isBottom = position === "bottom"
@@ -154,13 +216,27 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, change 
             </text>
           </box>
 
-          {/* Change notification banner */}
-          {change && (
-            <box height={1}>
-              <text>
-                <span fg={theme.warning}>● </span>
-                <span fg={theme.warning}>{formatChangeMessage(change)}</span>
-              </text>
+          {/* Change notification section */}
+          {changes && changes.length > 0 && (
+            <box marginTop={1} marginBottom={1} flexDirection="column">
+              <box
+                backgroundColor={theme.headerBg}
+                paddingLeft={1}
+                paddingTop={1}
+                paddingBottom={1}
+                flexDirection="column"
+                gap={0}
+              >
+                {changes.map((change, i) => (
+                  <box key={i} height={1}>
+                    <text>
+                      <span fg={getChangeColor(change.type)}>
+                        {getChangeIcon(change.type)}  {formatChangeMessage(change)}
+                      </span>
+                    </text>
+                  </box>
+                ))}
+              </box>
             </box>
           )}
 

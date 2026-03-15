@@ -91,21 +91,6 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       .filter((r) => !r.disabled)
       .map((r) => r.name)
 
-    if (allEnabledRepos.length === 0) {
-      dispatch({ type: "SET_LOADING", loading: true })
-      try {
-        const fetchedPRs = await listPRs()
-        dispatch({ type: "SET_PRS", prs: fetchedPRs })
-        dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
-      } catch (err) {
-        dispatch({
-          type: "SET_ERROR",
-          error: err instanceof Error ? err.message : "Failed to fetch PRs",
-        })
-      }
-      return
-    }
-
     if (showAsRefresh) {
       dispatch({ type: "SET_REFRESHING", refreshing: true })
     } else {

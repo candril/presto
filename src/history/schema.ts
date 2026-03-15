@@ -44,14 +44,26 @@ export type ChangeType =
   | "changes_requested"
   | "merged"
   | "closed"
+  | "reopened"
+  | "ready"
+  | "draft"
   | "ci_passed"
   | "ci_failed"
   | "review_requested"
 
+/** A single detected change */
+export interface DetectedChange {
+  type: ChangeType
+  message: string
+}
+
+/** Combined PR state: draft, ready, merged, closed */
+export type PRState = "draft" | "ready" | "merged" | "closed"
+
 /** Snapshot of a PR's state for change detection */
 export interface PRSnapshot {
-  /** PR state: OPEN, MERGED, CLOSED */
-  state: string
+  /** Combined PR state */
+  prState: PRState
   /** Review decision: APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, null */
   reviewDecision: string | null
   /** CI status: SUCCESS, FAILURE, PENDING, NONE */
@@ -64,9 +76,13 @@ export interface PRSnapshot {
   seenAt: string // ISO date
   /** Whether there are unseen changes */
   hasChanges: boolean
-  /** What type of change was detected (if hasChanges is true) */
+  /** List of detected changes (if hasChanges is true) */
+  changes?: DetectedChange[]
+  /** @deprecated use prState instead */
+  state?: string
+  /** @deprecated - use changes array instead */
   changeType?: ChangeType
-  /** Human readable change message */
+  /** @deprecated - use changes array instead */
   changeMessage?: string
 }
 

@@ -3,10 +3,10 @@
  */
 
 import type { PR } from "../types"
-import type { ChangeType } from "../history/schema"
+import type { ChangeType, DetectedChange } from "../history/schema"
 
-// Re-export ChangeType for convenience
-export type { ChangeType }
+// Re-export types for convenience
+export type { ChangeType, DetectedChange }
 
 /** A detected change in a PR */
 export interface PRChange {

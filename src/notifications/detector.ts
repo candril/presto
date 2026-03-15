@@ -6,7 +6,7 @@ import type { History } from "../history/schema"
 import type { PR } from "../types"
 import { getRepoName, computeCheckState } from "../types"
 import type { PRChange } from "./types"
-import { getPRKey } from "./snapshots"
+import { getPRKey, computePRState } from "./snapshots"
 
 /**
  * Detect changes in PRs compared to their snapshots
@@ -36,11 +36,20 @@ export function detectChanges(
     if (!snapshot) continue // First time seeing, no comparison
 
     // State changes (relevant for all tracked PRs)
-    if (pr.state !== snapshot.state) {
-      if (pr.state === "MERGED") {
+    const currentState = computePRState(pr)
+    const prevState = snapshot.prState ?? (snapshot.state === "MERGED" ? "merged" : snapshot.state === "CLOSED" ? "closed" : "ready")
+    
+    if (currentState !== prevState) {
+      if (currentState === "merged") {
         changes.push({ prKey, pr, changeType: "merged", message: "was merged" })
-      } else if (pr.state === "CLOSED") {
+      } else if (currentState === "closed") {
         changes.push({ prKey, pr, changeType: "closed", message: "was closed" })
+      } else if (currentState === "ready" && prevState === "closed") {
+        changes.push({ prKey, pr, changeType: "reopened", message: "was reopened" })
+      } else if (currentState === "ready" && prevState === "draft") {
+        changes.push({ prKey, pr, changeType: "ready", message: "marked ready for review" })
+      } else if (currentState === "draft" && prevState === "ready") {
+        changes.push({ prKey, pr, changeType: "draft", message: "converted to draft" })
       }
     }
 

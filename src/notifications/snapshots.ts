@@ -2,9 +2,17 @@
  * PR snapshot management for change detection
  */
 
-import type { History, PRSnapshot, ChangeType } from "../history/schema"
+import type { History, PRSnapshot, ChangeType, DetectedChange, PRState } from "../history/schema"
 import type { PR } from "../types"
 import { getRepoName, computeCheckState } from "../types"
+
+/** Compute combined PR state from PR fields */
+export function computePRState(pr: PR): PRState {
+  if (pr.state === "MERGED") return "merged"
+  if (pr.state === "CLOSED") return "closed"
+  if (pr.isDraft) return "draft"
+  return "ready"
+}
 
 /** Get PR key from PR object */
 export function getPRKey(pr: PR): string
@@ -20,7 +28,7 @@ export function getPRKey(prOrRepo: PR | string, number?: number): string {
 export function createSnapshot(pr: PR): PRSnapshot {
   const now = new Date().toISOString()
   return {
-    state: pr.state,
+    prState: computePRState(pr),
     reviewDecision: pr.reviewDecision,
     checkState: computeCheckState(pr.statusCheckRollup),
     commentCount: pr.commentCount,
@@ -42,7 +50,7 @@ export function updateSnapshot(history: History, pr: PR): History {
     prSnapshots: {
       ...history.prSnapshots,
       [prKey]: {
-        state: pr.state,
+        prState: computePRState(pr),
         reviewDecision: pr.reviewDecision,
         checkState,
         commentCount: pr.commentCount,
@@ -50,8 +58,7 @@ export function updateSnapshot(history: History, pr: PR): History {
         // Keep existing seenAt, hasChanges, and change info if we have them
         seenAt: existing?.seenAt ?? now,
         hasChanges: existing?.hasChanges ?? false,
-        changeType: existing?.changeType,
-        changeMessage: existing?.changeMessage,
+        changes: existing?.changes,
       },
     },
   }
@@ -61,11 +68,16 @@ export function updateSnapshot(history: History, pr: PR): History {
 export function markPRHasChanges(
   history: History,
   prKey: string,
-  changeType?: ChangeType,
-  changeMessage?: string
+  changes: DetectedChange[]
 ): History {
   const snapshot = history.prSnapshots[prKey]
   if (!snapshot) return history
+
+  // Merge with existing changes (avoid duplicates by type)
+  const existingChanges = snapshot.changes ?? []
+  const existingTypes = new Set(existingChanges.map((c) => c.type))
+  const newChanges = changes.filter((c) => !existingTypes.has(c.type))
+  const mergedChanges = [...existingChanges, ...newChanges]
 
   return {
     ...history,
@@ -74,8 +86,7 @@ export function markPRHasChanges(
       [prKey]: {
         ...snapshot,
         hasChanges: true,
-        changeType,
-        changeMessage,
+        changes: mergedChanges,
       },
     },
   }
@@ -94,8 +105,7 @@ export function markPRSeen(history: History, prKey: string): History {
         ...snapshot,
         seenAt: new Date().toISOString(),
         hasChanges: false,
-        changeType: undefined,
-        changeMessage: undefined,
+        changes: undefined,
       },
     },
   }

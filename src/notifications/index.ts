@@ -2,7 +2,7 @@
  * Notifications module - exports
  */
 
-export type { PRChange, ChangeType } from "./types"
+export type { PRChange, ChangeType, DetectedChange } from "./types"
 export { detectChanges } from "./detector"
 export {
   getPRKey,
@@ -12,6 +12,7 @@ export {
   markPRSeen,
   prHasChanges,
   updateAllSnapshots,
+  computePRState,
 } from "./snapshots"
 export {
   sendDesktopNotification,
