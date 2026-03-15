@@ -83,8 +83,8 @@ export function detectChanges(
       }
     }
 
-    // New comments (for my PRs)
-    if (isMine && pr.commentCount > snapshot.commentCount) {
+    // New comments (for all tracked PRs - you want to know when someone comments on PRs you're watching)
+    if (pr.commentCount > snapshot.commentCount) {
       const newCount = pr.commentCount - snapshot.commentCount
       changes.push({
         prKey,

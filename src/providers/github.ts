@@ -18,19 +18,23 @@ const PR_FIELDS = [
   "reviewDecision",
   "statusCheckRollup",
   "comments",
+  "reviews",
 ].join(",")
 
-/** Raw PR from GitHub API (comments is an array) */
+/** Raw PR from GitHub API (comments and reviews are arrays) */
 interface RawPR extends Omit<PR, "commentCount"> {
   comments: unknown[]
+  reviews: unknown[]
 }
 
 /** Transform raw GitHub PR to our PR type */
 function transformPR(raw: RawPR): PR {
-  const { comments, ...rest } = raw
+  const { comments, reviews, ...rest } = raw
+  // Count both PR-level comments and review comments
+  const commentCount = (comments?.length ?? 0) + (reviews?.length ?? 0)
   return {
     ...rest,
-    commentCount: comments?.length ?? 0,
+    commentCount,
   }
 }
 
