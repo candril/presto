@@ -2,7 +2,7 @@
  * PR snapshot management for change detection
  */
 
-import type { History, PRSnapshot } from "../history/schema"
+import type { History, PRSnapshot, ChangeType } from "../history/schema"
 import type { PR } from "../types"
 import { getRepoName, computeCheckState } from "../types"
 
@@ -47,16 +47,23 @@ export function updateSnapshot(history: History, pr: PR): History {
         checkState,
         commentCount: pr.commentCount,
         snapshotAt: now,
-        // Keep existing seenAt and hasChanges if we have them
+        // Keep existing seenAt, hasChanges, and change info if we have them
         seenAt: existing?.seenAt ?? now,
         hasChanges: existing?.hasChanges ?? false,
+        changeType: existing?.changeType,
+        changeMessage: existing?.changeMessage,
       },
     },
   }
 }
 
 /** Mark a PR as having unseen changes */
-export function markPRHasChanges(history: History, prKey: string): History {
+export function markPRHasChanges(
+  history: History,
+  prKey: string,
+  changeType?: ChangeType,
+  changeMessage?: string
+): History {
   const snapshot = history.prSnapshots[prKey]
   if (!snapshot) return history
 
@@ -67,12 +74,14 @@ export function markPRHasChanges(history: History, prKey: string): History {
       [prKey]: {
         ...snapshot,
         hasChanges: true,
+        changeType,
+        changeMessage,
       },
     },
   }
 }
 
-/** Mark a PR as seen (clear hasChanges) */
+/** Mark a PR as seen (clear hasChanges and change info) */
 export function markPRSeen(history: History, prKey: string): History {
   const snapshot = history.prSnapshots[prKey]
   if (!snapshot) return history
@@ -85,6 +94,8 @@ export function markPRSeen(history: History, prKey: string): History {
         ...snapshot,
         seenAt: new Date().toISOString(),
         hasChanges: false,
+        changeType: undefined,
+        changeMessage: undefined,
       },
     },
   }

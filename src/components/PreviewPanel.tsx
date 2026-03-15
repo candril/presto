@@ -9,6 +9,29 @@ import { SyntaxStyle, RGBA } from "@opentui/core"
 import { theme } from "../theme"
 import { Spinner } from "./Loading"
 import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile, PreviewPosition } from "../types"
+import type { PRChange } from "../notifications"
+
+/** Format change type into human readable message */
+function formatChangeMessage(change: PRChange): string {
+  switch (change.changeType) {
+    case "new_comments":
+      return change.message // "1 new comment" or "3 new comments"
+    case "approved":
+      return "PR was approved"
+    case "changes_requested":
+      return "Changes requested"
+    case "merged":
+      return "PR was merged"
+    case "closed":
+      return "PR was closed"
+    case "ci_passed":
+      return "CI checks passed"
+    case "ci_failed":
+      return "CI checks failed"
+    default:
+      return change.message
+  }
+}
 
 // Shared syntax style for markdown rendering (lazy init)
 let sharedSyntaxStyle: SyntaxStyle | null = null
@@ -46,9 +69,11 @@ interface PreviewPanelProps {
   loading: boolean
   scrollOffset: number
   position: PreviewPosition
+  /** Active change notification for this PR (if any) */
+  change?: PRChange | null
 }
 
-export function PreviewPanel({ preview, loading, scrollOffset, position }: PreviewPanelProps) {
+export function PreviewPanel({ preview, loading, scrollOffset, position, change }: PreviewPanelProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
   const isBottom = position === "bottom"
@@ -128,6 +153,16 @@ export function PreviewPanel({ preview, loading, scrollOffset, position }: Previ
               <span fg={theme.textDim}> #{preview.number}</span>
             </text>
           </box>
+
+          {/* Change notification banner */}
+          {change && (
+            <box height={1}>
+              <text>
+                <span fg={theme.warning}>● </span>
+                <span fg={theme.warning}>{formatChangeMessage(change)}</span>
+              </text>
+            </box>
+          )}
 
           {/* Branch info */}
           <box height={1}>

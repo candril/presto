@@ -15,6 +15,7 @@ import {
   recordRepoVisit,
   type History,
 } from "../history"
+import { markPRSeen } from "../notifications"
 import { isFilterActive, type ParsedFilter } from "../discovery"
 import type { Config } from "../config"
 import type { PR, PreviewPosition } from "../types"
@@ -126,6 +127,18 @@ export function useKeyboardNav({
 
     // Preview controls: p = toggle on/off, P = cycle position
     if (key.name === "p" && !key.shift) {
+      // If closing preview, mark PR as seen (clear notification dot)
+      if (previewPosition) {
+        const pr = filteredPRs[selectedIndex]
+        if (pr) {
+          const prKey = getPRKey(getRepoName(pr), pr.number)
+          if (history.prSnapshots?.[prKey]?.hasChanges) {
+            const newHistory = markPRSeen(history, prKey)
+            setHistory(newHistory)
+            saveHistory(newHistory)
+          }
+        }
+      }
       dispatch({ type: "TOGGLE_PREVIEW" })
       return
     }
@@ -193,11 +206,35 @@ export function useKeyboardNav({
 
     // Navigation - clamp to filtered list bounds
     if (key.name === "j" || key.name === "down") {
+      // If preview is open, mark current PR as seen before navigating away
+      if (previewPosition) {
+        const pr = filteredPRs[selectedIndex]
+        if (pr) {
+          const prKey = getPRKey(getRepoName(pr), pr.number)
+          if (history.prSnapshots?.[prKey]?.hasChanges) {
+            const newHistory = markPRSeen(history, prKey)
+            setHistory(newHistory)
+            saveHistory(newHistory)
+          }
+        }
+      }
       const newIndex = Math.min(selectedIndex + 1, filteredPRs.length - 1)
       dispatch({ type: "SELECT", index: newIndex })
       return
     }
     if (key.name === "k" || key.name === "up") {
+      // If preview is open, mark current PR as seen before navigating away
+      if (previewPosition) {
+        const pr = filteredPRs[selectedIndex]
+        if (pr) {
+          const prKey = getPRKey(getRepoName(pr), pr.number)
+          if (history.prSnapshots?.[prKey]?.hasChanges) {
+            const newHistory = markPRSeen(history, prKey)
+            setHistory(newHistory)
+            saveHistory(newHistory)
+          }
+        }
+      }
       const newIndex = Math.max(selectedIndex - 1, 0)
       dispatch({ type: "SELECT", index: newIndex })
       return
@@ -220,7 +257,8 @@ export function useKeyboardNav({
     // Open in browser
     if (key.name === "o") {
       const repo = getRepoName(selectedPR)
-      // Record to recent history (spec 015) and visited repo (spec 018)
+      const prKey = getPRKey(repo, selectedPR.number)
+      // Record to recent history (spec 015), visited repo (spec 018), and mark seen
       let newHistory = recordPRView(history, {
         repo,
         number: selectedPR.number,
@@ -228,6 +266,7 @@ export function useKeyboardNav({
         author: selectedPR.author.login,
       })
       newHistory = recordRepoVisit(newHistory, repo)
+      newHistory = markPRSeen(newHistory, prKey)
       setHistory(newHistory)
       saveHistory(newHistory)
 
@@ -241,7 +280,8 @@ export function useKeyboardNav({
     // Open in riff
     if (key.name === "return") {
       const repo = getRepoName(selectedPR)
-      // Record to recent history (spec 015) and visited repo (spec 018)
+      const prKey = getPRKey(repo, selectedPR.number)
+      // Record to recent history (spec 015), visited repo (spec 018), and mark seen
       let newHistory = recordPRView(history, {
         repo,
         number: selectedPR.number,
@@ -249,6 +289,7 @@ export function useKeyboardNav({
         author: selectedPR.author.login,
       })
       newHistory = recordRepoVisit(newHistory, repo)
+      newHistory = markPRSeen(newHistory, prKey)
       setHistory(newHistory)
       saveHistory(newHistory)
 

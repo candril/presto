@@ -29,7 +29,7 @@ const COL = {
 /** Calculate total fixed width (everything except title) */
 function getFixedColumnsWidth(v: ColumnVisibility): number {
   let width = 2 // padding left + right
-  width += 1 // change indicator dot
+  width += 2 // change indicator dot + space
   if (v.state) width += COL.state // icon + space
   if (v.checks) width += COL.checks // icon + space
   if (v.review) width += COL.review + 1 // icon + space
@@ -136,7 +136,7 @@ function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: Colum
       paddingRight={1}
     >
       <text fg={theme.textDim}>
-        {" "}{/* space for dot column */}
+        {"  "}{/* space for dot column (2 chars: dot + space) */}
         {v.state && "S "}
         {v.checks && "C "}
         {v.review && "R "}
@@ -217,7 +217,7 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
     >
       <text>
         {/* Change indicator dot */}
-        <span fg={hasChanges ? theme.primary : undefined}>{hasChanges ? "•" : " "}</span>
+        <span fg={hasChanges ? theme.primary : undefined}>{hasChanges ? "• " : "  "}</span>
         {v.state && <span fg={stateIndicator.color}>{stateIndicator.icon}</span>}
         {v.state && " "}
         {v.checks && <span fg={checkIndicator.color}>{checkIndicator.icon}</span>}

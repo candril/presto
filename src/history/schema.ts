@@ -37,6 +37,17 @@ export interface VisitedRepo {
   visitCount: number
 }
 
+/** Types of changes that can be detected */
+export type ChangeType =
+  | "new_comments"
+  | "approved"
+  | "changes_requested"
+  | "merged"
+  | "closed"
+  | "ci_passed"
+  | "ci_failed"
+  | "review_requested"
+
 /** Snapshot of a PR's state for change detection */
 export interface PRSnapshot {
   /** PR state: OPEN, MERGED, CLOSED */
@@ -53,6 +64,10 @@ export interface PRSnapshot {
   seenAt: string // ISO date
   /** Whether there are unseen changes */
   hasChanges: boolean
+  /** What type of change was detected (if hasChanges is true) */
+  changeType?: ChangeType
+  /** Human readable change message */
+  changeMessage?: string
 }
 
 export interface RecentAuthor {

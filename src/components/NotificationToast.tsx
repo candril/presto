@@ -1,16 +1,43 @@
 /**
  * Notification toast - shows changes to tracked PRs
  * Auto-dismisses after 4 seconds or on any keypress
+ * Groups notifications by repository
  */
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { useKeyboard } from "@opentui/react"
 import { theme } from "../theme"
 import type { PRChange, ChangeType } from "../notifications"
+import { getRepoName } from "../types"
 
 interface NotificationToastProps {
   changes: PRChange[]
   onDismiss: () => void
+}
+
+/** Group changes by repository */
+interface RepoGroup {
+  repo: string
+  shortName: string
+  changes: PRChange[]
+}
+
+function groupByRepo(changes: PRChange[]): RepoGroup[] {
+  const groups = new Map<string, PRChange[]>()
+  
+  for (const change of changes) {
+    const repo = getRepoName(change.pr)
+    if (!groups.has(repo)) {
+      groups.set(repo, [])
+    }
+    groups.get(repo)!.push(change)
+  }
+  
+  return Array.from(groups.entries()).map(([repo, changes]) => ({
+    repo,
+    shortName: repo.split("/").pop() ?? repo,
+    changes,
+  }))
 }
 
 export function NotificationToast({ changes, onDismiss }: NotificationToastProps) {
@@ -25,10 +52,26 @@ export function NotificationToast({ changes, onDismiss }: NotificationToastProps
     onDismiss()
   })
 
+  const groups = useMemo(() => groupByRepo(changes), [changes])
+
   if (changes.length === 0) return null
 
-  const visible = changes.slice(0, 5)
-  const remaining = changes.length - visible.length
+  // Count total visible items (repos + their changes, limited)
+  let visibleCount = 0
+  const maxVisible = 6
+  const visibleGroups: RepoGroup[] = []
+  
+  for (const group of groups) {
+    if (visibleCount >= maxVisible) break
+    const remainingSlots = maxVisible - visibleCount - 1 // -1 for repo header
+    const visibleChanges = group.changes.slice(0, Math.max(1, remainingSlots))
+    visibleGroups.push({ ...group, changes: visibleChanges })
+    visibleCount += 1 + visibleChanges.length
+  }
+
+  const totalChanges = changes.length
+  const shownChanges = visibleGroups.reduce((acc, g) => acc + g.changes.length, 0)
+  const remaining = totalChanges - shownChanges
 
   return (
     <box
@@ -43,14 +86,31 @@ export function NotificationToast({ changes, onDismiss }: NotificationToastProps
       paddingX={1}
       paddingY={1}
     >
-      {visible.map((change) => (
-        <NotificationRow key={change.prKey + change.changeType} change={change} />
+      {visibleGroups.map((group) => (
+        <RepoGroupSection key={group.repo} group={group} />
       ))}
       {remaining > 0 && (
         <box paddingLeft={1}>
           <text fg={theme.textMuted}>+ {remaining} more</text>
         </box>
       )}
+    </box>
+  )
+}
+
+function RepoGroupSection({ group }: { group: RepoGroup }) {
+  return (
+    <box flexDirection="column">
+      {/* Repo header */}
+      <box height={1}>
+        <text>
+          <span fg={theme.primary}>{group.shortName}</span>
+        </text>
+      </box>
+      {/* Changes in this repo */}
+      {group.changes.map((change) => (
+        <NotificationRow key={change.prKey + change.changeType} change={change} />
+      ))}
     </box>
   )
 }

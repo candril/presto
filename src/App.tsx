@@ -98,10 +98,10 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
       if (isRefresh) {
         const changes = detectChanges(prs, history, currentUser)
         if (changes.length > 0) {
-          // Mark PRs as having changes
+          // Mark PRs as having changes (with change type and message)
           let newHistory = history
           for (const change of changes) {
-            newHistory = markPRHasChanges(newHistory, change.prKey)
+            newHistory = markPRHasChanges(newHistory, change.prKey, change.changeType, change.message)
           }
           // Update snapshots with new state
           newHistory = updateAllSnapshots(newHistory, prs, currentUser)
@@ -166,18 +166,21 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
 
   // Feature: PR Preview
   const selectedPR = filteredPRs[state.selectedIndex] ?? null
-
-  // Mark PR as seen when selected (clears notification dot)
-  useEffect(() => {
-    if (selectedPR) {
-      const prKey = getPRKey(getRepoName(selectedPR), selectedPR.number)
-      if (history.prSnapshots?.[prKey]?.hasChanges) {
-        const newHistory = markPRSeen(history, prKey)
-        setHistory(newHistory)
-        saveHistory(newHistory)
+  
+  // Get change info from snapshot (persists until PR is marked as seen)
+  const selectedPRSnapshot = selectedPR
+    ? history.prSnapshots?.[getPRKey(getRepoName(selectedPR), selectedPR.number)]
+    : null
+  const selectedPRChange = selectedPRSnapshot?.hasChanges && selectedPRSnapshot?.changeType
+    ? {
+        prKey: getPRKey(getRepoName(selectedPR!), selectedPR!.number),
+        pr: selectedPR!,
+        changeType: selectedPRSnapshot.changeType,
+        message: selectedPRSnapshot.changeMessage ?? "",
       }
-    }
-  }, [selectedPR?.url])
+    : null
+
+  // Note: PR is marked as seen (dot cleared) when opened via p/Enter/o, not on selection
   const { preview, loading: previewLoading } = usePreview({
     previewPosition: state.previewPosition,
     previewCache: state.previewCache,
@@ -289,6 +292,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
             loading={previewLoading}
             scrollOffset={state.previewScrollOffset}
             position={state.previewPosition}
+            change={selectedPRChange}
           />
         )}
       </box>

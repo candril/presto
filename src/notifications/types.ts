@@ -3,17 +3,10 @@
  */
 
 import type { PR } from "../types"
+import type { ChangeType } from "../history/schema"
 
-/** Types of changes we can detect */
-export type ChangeType =
-  | "merged"
-  | "closed"
-  | "approved"
-  | "changes_requested"
-  | "ci_passed"
-  | "ci_failed"
-  | "review_requested"
-  | "new_comments"
+// Re-export ChangeType for convenience
+export type { ChangeType }
 
 /** A detected change in a PR */
 export interface PRChange {
