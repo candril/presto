@@ -76,6 +76,7 @@ export function App({ config, currentUser }: AppProps) {
     dispatch,
     history,
     setHistory,
+    currentUser,
   })
 
   // Feature: Notifications - detect changes when PRs update

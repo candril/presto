@@ -19,9 +19,39 @@ interface UsePRDataOptions {
   dispatch: (action: any) => void
   history: History
   setHistory: (history: History) => void
+  currentUser: string | null
 }
 
-export function usePRData({ config, filter, prs, dispatch, history, setHistory }: UsePRDataOptions) {
+export function usePRData({ config, filter, prs, dispatch, history, setHistory, currentUser }: UsePRDataOptions) {
+  /**
+   * Get tracked PR keys that are NOT in configured repos.
+   * These need to be fetched individually during refresh for notification detection.
+   */
+  const getTrackedPRsFromNonConfiguredRepos = useCallback((): Array<{ repo: string; number: number }> => {
+    const enabledRepos = new Set(
+      config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
+    )
+
+    // Collect tracked PR keys: marked + recently viewed + my PRs (via snapshots)
+    const trackedKeys = new Set([
+      ...(history.markedPRs ?? []),
+      ...(history.recentlyViewed ?? []).map((r) => `${r.repo}#${r.number}`),
+    ])
+
+    // Parse keys and filter out PRs from enabled repos
+    const result: Array<{ repo: string; number: number }> = []
+    for (const key of trackedKeys) {
+      const match = key.match(/^(.+)#(\d+)$/)
+      if (!match) continue
+      const [, repo, numStr] = match
+      // Skip if repo is enabled (will be fetched normally)
+      if (enabledRepos.has(repo.toLowerCase())) continue
+      result.push({ repo, number: parseInt(numStr, 10) })
+    }
+
+    return result
+  }, [config.repositories, history.markedPRs, history.recentlyViewed])
+
   // Fetch PRs from GitHub (only enabled repos)
   const fetchPRs = useCallback(async (showAsRefresh = false) => {
     const repos = config.repositories
@@ -53,9 +83,32 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory }
     dispatch({ type: "CLEAR_PREVIEW_CACHE" })
 
     try {
+      // Fetch PRs from configured repos
       const fetchedPRs = await listPRsFromRepos(repos)
-      dispatch({ type: "SET_PRS", prs: fetchedPRs })
+
+      // Also fetch tracked PRs from non-configured repos (for notification detection)
+      const trackedFromOtherRepos = getTrackedPRsFromNonConfiguredRepos()
+      let allPRs = fetchedPRs
+
+      if (trackedFromOtherRepos.length > 0) {
+        const trackedPRs = await Promise.all(
+          trackedFromOtherRepos.map(({ repo, number }) => getPR(repo, number))
+        )
+        // Add successfully fetched tracked PRs (filter out nulls)
+        const validTrackedPRs = trackedPRs.filter((pr): pr is PR => pr !== null)
+        if (validTrackedPRs.length > 0) {
+          // Merge, avoiding duplicates
+          const existingKeys = new Set(fetchedPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+          const newTracked = validTrackedPRs.filter(
+            (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
+          )
+          allPRs = [...fetchedPRs, ...newTracked]
+        }
+      }
+
+      dispatch({ type: "SET_PRS", prs: allPRs })
       dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
+      // Only cache PRs from configured repos
       saveCache(fetchedPRs, repos)
     } catch (err) {
       dispatch({ type: "SET_REFRESHING", refreshing: false })
@@ -67,7 +120,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory }
         })
       }
     }
-  }, [config.repositories, dispatch])
+  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos])
 
   // Load cached data on mount, then revalidate
   useEffect(() => {
