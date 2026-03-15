@@ -14,6 +14,7 @@ const COLUMN_NAMES: Record<ColumnId, string> = {
   state: "State",
   checks: "Checks",
   review: "Review",
+  comments: "Comments",
   time: "Time",
   repo: "Repository",
   author: "Author",
@@ -21,7 +22,7 @@ const COLUMN_NAMES: Record<ColumnId, string> = {
 
 /** Get column commands with current visibility state in labels */
 export function getColumnCommands(ctx: CommandContext): Command[] {
-  const columns: ColumnId[] = ["state", "checks", "review", "time", "repo", "author"]
+  const columns: ColumnId[] = ["state", "checks", "review", "comments", "time", "repo", "author"]
   return columns.map((columnId) => ({
     id: `column.${columnId}`,
     label: `${ctx.columnVisibility[columnId] ? "Hide" : "Show"} ${COLUMN_NAMES[columnId]} column`,

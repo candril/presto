@@ -3,13 +3,17 @@ import { createRoot } from "@opentui/react"
 import { App } from "./App"
 import { loadConfig } from "./config"
 import { getCurrentUser } from "./providers/github"
+import { initGraphQL } from "./providers/graphql"
 import { setupFocusReporting, type FocusCallback } from "./utils/focus-reporting"
 
 // Load configuration
 const config = loadConfig()
 
-// Get current GitHub user (for @me filter)
-const currentUser = await getCurrentUser().catch(() => null)
+// Initialize GitHub API (pre-warm token cache for faster first fetch)
+const [currentUser] = await Promise.all([
+  getCurrentUser().catch(() => null),
+  initGraphQL().catch(() => {}),
+])
 
 // Create renderer and mount app
 const renderer = await createCliRenderer({ exitOnCtrlC: false })

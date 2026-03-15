@@ -1,9 +1,11 @@
 /**
  * GitHub API provider using gh CLI
+ * Uses GraphQL for bulk operations with REST fallback
  */
 
 import { $ } from "bun"
 import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck } from "../types"
+import { listPRsGraphQL, getPRsGraphQL } from "./graphql"
 
 /** Fields to fetch from GitHub */
 const PR_FIELDS = [
@@ -96,7 +98,7 @@ export async function listRecentPRs(repo: string, days: number): Promise<PR[]> {
 }
 
 /**
- * List PRs from multiple repositories
+ * List PRs from multiple repositories using GraphQL (with REST fallback)
  */
 export async function listPRsFromRepos(repos: string[]): Promise<PR[]> {
   if (repos.length === 0) {
@@ -104,6 +106,20 @@ export async function listPRsFromRepos(repos: string[]): Promise<PR[]> {
     return listPRs()
   }
 
+  try {
+    // Use GraphQL for bulk fetching (single API call)
+    return await listPRsGraphQL(repos)
+  } catch (error) {
+    // Fallback to REST API (parallel calls per repo)
+    console.error("GraphQL bulk fetch failed, falling back to REST:", error)
+    return listPRsFromReposREST(repos)
+  }
+}
+
+/**
+ * List PRs from multiple repositories using REST API (fallback)
+ */
+async function listPRsFromReposREST(repos: string[]): Promise<PR[]> {
   // Fetch from all repos in parallel
   const results = await Promise.allSettled(repos.map((repo) => listPRs(repo)))
 
@@ -151,6 +167,27 @@ export async function getPR(repo: string, number: number): Promise<PR | null> {
     return transformPR(result as RawPR)
   } catch {
     return null
+  }
+}
+
+/**
+ * Fetch multiple specific PRs by repo/number using GraphQL (with REST fallback)
+ */
+export async function getPRsBulk(
+  prs: Array<{ repo: string; number: number }>
+): Promise<PR[]> {
+  if (prs.length === 0) return []
+
+  try {
+    // Use GraphQL for efficient bulk fetch
+    return await getPRsGraphQL(prs)
+  } catch (error) {
+    // Fallback to individual REST calls
+    console.error("GraphQL bulk PR fetch failed, falling back to REST:", error)
+    const results = await Promise.all(
+      prs.map(({ repo, number }) => getPR(repo, number))
+    )
+    return results.filter((pr): pr is PR => pr !== null)
   }
 }
 

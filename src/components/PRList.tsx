@@ -20,6 +20,7 @@ const COL = {
   state: 2,      // icon + space
   checks: 2,     // icon + space
   review: 1,     // icon (no trailing space)
+  comments: 3,   // comment count (e.g. "12" or "99+")
   time: 4,       // "1d" or "2mo" (without "ago")
   repo: 16,      // Short repo name
   author: 16,    // @username
@@ -33,6 +34,7 @@ function getFixedColumnsWidth(v: ColumnVisibility): number {
   if (v.state) width += COL.state // icon + space
   if (v.checks) width += COL.checks // icon + space
   if (v.review) width += COL.review + 1 // icon + space
+  if (v.comments) width += COL.comments + 1 // comments + space
   if (v.time) width += COL.time + 1 // time + space
   if (v.author) width += COL.author + 1 // space + author
   if (v.repo) width += COL.repo + 1 // space + repo
@@ -140,6 +142,8 @@ function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: Colum
         {v.state && "S "}
         {v.checks && "C "}
         {v.review && "R "}
+        {v.comments && padRight("#", COL.comments)}
+        {v.comments && " "}
         {v.time && padRight("", COL.time)}
         {v.time && " "}
         {padRight("Title", titleWidth)}
@@ -165,6 +169,7 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(computeCheckState(pr.statusCheckRollup))
   const reviewIndicator = getReviewIndicator(pr.reviewDecision)
+  const commentCount = formatCommentCount(pr.commentCount)
   const timeAgo = formatRelativeTime(pr.updatedAt).replace(" ago", "")
   const repoName = getShortRepoName(pr)
   const prId = `#${pr.number}`
@@ -224,6 +229,8 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
         {v.checks && " "}
         {v.review && <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>}
         {v.review && " "}
+        {v.comments && <span fg={pr.commentCount > 0 ? theme.textMuted : theme.textMuted}>{padRight(commentCount, COL.comments)}</span>}
+        {v.comments && " "}
         {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
         {v.time && " "}
         <span fg={titleColor}>{title}</span>
@@ -299,4 +306,11 @@ function padRight(text: string, width: number): string {
 function padLeft(text: string, width: number): string {
   if (text.length >= width) return text.slice(0, width)
   return " ".repeat(width - text.length) + text
+}
+
+/** Format comment count for display */
+function formatCommentCount(count: number): string {
+  if (count === 0) return "-"
+  if (count > 99) return "99+"
+  return String(count)
 }

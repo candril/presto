@@ -156,19 +156,37 @@ export function useFiltering({
       let result = prs.filter((pr) => 
         history.starredAuthors.includes(pr.author.login)
       )
-      // Apply other filters on top
+      // Apply other filters on top (including repo: filter)
       result = applyFilter(result, { ...filter, starred: false })
       return { filteredPRs: result, hiddenCount: 0 }
     }
 
-    // Normal filtering: apply regular filter, then starred-only filter
-    const afterFilter = applyFilter(prs, filter)
+    // Normal filtering: only show PRs from configured (enabled) repos
+    // UNLESS there's an explicit repo: filter - then show matching PRs regardless
+    const enabledRepoNames = new Set(
+      config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
+    )
+    
+    // If there's a repo filter, allow PRs from those repos too
+    const hasRepoFilter = filter.repos.length > 0
+    
+    const configuredPRs = prs.filter((pr) => {
+      const repoName = getRepoName(pr).toLowerCase()
+      // Always allow if repo is in enabled config
+      if (enabledRepoNames.has(repoName)) return true
+      // Allow if there's a repo filter and this PR matches it
+      if (hasRepoFilter && filter.repos.some((r) => repoName.includes(r))) return true
+      return false
+    })
+    
+    // Apply regular filter, then starred-only filter
+    const afterFilter = applyFilter(configuredPRs, filter)
     const result = applyStarredOnlyFilter(afterFilter, filter, {
       starredAuthors: history.starredAuthors,
       repoConfig,
     })
     return { filteredPRs: result.filtered, hiddenCount: result.hiddenCount }
-  }, [allPRs, prs, filter, repoConfig, history.starredAuthors, history.markedPRs, history.recentlyViewed])
+  }, [allPRs, prs, filter, repoConfig, config.repositories, history.starredAuthors, history.markedPRs, history.recentlyViewed])
 
   // Reset selection when filter changes
   useEffect(() => {

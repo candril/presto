@@ -9,12 +9,13 @@ export type View = "list" | "detail"
 export type PreviewPosition = "right" | "bottom" | null
 
 // Column visibility settings
-export type ColumnId = "state" | "checks" | "review" | "time" | "repo" | "author"
+export type ColumnId = "state" | "checks" | "review" | "comments" | "time" | "repo" | "author"
 
 export interface ColumnVisibility {
   state: boolean
   checks: boolean
   review: boolean
+  comments: boolean
   time: boolean
   repo: boolean
   author: boolean

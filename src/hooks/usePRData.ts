@@ -3,8 +3,8 @@
  * Handles initial load, refresh, and on-demand PR fetching
  */
 
-import { useEffect, useCallback } from "react"
-import { listPRs, listPRsFromRepos, getPR } from "../providers/github"
+import { useEffect, useCallback, useRef } from "react"
+import { listPRs, listPRsFromRepos, getPR, getPRsBulk } from "../providers/github"
 import { loadCache, saveCache, isCacheValidForRepos } from "../cache"
 import { recordPRView, saveHistory, type History } from "../history"
 import type { Config } from "../config"
@@ -56,6 +56,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   /**
    * Get repos that match the current filter (if any repo filter is active).
    * Returns repos that should be prioritized during refresh.
+   * Priority repos include both configured AND non-configured repos matching the filter.
    */
   const getPriorityRepos = useCallback((): { priority: string[]; rest: string[] } => {
     const enabledRepos = config.repositories
@@ -82,10 +83,35 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       }
     }
 
-    return { priority, rest }
-  }, [config.repositories, filter.repos])
+    // Also check for non-configured repos matching the filter
+    // (from disabled config repos or visited repos)
+    for (const filterRepo of filter.repos) {
+      // Skip if already matched an enabled repo
+      if (priority.some((r) => r.toLowerCase().includes(filterRepo))) continue
 
-  // Fetch PRs from GitHub (only enabled repos)
+      // Check disabled config repos
+      const disabledRepo = config.repositories.find(
+        (r) => r.disabled && r.name.toLowerCase().includes(filterRepo)
+      )
+      if (disabledRepo) {
+        priority.push(disabledRepo.name)
+        continue
+      }
+
+      // Check visited repos
+      const visitedRepo = (history.visitedRepos ?? []).find(
+        (r) => r.name.toLowerCase().includes(filterRepo)
+      )
+      if (visitedRepo) {
+        priority.push(visitedRepo.name)
+      }
+    }
+
+    return { priority, rest }
+  }, [config.repositories, filter.repos, history.visitedRepos])
+
+  // Fetch PRs from GitHub
+  // When repo filter is active: fetch filtered repos first, then background load the rest
   const fetchPRs = useCallback(async (showAsRefresh = false) => {
     const allEnabledRepos = config.repositories
       .filter((r) => !r.disabled)
@@ -102,91 +128,78 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
     try {
       const { priority, rest } = getPriorityRepos()
-      let allFetchedPRs: PR[] = []
-
+      
       // If we have priority repos (matching current filter), fetch those first
       if (priority.length > 0) {
         const priorityPRs = await listPRsFromRepos(priority)
-        allFetchedPRs = priorityPRs
-
+        
         // Dispatch priority PRs immediately for fast UI update
-        if (showAsRefresh && priorityPRs.length > 0) {
-          dispatch({ type: "SET_PRS", prs: priorityPRs })
-        }
-
-        // Then fetch the rest in parallel
-        if (rest.length > 0) {
-          const restPRs = await listPRsFromRepos(rest)
-          // Merge, avoiding duplicates (shouldn't be any, but just in case)
-          const existingKeys = new Set(priorityPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
-          const newPRs = restPRs.filter(
-            (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
-          )
-          allFetchedPRs = [...priorityPRs, ...newPRs]
+        dispatch({ type: "SET_PRS", prs: priorityPRs })
+        dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
+        
+        // Background load: rest of configured repos + tracked PRs
+        // Don't await - let it run in background
+        if (rest.length > 0 || getTrackedPRsFromNonConfiguredRepos().length > 0) {
+          (async () => {
+            let backgroundPRs = [...priorityPRs]
+            
+            // Fetch rest of configured repos
+            if (rest.length > 0) {
+              const restPRs = await listPRsFromRepos(rest)
+              const existingKeys = new Set(backgroundPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+              const newPRs = restPRs.filter(
+                (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
+              )
+              backgroundPRs = [...backgroundPRs, ...newPRs]
+            }
+            
+            // Fetch tracked PRs for notification detection
+            const trackedFromOtherRepos = getTrackedPRsFromNonConfiguredRepos()
+            if (trackedFromOtherRepos.length > 0) {
+              const trackedPRs = await getPRsBulk(trackedFromOtherRepos)
+              const existingKeys = new Set(backgroundPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+              const newTracked = trackedPRs.filter(
+                (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
+              )
+              backgroundPRs = [...backgroundPRs, ...newTracked]
+            }
+            
+            // Update with full data
+            dispatch({ type: "SET_PRS", prs: backgroundPRs })
+            saveCache(backgroundPRs.filter(pr => {
+              const repoName = getRepoName(pr).toLowerCase()
+              return allEnabledRepos.some(r => r.toLowerCase() === repoName)
+            }), allEnabledRepos)
+          })()
+        } else {
+          // No background work needed, cache priority repos
+          saveCache(priorityPRs.filter(pr => {
+            const repoName = getRepoName(pr).toLowerCase()
+            return allEnabledRepos.some(r => r.toLowerCase() === repoName)
+          }), allEnabledRepos)
         }
       } else {
         // No priority repos, fetch all at once
-        allFetchedPRs = await listPRsFromRepos(allEnabledRepos)
-      }
+        let allFetchedPRs = await listPRsFromRepos(allEnabledRepos)
 
-      let finalPRs = allFetchedPRs
-
-      // Fetch tracked PRs from non-configured repos for notification detection
-      // These are PRs the user has viewed (recentlyViewed) or marked
-      const trackedFromOtherRepos = getTrackedPRsFromNonConfiguredRepos()
-      if (trackedFromOtherRepos.length > 0) {
-        const trackedPRs = await Promise.all(
-          trackedFromOtherRepos.map(({ repo, number }) => getPR(repo, number))
-        )
-        const validTrackedPRs = trackedPRs.filter((pr): pr is PR => pr !== null)
-        if (validTrackedPRs.length > 0) {
-          const existingKeys = new Set(finalPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
-          const newTracked = validTrackedPRs.filter(
+        // Fetch tracked PRs for notification detection
+        const trackedFromOtherRepos = getTrackedPRsFromNonConfiguredRepos()
+        if (trackedFromOtherRepos.length > 0) {
+          const trackedPRs = await getPRsBulk(trackedFromOtherRepos)
+          const existingKeys = new Set(allFetchedPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+          const newTracked = trackedPRs.filter(
             (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
           )
-          // Add to finalPRs for change detection (will be filtered out in display if no matching filter)
-          finalPRs = [...finalPRs, ...newTracked]
+          allFetchedPRs = [...allFetchedPRs, ...newTracked]
         }
-      }
 
-      // Fetch PRs from non-configured repos only when there's a repo filter
-      if (filter.repos.length > 0) {
-        const enabledRepoNames = new Set(
-          config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
-        )
-        
-        // Find full repo names for filter that aren't in enabled config
-        const filterReposToFetch: string[] = []
-        for (const filterRepo of filter.repos) {
-          // Skip if matches an enabled repo
-          if ([...enabledRepoNames].some((r) => r.includes(filterRepo.toLowerCase()))) continue
-          
-          // Find full name from visited repos
-          const visitedRepo = (history.visitedRepos ?? []).find(
-            (r) => r.name.toLowerCase().includes(filterRepo.toLowerCase())
-          )
-          if (visitedRepo) {
-            filterReposToFetch.push(visitedRepo.name)
-          }
-        }
-        
-        if (filterReposToFetch.length > 0) {
-          const filterPRs = await listPRsFromRepos(filterReposToFetch)
-          if (filterPRs.length > 0) {
-            // Merge, avoiding duplicates
-            const existingKeys = new Set(finalPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
-            const newFilterPRs = filterPRs.filter(
-              (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
-            )
-            finalPRs = [...finalPRs, ...newFilterPRs]
-          }
-        }
+        dispatch({ type: "SET_PRS", prs: allFetchedPRs })
+        dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
+        saveCache(allFetchedPRs.filter(pr => {
+          const repoName = getRepoName(pr).toLowerCase()
+          return allEnabledRepos.some(r => r.toLowerCase() === repoName)
+        }), allEnabledRepos)
       }
-
-      dispatch({ type: "SET_PRS", prs: finalPRs })
-      dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
-      // Only cache PRs from configured repos
-      saveCache(allFetchedPRs, allEnabledRepos)
     } catch (err) {
       dispatch({ type: "SET_REFRESHING", refreshing: false })
       dispatch({ type: "SET_LOADING", loading: false })
@@ -197,7 +210,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         })
       }
     }
-  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, filter.repos, history.visitedRepos])
+  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos])
 
   // Load cached data on mount, then revalidate
   useEffect(() => {
@@ -268,6 +281,9 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     })
   }, [filter.prRef?.repo, filter.prRef?.number])
 
+  // Track which repos have been fully fetched (not just individual PRs)
+  const fullyFetchedRepos = useRef<Set<string>>(new Set())
+
   // Fetch PRs on-demand when filtering by a repo not in current PR list (spec 018)
   useEffect(() => {
     if (filter.repos.length === 0) return
@@ -280,9 +296,6 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
     )
 
-    // Check which filter repos we already have PRs for
-    const loadedRepos = new Set(prs.map((pr) => getRepoName(pr).toLowerCase()))
-
     // Find repos that match filter and need fetching
     const reposToFetch: string[] = []
     for (const filterRepo of filterRepos) {
@@ -290,9 +303,9 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       const isEnabledRepo = [...enabledConfigRepos].some((r) => r.includes(filterRepo))
       if (isEnabledRepo) continue
 
-      // Skip if we already have PRs from this repo
-      const hasLoaded = [...loadedRepos].some((r) => r.includes(filterRepo))
-      if (hasLoaded) continue
+      // Skip if we already fully fetched this repo
+      const alreadyFetched = [...fullyFetchedRepos.current].some((r) => r.includes(filterRepo))
+      if (alreadyFetched) continue
 
       // Find full repo name from config (disabled) or visited repos
       let fullRepoName: string | null = null
@@ -321,6 +334,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
     dispatch({ type: "SHOW_MESSAGE", message: `Loading ${reposToFetch.join(", ")}...` })
     listPRsFromRepos(reposToFetch).then((fetchedPRs) => {
+      // Mark repos as fully fetched
+      for (const repo of reposToFetch) {
+        fullyFetchedRepos.current.add(repo.toLowerCase())
+      }
+      
       if (fetchedPRs.length > 0) {
         // Use APPEND_PRS to merge with existing PRs (handles deduplication)
         dispatch({ type: "APPEND_PRS", prs: fetchedPRs })

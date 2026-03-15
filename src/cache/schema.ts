@@ -22,6 +22,7 @@ export const defaultColumnVisibility: ColumnVisibility = {
   state: true,
   checks: true,
   review: true,
+  comments: true,
   time: true,
   repo: true,
   author: true,
