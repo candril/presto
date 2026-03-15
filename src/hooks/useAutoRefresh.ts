@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef, useCallback } from "react"
+import type { FocusCallback } from "../utils/focus-reporting"
 
 interface UseAutoRefreshOptions {
   /** Refresh interval in seconds (0 to disable) */
@@ -16,6 +17,8 @@ interface UseAutoRefreshOptions {
   lastRefresh: Date | null
   /** Called when lastRefresh should be updated */
   onRefreshComplete: (time: Date) => void
+  /** Register for terminal focus events (tmux/window switches) */
+  registerFocusCallback?: (cb: FocusCallback) => () => void
 }
 
 interface AutoRefreshState {
@@ -31,9 +34,16 @@ export function useAutoRefresh({
   onRefresh,
   lastRefresh,
   onRefreshComplete,
+  registerFocusCallback,
 }: UseAutoRefreshOptions): AutoRefreshState {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isRefreshingRef = useRef(false)
+  const lastRefreshRef = useRef(lastRefresh)
+  
+  // Keep lastRefreshRef in sync
+  useEffect(() => {
+    lastRefreshRef.current = lastRefresh
+  }, [lastRefresh])
 
   // Perform refresh and update timestamp
   const doRefresh = useCallback(async () => {
@@ -71,14 +81,33 @@ export function useAutoRefresh({
     }
   }, [interval, doRefresh])
 
-  // Set up focus-based refresh (SIGCONT signal when terminal is resumed)
+  // Set up focus-based refresh via terminal focus reporting (tmux/window switches)
+  useEffect(() => {
+    if (!onFocus || !registerFocusCallback) return
+
+    const handleFocus = (focused: boolean) => {
+      if (!focused) return // Only refresh on focus IN
+      
+      // Only refresh if data is potentially stale (> 30 seconds since last refresh)
+      const staleThreshold = 30 * 1000 // 30 seconds
+      const lr = lastRefreshRef.current
+      if (!lr || Date.now() - lr.getTime() > staleThreshold) {
+        doRefresh()
+      }
+    }
+
+    return registerFocusCallback(handleFocus)
+  }, [onFocus, registerFocusCallback, doRefresh])
+
+  // Also listen for SIGCONT (process resume from Ctrl+Z)
   useEffect(() => {
     if (!onFocus) return
 
     const handleResume = () => {
       // Only refresh if data is potentially stale (> 30 seconds since last refresh)
       const staleThreshold = 30 * 1000 // 30 seconds
-      if (!lastRefresh || Date.now() - lastRefresh.getTime() > staleThreshold) {
+      const lr = lastRefreshRef.current
+      if (!lr || Date.now() - lr.getTime() > staleThreshold) {
         doRefresh()
       }
     }
@@ -88,7 +117,7 @@ export function useAutoRefresh({
     return () => {
       process.off("SIGCONT", handleResume)
     }
-  }, [onFocus, lastRefresh, doRefresh])
+  }, [onFocus, doRefresh])
 
   // Calculate stale state and next refresh time
   const isStale = lastRefresh && interval > 0
