@@ -84,21 +84,21 @@ export function useKeyboardNav({
     }
 
     // Special filter shortcuts (spec 015)
-    // Ctrl+M: Toggle @marked filter
+    // Ctrl+M: Toggle >marked filter
     if (key.ctrl && key.name === "m") {
-      const current = filter.marked ? "" : "@marked"
+      const current = filter.marked ? "" : ">marked"
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }
-    // Ctrl+R: Toggle @recent filter
+    // Ctrl+R: Toggle >recent filter
     if (key.ctrl && key.name === "r") {
-      const current = filter.recent ? "" : "@recent"
+      const current = filter.recent ? "" : ">recent"
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }
-    // Ctrl+S: Toggle @starred filter
+    // Ctrl+S: Toggle >starred filter
     if (key.ctrl && key.name === "s") {
-      const current = filter.starred ? "" : "@starred"
+      const current = filter.starred ? "" : ">starred"
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }

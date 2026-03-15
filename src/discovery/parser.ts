@@ -20,7 +20,7 @@ export interface ParsedFilter {
   // Special filters (spec 015)
   marked: boolean        // marked: - show only marked PRs
   recent: boolean        // recent: - show only recent PRs
-  starred: boolean       // @starred - show PRs from starred authors
+  starred: boolean       // >starred - show PRs from starred authors
 }
 
 export const emptyFilter: ParsedFilter = {
@@ -78,11 +78,11 @@ export function parseFilter(query: string): ParsedFilter {
     const lower = token.toLowerCase()
     if (token === "*") {
       result.showAll = true
-    } else if (lower === "@marked") {
+    } else if (lower === ">marked") {
       result.marked = true
-    } else if (lower === "@recent") {
+    } else if (lower === ">recent") {
       result.recent = true
-    } else if (lower === "@starred") {
+    } else if (lower === ">starred") {
       result.starred = true
     } else if (token.startsWith("@")) {
       result.authors.push(token.slice(1).toLowerCase())

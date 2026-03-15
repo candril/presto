@@ -169,9 +169,9 @@ function buildSuggestions(
 
     // Show special filter tokens first (if not already in query)
     const specialFilters = [
-      { token: "@marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
-      { token: "@recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
-      { token: "@starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
+      { token: ">marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
+      { token: ">recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
+      { token: ">starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
     ]
     
     for (const filter of specialFilters) {
@@ -257,9 +257,9 @@ function buildSuggestions(
       const partial = lastToken.slice(1).toLowerCase()
       
       const specialFilters = [
-        { token: "@marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
-        { token: "@recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
-        { token: "@starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
+        { token: ">marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
+        { token: ">recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
+        { token: ">starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
       ]
       
       for (const filter of specialFilters) {

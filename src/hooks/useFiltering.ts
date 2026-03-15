@@ -68,7 +68,7 @@ export function useFiltering({
     return Array.from(prMap.values())
   }, [prs, fetchedPRs])
 
-  // Fetch missing PRs for @marked or @recent filters
+  // Fetch missing PRs for >marked or >recent filters
   const fetchMissingPRs = useCallback(async (keys: string[]) => {
     const missing = keys.filter(key => {
       const inMain = prs.some(pr => getPRKey(getRepoName(pr), pr.number) === key)
@@ -105,7 +105,7 @@ export function useFiltering({
     setFetchedPRs(newFetched)
   }, [prs, fetchedPRs])
 
-  // Trigger fetch when @marked or @recent filter is active
+  // Trigger fetch when >marked or >recent filter is active
   useEffect(() => {
     if (filter.marked) {
       fetchMissingPRs(history.markedPRs)
@@ -115,9 +115,9 @@ export function useFiltering({
     }
   }, [filter.marked, filter.recent, history.markedPRs, history.recentlyViewed, fetchMissingPRs])
 
-  // Apply filters: special tokens (@marked, @recent, @starred) bypass repo settings
+  // Apply filters: special tokens (>marked, >recent, >starred) bypass repo settings
   const { filteredPRs, hiddenCount } = useMemo(() => {
-    // @marked - show only marked PRs (bypasses all repo settings)
+    // >marked - show only marked PRs (bypasses all repo settings)
     if (filter.marked) {
       let result = allPRs.filter((pr) => {
         const prKey = getPRKey(getRepoName(pr), pr.number)
@@ -128,7 +128,7 @@ export function useFiltering({
       return { filteredPRs: result, hiddenCount: 0 }
     }
 
-    // @recent - show only recent PRs, sorted by recency (bypasses all repo settings)
+    // >recent - show only recent PRs, sorted by recency (bypasses all repo settings)
     if (filter.recent) {
       const recentKeys = new Set(
         history.recentlyViewed.map((r) => `${r.repo}#${r.number}`)
@@ -151,7 +151,7 @@ export function useFiltering({
       return { filteredPRs: recentPRs, hiddenCount: 0 }
     }
 
-    // @starred - show PRs from starred authors only (bypasses starredOnly repo setting)
+    // >starred - show PRs from starred authors only (bypasses starredOnly repo setting)
     if (filter.starred) {
       let result = prs.filter((pr) => 
         history.starredAuthors.includes(pr.author.login)

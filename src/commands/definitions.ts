@@ -103,7 +103,7 @@ export const commands: Command[] = [
     category: "filter",
     shortcut: "Ctrl+M",
     execute: async (ctx) => {
-      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: "@marked" })
+      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: ">marked" })
       return { type: "success" }
     },
   },
@@ -113,7 +113,7 @@ export const commands: Command[] = [
     category: "filter",
     shortcut: "Ctrl+R",
     execute: async (ctx) => {
-      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: "@recent" })
+      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: ">recent" })
       return { type: "success" }
     },
   },
@@ -123,7 +123,7 @@ export const commands: Command[] = [
     category: "filter",
     shortcut: "Ctrl+S",
     execute: async (ctx) => {
-      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: "@starred" })
+      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: ">starred" })
       return { type: "success" }
     },
   },
