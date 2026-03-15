@@ -138,5 +138,65 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory }
     })
   }, [filter.prRef?.repo, filter.prRef?.number])
 
+  // Fetch PRs on-demand when filtering by a repo not in current PR list (spec 018)
+  useEffect(() => {
+    if (filter.repos.length === 0) return
+
+    // Get repos we're filtering for
+    const filterRepos = filter.repos
+
+    // Check which filter repos we don't have PRs for
+    const loadedRepos = new Set(prs.map((pr) => getRepoName(pr).toLowerCase()))
+    const enabledConfigRepos = new Set(
+      config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
+    )
+
+    // Find repos that match filter but aren't loaded and aren't enabled in config
+    const reposToFetch: string[] = []
+    for (const filterRepo of filterRepos) {
+      // Check if any loaded repo matches this filter
+      const hasLoaded = [...loadedRepos].some((r) => r.includes(filterRepo))
+      if (hasLoaded) continue
+
+      // Find full repo name from config (disabled) or visited repos
+      const configRepo = config.repositories.find(
+        (r) => r.disabled && r.name.toLowerCase().includes(filterRepo)
+      )
+      if (configRepo) {
+        reposToFetch.push(configRepo.name)
+        continue
+      }
+
+      // Check visited repos
+      const visitedRepo = (history.visitedRepos ?? []).find(
+        (r) => r.name.toLowerCase().includes(filterRepo)
+      )
+      if (visitedRepo) {
+        reposToFetch.push(visitedRepo.name)
+      }
+    }
+
+    if (reposToFetch.length === 0) return
+
+    dispatch({ type: "SHOW_MESSAGE", message: `Loading ${reposToFetch.join(", ")}...` })
+    listPRsFromRepos(reposToFetch).then((fetchedPRs) => {
+      if (fetchedPRs.length > 0) {
+        // Merge with existing PRs (avoid duplicates)
+        const existingKeys = new Set(prs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+        const newPRs = fetchedPRs.filter(
+          (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
+        )
+        if (newPRs.length > 0) {
+          dispatch({ type: "SET_PRS", prs: [...prs, ...newPRs] })
+        }
+        dispatch({ type: "SHOW_MESSAGE", message: `Loaded ${fetchedPRs.length} PRs` })
+      } else {
+        dispatch({ type: "SHOW_MESSAGE", message: "No open PRs found" })
+      }
+    }).catch(() => {
+      dispatch({ type: "SHOW_MESSAGE", message: "Failed to load PRs" })
+    })
+  }, [filter.repos.join(",")])
+
   return { fetchPRs }
 }

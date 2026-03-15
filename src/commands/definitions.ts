@@ -5,7 +5,7 @@
 import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
 import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
-import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent } from "../history"
+import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { saveColumnVisibility } from "../cache"
 import { getRepoName, type ColumnId } from "../types"
 
@@ -231,6 +231,29 @@ export const commands: Command[] = [
       return {
         type: "success",
         message: "Cleared from recent",
+      }
+    },
+  },
+  {
+    id: "action.forget_repo",
+    label: "Forget this repo",
+    category: "action",
+    requiresPR: true,
+    // Only show if repo is visited (not configured)
+    available: (ctx) => {
+      if (!ctx.selectedPR) return false
+      const repo = getRepoName(ctx.selectedPR)
+      const isConfigured = ctx.config.repositories.some((r) => r.name === repo)
+      return !isConfigured && isRepoVisited(ctx.history, repo)
+    },
+    execute: async (ctx) => {
+      const repo = getRepoName(ctx.selectedPR!)
+      const newHistory = forgetRepo(ctx.history, repo)
+      ctx.setHistory(newHistory)
+      saveHistory(newHistory)
+      return {
+        type: "success",
+        message: `Forgot ${repo}`,
       }
     },
   },

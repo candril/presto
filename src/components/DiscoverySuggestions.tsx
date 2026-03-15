@@ -212,15 +212,6 @@ function buildSuggestions(
       }
     }
 
-    // Show * to reveal all PRs (if not already present)
-    if (!tokens.includes("*")) {
-      items.push({
-        type: "quick",
-        value: `${existingQuery}*`,
-        label: "Show all PRs",
-      })
-    }
-
     // Show all configured repos with PR counts
     // Skip if already filtering by this repo
     const existingRepos = tokens
@@ -233,17 +224,27 @@ function buildSuggestions(
       prCountByRepo.set(name, (prCountByRepo.get(name) || 0) + 1)
     }
 
+    const configRepoNames = new Set(repositories.map((r) => r.name))
+
     for (const repo of repositories) {
       if (!existingRepos.some(r => repo.name.toLowerCase().includes(r))) {
         const count = prCountByRepo.get(repo.name) || 0
-        const label = repo.disabled
-          ? `${repo.alias || repo.name} (not loaded)`
-          : repo.alias || repo.name
         items.push({
           type: "repo",
           value: `${existingQuery}repo:${repo.name}`,
-          label,
+          label: repo.alias || repo.name,
           count: repo.disabled ? undefined : count,
+        })
+      }
+    }
+
+    // Show visited repos not in config (spec 018)
+    for (const visited of history.visitedRepos ?? []) {
+      if (!configRepoNames.has(visited.name) && !existingRepos.some(r => visited.name.toLowerCase().includes(r))) {
+        items.push({
+          type: "repo",
+          value: `${existingQuery}repo:${visited.name}`,
+          label: visited.name,
         })
       }
     }
@@ -301,10 +302,11 @@ function buildSuggestions(
         }
       }
     } else if (isTypingRepo) {
-      // Typing repo: - suggest repos (including disabled ones from config)
+      // Typing repo: - suggest repos (including disabled ones from config and visited)
       const partial = lastToken.slice(5)
       const reposFromPRs = getAllRepos(prs)
       const seenRepos = new Set(reposFromPRs.map((r) => r.name))
+      const configRepoNames = new Set(repositories.map((r) => r.name))
 
       // First show repos we have PRs for
       for (const repo of reposFromPRs) {
@@ -329,7 +331,24 @@ function buildSuggestions(
             items.push({
               type: "repo",
               value: `${prefixWithSpace}repo:${repo.name}`,
-              label: `${repo.name} (not loaded)`,
+              label: repo.name,
+            })
+          }
+        }
+      }
+
+      // Then show visited repos not in config (spec 018)
+      for (const visited of history.visitedRepos ?? []) {
+        if (!seenRepos.has(visited.name) && !configRepoNames.has(visited.name)) {
+          const shortName = visited.name.split("/")[1] || visited.name
+          if (
+            visited.name.toLowerCase().includes(partial) ||
+            shortName.toLowerCase().includes(partial)
+          ) {
+            items.push({
+              type: "repo",
+              value: `${prefixWithSpace}repo:${visited.name}`,
+              label: visited.name,
             })
           }
         }
@@ -372,8 +391,9 @@ function buildSuggestions(
         }
       }
 
-      // Filter matching repos
+      // Filter matching repos (from PRs)
       const repos = getAllRepos(prs)
+      const seenRepos = new Set(repos.map((r) => r.name))
       for (const repo of repos) {
         const shortName = repo.name.split("/")[1] || repo.name
         if (
@@ -386,6 +406,24 @@ function buildSuggestions(
             label: repo.name,
             count: repo.count,
           })
+        }
+      }
+
+      // Filter matching visited repos (spec 018)
+      const configRepoNames = new Set(repositories.map((r) => r.name))
+      for (const visited of history.visitedRepos ?? []) {
+        if (!seenRepos.has(visited.name) && !configRepoNames.has(visited.name)) {
+          const shortName = visited.name.split("/")[1] || visited.name
+          if (
+            visited.name.toLowerCase().includes(lastToken) ||
+            shortName.toLowerCase().includes(lastToken)
+          ) {
+            items.push({
+              type: "repo",
+              value: `${prefixWithSpace}repo:${visited.name}`,
+              label: visited.name,
+            })
+          }
         }
       }
     }

@@ -20,6 +20,21 @@ export interface History {
 
   /** Snapshots of tracked PR states for change detection */
   prSnapshots: Record<string, PRSnapshot>
+
+  /** Repositories visited via PR opens (not in config) */
+  visitedRepos: VisitedRepo[]
+}
+
+/** A visited repository (not in config) */
+export interface VisitedRepo {
+  /** Full repo name: "owner/repo" */
+  name: string
+  /** When first visited */
+  firstVisit: string // ISO date
+  /** When last visited */
+  lastVisit: string // ISO date
+  /** Number of PR opens from this repo */
+  visitCount: number
 }
 
 /** Snapshot of a PR's state for change detection */
@@ -61,6 +76,7 @@ export const defaultHistory: History = {
   recentFilters: [],
   markedPRs: [],
   prSnapshots: {},
+  visitedRepos: [],
 }
 
 /** Maximum items to keep in history */
@@ -68,4 +84,5 @@ export const HISTORY_LIMITS = {
   recentAuthors: 20,
   recentlyViewed: 30,
   recentFilters: 10,
+  visitedRepos: 50,
 }

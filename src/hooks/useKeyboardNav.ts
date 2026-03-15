@@ -12,6 +12,7 @@ import {
   isPRMarked,
   getPRKey,
   recordPRView,
+  recordRepoVisit,
   type History,
 } from "../history"
 import { isFilterActive, type ParsedFilter } from "../discovery"
@@ -218,13 +219,15 @@ export function useKeyboardNav({
 
     // Open in browser
     if (key.name === "o") {
-      // Record to recent history (spec 015)
-      const newHistory = recordPRView(history, {
-        repo: getRepoName(selectedPR),
+      const repo = getRepoName(selectedPR)
+      // Record to recent history (spec 015) and visited repo (spec 018)
+      let newHistory = recordPRView(history, {
+        repo,
         number: selectedPR.number,
         title: selectedPR.title,
         author: selectedPR.author.login,
       })
+      newHistory = recordRepoVisit(newHistory, repo)
       setHistory(newHistory)
       saveHistory(newHistory)
 
@@ -237,13 +240,15 @@ export function useKeyboardNav({
 
     // Open in riff
     if (key.name === "return") {
-      // Record to recent history (spec 015)
-      const newHistory = recordPRView(history, {
-        repo: getRepoName(selectedPR),
+      const repo = getRepoName(selectedPR)
+      // Record to recent history (spec 015) and visited repo (spec 018)
+      let newHistory = recordPRView(history, {
+        repo,
         number: selectedPR.number,
         title: selectedPR.title,
         author: selectedPR.author.login,
       })
+      newHistory = recordRepoVisit(newHistory, repo)
       setHistory(newHistory)
       saveHistory(newHistory)
 

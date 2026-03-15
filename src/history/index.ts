@@ -16,6 +16,10 @@ export {
   clearRecentPRs,
   removePRFromRecent,
   type RecencyLevel,
+  // Visited repos (spec 018)
+  recordRepoVisit,
+  forgetRepo,
+  isRepoVisited,
 } from "./loader"
 
 export {
@@ -24,4 +28,5 @@ export {
   type History,
   type RecentAuthor,
   type RecentPR,
+  type VisitedRepo,
 } from "./schema"

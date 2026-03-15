@@ -33,9 +33,15 @@ This creates a seamless discovery flow: open a PR from a new repo → that repo 
 - **Recent first**: Sort all repos by recency of visit (most recent first)
 - **Merge with config**: If a visited repo is later added to config, config takes precedence
 
+### P2 - Should Have
+
+- **Forget repo**: Command palette action "Forget repo" removes current PR's repo from visited repos
+  - Only shows when PR is from a visited (non-configured) repo
+  - Removes repo from suggestions
+
 ### P3 - Nice to Have
 
-- **Clear visited repos**: Command to clear visited repo history
+- **Clear all visited repos**: Command to clear entire visited repo history
 - **Age out**: Auto-remove repos not visited in 30+ days
 
 ## Technical Notes

@@ -10,6 +10,7 @@ import {
   HISTORY_LIMITS,
   type History,
   type RecentAuthor,
+  type VisitedRepo,
 } from "./schema"
 
 /** History file path */
@@ -40,6 +41,7 @@ export function saveHistory(history: History): void {
       HISTORY_LIMITS.recentlyViewed
     ),
     recentFilters: history.recentFilters.slice(0, HISTORY_LIMITS.recentFilters),
+    visitedRepos: (history.visitedRepos ?? []).slice(0, HISTORY_LIMITS.visitedRepos),
   }
 
   writeFileSync(HISTORY_FILE, JSON.stringify(trimmed, null, 2))
@@ -211,4 +213,47 @@ export function removePRFromRecent(history: History, prKey: string): History {
       (r) => !(r.repo === repo && r.number === number)
     ),
   }
+}
+
+// ============================================================================
+// Visited Repos (spec 018)
+// ============================================================================
+
+/** Record a visit to a repository */
+export function recordRepoVisit(history: History, repoName: string): History {
+  const now = new Date().toISOString()
+  const visitedRepos = history.visitedRepos ?? []
+
+  const existing = visitedRepos.find((r) => r.name === repoName)
+
+  let newVisitedRepos: VisitedRepo[]
+  if (existing) {
+    // Update existing - move to front
+    newVisitedRepos = [
+      { ...existing, lastVisit: now, visitCount: existing.visitCount + 1 },
+      ...visitedRepos.filter((r) => r.name !== repoName),
+    ]
+  } else {
+    // Add new
+    newVisitedRepos = [
+      { name: repoName, firstVisit: now, lastVisit: now, visitCount: 1 },
+      ...visitedRepos,
+    ]
+  }
+
+  return { ...history, visitedRepos: newVisitedRepos }
+}
+
+/** Remove a repo from visited history */
+export function forgetRepo(history: History, repoName: string): History {
+  const visitedRepos = history.visitedRepos ?? []
+  return {
+    ...history,
+    visitedRepos: visitedRepos.filter((r) => r.name !== repoName),
+  }
+}
+
+/** Check if a repo is in visited history */
+export function isRepoVisited(history: History, repoName: string): boolean {
+  return (history.visitedRepos ?? []).some((r) => r.name === repoName)
 }
