@@ -297,6 +297,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
             scrollOffset={state.previewScrollOffset}
             position={state.previewPosition}
             changes={selectedPRChanges}
+            seenAt={selectedPRSnapshot?.seenAt}
           />
         )}
       </box>

@@ -95,6 +95,125 @@ function getChangeColor(changeType: DetectedChange["type"]): string {
   }
 }
 
+/** Get status color and label (like riff) */
+function getStatusInfo(state: string, isDraft?: boolean): { label: string; color: string } {
+  if (isDraft) {
+    return { label: "Draft", color: theme.textMuted }
+  }
+  switch (state) {
+    case "OPEN":
+      return { label: "Open", color: theme.success }
+    case "CLOSED":
+      return { label: "Closed", color: theme.error }
+    case "MERGED":
+      return { label: "Merged", color: theme.prMerged }
+    default:
+      return { label: state, color: theme.text }
+  }
+}
+
+/** Metadata row component (label + value) */
+function MetadataRow({ label, value, valueColor }: { 
+  label: string
+  value: string
+  valueColor: string 
+}) {
+  return (
+    <box height={1}>
+      <text>
+        <span fg={theme.textDim}>{label.padEnd(12)}</span>
+        <span fg={valueColor}>{value}</span>
+      </text>
+    </box>
+  )
+}
+
+/** Section header with optional count */
+function SectionHeader({ title, count }: { title: string; count?: number }) {
+  const countStr = count !== undefined ? ` (${count})` : ""
+  return (
+    <box height={1}>
+      <text fg={theme.textMuted}>▼ {title}{countStr}</text>
+    </box>
+  )
+}
+
+/** Reviews section with submitted reviews and pending reviewers */
+function ReviewsSection({ reviews, requestedReviewers }: { 
+  reviews: PRReview[]
+  requestedReviewers: string[]
+}) {
+  // Get reviewers who haven't submitted a review yet
+  const pendingReviewers = requestedReviewers.filter(
+    r => !reviews.some(rev => rev.author === r)
+  )
+  const totalCount = reviews.length + pendingReviewers.length
+
+  return (
+    <box flexDirection="column" marginTop={1}>
+      <SectionHeader title="Reviews" count={totalCount} />
+      <box flexDirection="column" paddingLeft={2}>
+        {reviews.map((review) => (
+          <ReviewRow key={review.author} review={review} />
+        ))}
+        {pendingReviewers.map((reviewer) => (
+          <PendingReviewerRow key={reviewer} author={reviewer} />
+        ))}
+      </box>
+    </box>
+  )
+}
+
+/** A single review row */
+function ReviewRow({ review }: { review: PRReview }) {
+  const { icon, color } = getReviewStateIcon(review.state)
+  const stateLabel = review.state === "APPROVED" ? "approved"
+    : review.state === "CHANGES_REQUESTED" ? "requested changes"
+    : "commented"
+
+  return (
+    <box height={1}>
+      <text>
+        <span fg={color}>{icon} </span>
+        <span fg={theme.primary}>@{review.author}</span>
+        <span fg={theme.textDim}> {stateLabel}</span>
+        {review.submittedAt && (
+          <span fg={theme.textMuted}>  {formatTimeAgo(review.submittedAt)}</span>
+        )}
+      </text>
+    </box>
+  )
+}
+
+/** Get icon and color for review state */
+function getReviewStateIcon(state: string): { icon: string; color: string } {
+  switch (state) {
+    case "APPROVED":
+      return { icon: "✓", color: theme.success }
+    case "CHANGES_REQUESTED":
+      return { icon: "✗", color: theme.error }
+    case "COMMENTED":
+      return { icon: "○", color: theme.textDim }
+    case "PENDING":
+      return { icon: "○", color: theme.warning }
+    default:
+      return { icon: "─", color: theme.textMuted }
+  }
+}
+
+/** Pending reviewer row */
+function PendingReviewerRow({ author }: { author: string }) {
+  return (
+    <box height={1}>
+      <text>
+        <span fg={theme.warning}>○ </span>
+        <span fg={theme.primary}>@{author}</span>
+        <span fg={theme.warning}> awaiting review</span>
+      </text>
+    </box>
+  )
+}
+
 // Shared syntax style for markdown rendering (lazy init)
 let sharedSyntaxStyle: SyntaxStyle | null = null
 function getSyntaxStyle(): SyntaxStyle {
@@ -133,9 +252,11 @@ interface PreviewPanelProps {
   position: PreviewPosition
   /** Active change notifications for this PR (if any) */
   changes?: DetectedChange[] | null
+  /** When user last "saw" this PR (for highlighting new comments) */
+  seenAt?: string
 }
 
-export function PreviewPanel({ preview, loading, scrollOffset, position, changes }: PreviewPanelProps) {
+export function PreviewPanel({ preview, loading, scrollOffset, position, changes, seenAt }: PreviewPanelProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
   const isBottom = position === "bottom"
@@ -204,16 +325,52 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
   }
 
   // Show preview content
+  const statusInfo = getStatusInfo(preview.state, preview.isDraft)
+
   return (
     <box {...containerProps}>
 
       <scrollbox ref={scrollRef} flexGrow={1} paddingLeft={1} paddingRight={1}>
-          {/* Repo and PR number */}
+          {/* Title */}
           <box height={1} marginTop={1}>
+            <text fg={theme.text}>{truncate(preview.title, contentWidth)}</text>
+          </box>
+
+          {/* Separator */}
+          <box height={1}>
+            <text fg={theme.border}>{"─".repeat(Math.min(70, contentWidth))}</text>
+          </box>
+
+          {/* Metadata rows (like riff) */}
+          <MetadataRow label="Status" value={statusInfo.label} valueColor={statusInfo.color} />
+          <MetadataRow label="Author" value={`@${preview.author.login}`} valueColor={theme.primary} />
+          <MetadataRow 
+            label="Branch" 
+            value={`${preview.headRef} → ${preview.baseRef}`} 
+            valueColor={theme.text} 
+          />
+          <box height={1}>
             <text>
-              <span fg={theme.primary}>{preview.repo}</span>
-              <span fg={theme.textDim}> #{preview.number}</span>
+              <span fg={theme.textDim}>{"Changes".padEnd(12)}</span>
+              <span fg={theme.success}>+{preview.additions}</span>
+              <span fg={theme.textDim}> </span>
+              <span fg={theme.error}>-{preview.deletions}</span>
+              <span fg={theme.textDim}> ({preview.files.length} files)</span>
             </text>
+          </box>
+
+          {/* CI/Merge status */}
+          <box height={1}>
+            <text>
+              <span fg={theme.textDim}>{"Checks".padEnd(12)}</span>
+              <ChecksIndicator checks={preview.checks} />
+              <MergeableIndicator state={preview.mergeable} />
+            </text>
+          </box>
+
+          {/* Separator */}
+          <box height={1} marginTop={1}>
+            <text fg={theme.border}>{"─".repeat(Math.min(70, contentWidth))}</text>
           </box>
 
           {/* Change notification section */}
@@ -240,74 +397,54 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
             </box>
           )}
 
-          {/* Recent comments section */}
+          {/* Conversation section (comments) */}
           {preview.recentComments.length > 0 && (
-            <CommentsSection comments={preview.recentComments} maxWidth={contentWidth} />
+            <CommentsSection comments={preview.recentComments} maxWidth={contentWidth} seenAt={seenAt} />
           )}
 
-          {/* Branch info */}
-          <box height={1}>
-            <text>
-              <span fg={theme.textDim}>{preview.author.login} wants to merge </span>
-              <span fg={theme.success}>{preview.headRef}</span>
-              <span fg={theme.textDim}> → </span>
-              <span fg={theme.primary}>{preview.baseRef}</span>
-            </text>
-          </box>
-
-          {/* Status row */}
-          <box height={1} marginTop={1}>
-            <text>
-              <ChecksIndicator checks={preview.checks} />
-              <MergeableIndicator state={preview.mergeable} />
-              <CommentsIndicator count={preview.commentCount + preview.reviewCommentCount} />
-            </text>
-          </box>
-
-          {/* Reviewers */}
-          {preview.reviews.length > 0 && (
-            <box height={1} marginTop={1}>
-              <text>
-                <span fg={theme.textDim}>Reviews: </span>
-                {preview.reviews.map((r, i) => (
-                  <span key={r.author}>
-                    {i > 0 && " "}
-                    <ReviewBadge review={r} />
-                  </span>
-                ))}
-              </text>
-            </box>
+          {/* Reviews section */}
+          {(preview.reviews.length > 0 || preview.requestedReviewers.length > 0) && (
+            <ReviewsSection 
+              reviews={preview.reviews} 
+              requestedReviewers={preview.requestedReviewers}
+            />
           )}
 
-          {/* Description - right after metadata */}
+          {/* Description section */}
           {preview.body && preview.body.trim() && (
             <box flexDirection="column" marginTop={1}>
-              <text fg={theme.textMuted}>Description:</text>
-              <markdown
-                content={preview.body}
-                syntaxStyle={getSyntaxStyle()}
-              />
+              <SectionHeader title="Description" />
+              <box paddingLeft={2}>
+                <markdown
+                  content={preview.body}
+                  syntaxStyle={getSyntaxStyle()}
+                />
+              </box>
             </box>
           )}
 
           {/* Files section */}
           <box flexDirection="column" marginTop={1}>
-            <text fg={theme.textMuted}>Files:</text>
-            <FilesList files={preview.files} maxWidth={contentWidth} />
+            <SectionHeader title="Files" count={preview.files.length} />
+            <box paddingLeft={2}>
+              <FilesList files={preview.files} maxWidth={contentWidth - 2} />
+            </box>
           </box>
 
           {/* Commits section */}
           {preview.commits.length > 0 && (
             <box flexDirection="column" marginTop={1}>
-              <text fg={theme.textMuted}>Commits:</text>
-              {preview.commits.map((commit) => (
-                <box key={commit.oid} height={1}>
-                  <text>
-                    <span fg={theme.warning}>{commit.oid}</span>
-                    <span fg={theme.text}> {truncate(commit.message, contentWidth - 9)}</span>
-                  </text>
-                </box>
-              ))}
+              <SectionHeader title="Commits" count={preview.commits.length} />
+              <box flexDirection="column" paddingLeft={2}>
+                {preview.commits.map((commit) => (
+                  <box key={commit.oid} height={1}>
+                    <text>
+                      <span fg={theme.warning}>{commit.oid}</span>
+                      <span fg={theme.text}> {truncate(commit.message, contentWidth - 11)}</span>
+                    </text>
+                  </box>
+                ))}
+              </box>
             </box>
           )}
         </scrollbox>
@@ -470,33 +607,60 @@ function truncatePath(path: string, maxLen: number): string {
 // Comments Section (spec 022)
 // ============================================================================
 
-function CommentsSection({ comments, maxWidth }: { comments: PreviewComment[]; maxWidth: number }) {
+/** Check if a comment is "new" (created after seenAt) */
+function isNewComment(comment: PreviewComment, seenAt: string | undefined): boolean {
+  if (!seenAt) return false
+  return new Date(comment.createdAt) > new Date(seenAt)
+}
+
+function CommentsSection({ comments, maxWidth, seenAt }: { 
+  comments: PreviewComment[]
+  maxWidth: number
+  seenAt?: string
+}) {
   if (comments.length === 0) return null
 
-  // Reserve space: author (~10) + gap (2) + time (~4) + gap (2) = ~18 chars
+  // Count new comments
+  const newCount = comments.filter(c => isNewComment(c, seenAt)).length
+
+  // Reserve space: indicator (2) + author (~10) + gap (1) + time (~4) + gap (1) = ~18 chars
   const bodyWidth = Math.max(20, maxWidth - 18)
 
   return (
     <box flexDirection="column" marginTop={1}>
-      <text fg={theme.textMuted}>Comments ({comments.length}):</text>
+      <text>
+        <span fg={theme.textMuted}>Comments ({comments.length})</span>
+        {newCount > 0 && <span fg={theme.primary}> • {newCount} new</span>}
+        <span fg={theme.textMuted}>:</span>
+      </text>
       {comments.map((comment, i) => (
-        <CommentRow key={i} comment={comment} bodyWidth={bodyWidth} />
+        <CommentRow 
+          key={i} 
+          comment={comment} 
+          bodyWidth={bodyWidth} 
+          isNew={isNewComment(comment, seenAt)}
+        />
       ))}
     </box>
   )
 }
 
-function CommentRow({ comment, bodyWidth }: { comment: PreviewComment; bodyWidth: number }) {
+function CommentRow({ comment, bodyWidth, isNew }: { 
+  comment: PreviewComment
+  bodyWidth: number
+  isNew: boolean
+}) {
   const timeAgo = formatTimeAgo(comment.createdAt)
   // Truncate author to 10 chars and pad
   const author = comment.author.slice(0, 10).padEnd(10)
-  const body = truncateCommentBody(comment.body, bodyWidth)
+  const body = truncateCommentBody(comment.body, bodyWidth - 2) // Account for indicator
 
   return (
     <box height={1}>
       <text>
+        <span fg={isNew ? theme.primary : theme.textDim}>{isNew ? "● " : "  "}</span>
         <span fg={theme.primary}>{author}</span>
-        <span fg={theme.textDim}> {timeAgo.padStart(4)} </span>
+        <span fg={theme.textDim}>{timeAgo.padStart(4)} </span>
         <span fg={theme.text}>{body}</span>
       </text>
     </box>

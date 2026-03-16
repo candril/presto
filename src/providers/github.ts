@@ -217,10 +217,16 @@ export async function getCurrentRepo(): Promise<string | null> {
 
 /** Fields to fetch for PR preview */
 const PREVIEW_FIELDS = [
+  "title",
+  "state",
+  "isDraft",
+  "additions",
+  "deletions",
   "files",
   "commits",
   "author",
   "reviews",
+  "reviewRequests",
   "statusCheckRollup",
   "body",
   "baseRefName",
@@ -236,16 +242,27 @@ const PREVIEW_FIELDS = [
 export async function fetchPRPreview(repo: string, number: number): Promise<PRPreview> {
   const result = await $`gh pr view ${number} -R ${repo} --json ${PREVIEW_FIELDS}`.json()
 
+  // Calculate total additions/deletions
+  const files = parseFiles(result.files)
+  const additions = result.additions ?? files.reduce((sum, f) => sum + f.additions, 0)
+  const deletions = result.deletions ?? files.reduce((sum, f) => sum + f.deletions, 0)
+
   return {
     repo,
     number,
-    files: parseFiles(result.files),
+    title: result.title ?? "",
+    state: result.state ?? "OPEN",
+    isDraft: result.isDraft ?? false,
+    files,
+    additions,
+    deletions,
     commits: parseCommits(result.commits),
     author: {
       login: result.author?.login ?? "unknown",
       createdAt: result.createdAt ?? "",
     },
     reviews: dedupeReviews(result.reviews ?? []),
+    requestedReviewers: parseRequestedReviewers(result.reviewRequests ?? []),
     checks: parsePreviewChecks(result.statusCheckRollup),
     body: result.body ?? "",
     baseRef: result.baseRefName ?? "",
@@ -289,6 +306,14 @@ function parseCommits(commits: any[]): PRCommit[] {
     author: c.authors?.[0]?.login ?? c.author?.login ?? "unknown",
     committedAt: c.committedDate ?? "",
   }))
+}
+
+/** Parse requested reviewers list */
+function parseRequestedReviewers(reviewRequests: any[]): string[] {
+  if (!reviewRequests) return []
+  return reviewRequests
+    .map((r: any) => r.login ?? r.name ?? null)
+    .filter((login: string | null): login is string => login !== null)
 }
 
 /** Keep only latest review per author */

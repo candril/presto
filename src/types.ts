@@ -97,8 +97,23 @@ export interface PRPreview {
   /** PR number */
   number: number
 
+  /** PR title */
+  title: string
+
+  /** PR state */
+  state: "OPEN" | "CLOSED" | "MERGED"
+
+  /** Is draft PR */
+  isDraft: boolean
+
   /** Files changed with line counts */
   files: ChangedFile[]
+
+  /** Total additions across all files */
+  additions: number
+
+  /** Total deletions across all files */
+  deletions: number
 
   /** Commits in the PR */
   commits: PRCommit[]
@@ -111,6 +126,9 @@ export interface PRPreview {
 
   /** Review status per reviewer */
   reviews: PRReview[]
+
+  /** Requested reviewers (not yet reviewed) */
+  requestedReviewers: string[]
 
   /** CI/check status */
   checks: PreviewCheckStatus
