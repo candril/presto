@@ -35,6 +35,9 @@ export function detectChanges(
     const snapshot = history.prSnapshots?.[prKey]
     if (!snapshot) continue // First time seeing, no comparison
 
+    // Track if we detected a review state change (to avoid double-counting as comment)
+    let hasReviewStateChange = false
+
     // State changes (relevant for all tracked PRs)
     const currentState = computePRState(pr)
     const prevState = snapshot.prState ?? (snapshot.state === "MERGED" ? "merged" : snapshot.state === "CLOSED" ? "closed" : "ready")
@@ -62,6 +65,7 @@ export function detectChanges(
           changeType: "approved",
           message: "was approved",
         })
+        hasReviewStateChange = true
       } else if (pr.reviewDecision === "CHANGES_REQUESTED") {
         changes.push({
           prKey,
@@ -69,18 +73,25 @@ export function detectChanges(
           changeType: "changes_requested",
           message: "changes requested",
         })
+        hasReviewStateChange = true
       }
     }
 
     // New comments (for all tracked PRs - you want to know when someone comments on PRs you're watching)
+    // If there was a review state change, subtract 1 to avoid double-counting the review as a comment
     if (pr.commentCount > snapshot.commentCount) {
-      const newCount = pr.commentCount - snapshot.commentCount
-      changes.push({
-        prKey,
-        pr,
-        changeType: "new_comments",
-        message: `${newCount} new comment${newCount > 1 ? "s" : ""}`,
-      })
+      let newCount = pr.commentCount - snapshot.commentCount
+      if (hasReviewStateChange) {
+        newCount -= 1 // The review that caused state change is already shown separately
+      }
+      if (newCount > 0) {
+        changes.push({
+          prKey,
+          pr,
+          changeType: "new_comments",
+          message: `${newCount} new comment${newCount > 1 ? "s" : ""}`,
+        })
+      }
     }
 
     // New push (HEAD commit changed)
