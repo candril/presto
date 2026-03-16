@@ -128,6 +128,21 @@ export interface PRPreview {
   /** Comment counts */
   commentCount: number
   reviewCommentCount: number
+
+  /** Recent comments for display in preview */
+  recentComments: PreviewComment[]
+}
+
+/** A comment for preview display */
+export interface PreviewComment {
+  /** Comment author login */
+  author: string
+  /** Full comment body (will be truncated in UI) */
+  body: string
+  /** ISO date when comment was created */
+  createdAt: string
+  /** Whether this is a review comment (vs PR-level) */
+  isReviewComment: boolean
 }
 
 export interface ChangedFile {

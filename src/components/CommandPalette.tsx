@@ -323,6 +323,7 @@ export function CommandPalette({
                       key={cmd.id}
                       command={cmd}
                       selected={isSelected}
+                      context={context}
                     />
                   )
                 })}
@@ -345,14 +346,18 @@ export function CommandPalette({
 function CommandRow({
   command,
   selected,
+  context,
 }: {
   command: Command
   selected: boolean
+  context: CommandContext
 }) {
   const bg = selected ? theme.selection : undefined
   const fg = selected ? theme.text : theme.textDim
   // Use brighter shortcut color when selected for contrast
   const shortcutFg = selected ? theme.textDim : theme.textMuted
+  // Use dynamic label if provided, otherwise use static label
+  const label = command.getLabel ? command.getLabel(context) : command.label
 
   return (
     <box
@@ -364,7 +369,7 @@ function CommandRow({
       width="100%"
     >
       <text>
-        <span fg={fg}>{command.label}</span>
+        <span fg={fg}>{label}</span>
         {command.dangerous && <span fg={theme.warning}> !</span>}
       </text>
       {command.shortcut && <text fg={shortcutFg}>{command.shortcut}</text>}

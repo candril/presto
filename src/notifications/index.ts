@@ -11,6 +11,7 @@ export {
   markPRHasChanges,
   markPRSeen,
   prHasChanges,
+  togglePRUnread,
   updateAllSnapshots,
   computePRState,
 } from "./snapshots"

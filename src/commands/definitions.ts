@@ -7,6 +7,7 @@ import type { Command, CommandContext } from "./types"
 import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
 import { checkoutPR } from "../actions/checkout"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
+import { prHasChanges, togglePRUnread } from "../notifications"
 import { saveColumnVisibility } from "../cache"
 import { getRepoName, type ColumnId } from "../types"
 
@@ -230,6 +231,30 @@ export const commands: Command[] = [
       return {
         type: "success",
         message: isMarked ? "Marked" : "Unmarked",
+      }
+    },
+  },
+  {
+    id: "action.toggle_unread",
+    label: "Mark as unread",
+    category: "action",
+    requiresPR: true,
+    // Dynamic label based on current state
+    getLabel: (ctx) => {
+      const prKey = getPRKey(getRepoName(ctx.selectedPR!), ctx.selectedPR!.number)
+      const isUnread = prHasChanges(ctx.history, prKey)
+      return isUnread ? "Mark as read" : "Mark as unread"
+    },
+    execute: async (ctx) => {
+      const pr = ctx.selectedPR!
+      const prKey = getPRKey(getRepoName(pr), pr.number)
+      const wasUnread = prHasChanges(ctx.history, prKey)
+      const newHistory = togglePRUnread(ctx.history, prKey)
+      ctx.setHistory(newHistory)
+      saveHistory(newHistory)
+      return {
+        type: "success",
+        message: wasUnread ? "Marked as read" : "Marked as unread",
       }
     },
   },

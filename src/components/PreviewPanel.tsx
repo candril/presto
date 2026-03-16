@@ -8,7 +8,7 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { SyntaxStyle, RGBA } from "@opentui/core"
 import { theme } from "../theme"
 import { Spinner } from "./Loading"
-import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile, PreviewPosition } from "../types"
+import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile, PreviewPosition, PreviewComment } from "../types"
 import type { DetectedChange } from "../notifications"
 
 /** Get icon for change type */
@@ -240,6 +240,11 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
             </box>
           )}
 
+          {/* Recent comments section */}
+          {preview.recentComments.length > 0 && (
+            <CommentsSection comments={preview.recentComments} maxWidth={contentWidth} />
+          )}
+
           {/* Branch info */}
           <box height={1}>
             <text>
@@ -461,4 +466,60 @@ function truncatePath(path: string, maxLen: number): string {
   return start + "…/" + filename
 }
 
+// ============================================================================
+// Comments Section (spec 022)
+// ============================================================================
+
+function CommentsSection({ comments, maxWidth }: { comments: PreviewComment[]; maxWidth: number }) {
+  if (comments.length === 0) return null
+
+  // Reserve space: author (~10) + gap (2) + time (~4) + gap (2) = ~18 chars
+  const bodyWidth = Math.max(20, maxWidth - 18)
+
+  return (
+    <box flexDirection="column" marginTop={1}>
+      <text fg={theme.textMuted}>Comments ({comments.length}):</text>
+      {comments.map((comment, i) => (
+        <CommentRow key={i} comment={comment} bodyWidth={bodyWidth} />
+      ))}
+    </box>
+  )
+}
+
+function CommentRow({ comment, bodyWidth }: { comment: PreviewComment; bodyWidth: number }) {
+  const timeAgo = formatTimeAgo(comment.createdAt)
+  // Truncate author to 10 chars and pad
+  const author = comment.author.slice(0, 10).padEnd(10)
+  const body = truncateCommentBody(comment.body, bodyWidth)
+
+  return (
+    <box height={1}>
+      <text>
+        <span fg={theme.primary}>{author}</span>
+        <span fg={theme.textDim}> {timeAgo.padStart(4)} </span>
+        <span fg={theme.text}>{body}</span>
+      </text>
+    </box>
+  )
+}
+
+/** Truncate comment body to single line */
+function truncateCommentBody(body: string, maxLen: number): string {
+  // Remove newlines, collapse whitespace
+  const oneLine = body.replace(/\s+/g, " ").trim()
+  if (oneLine.length <= maxLen) return oneLine
+  return oneLine.slice(0, maxLen - 1) + "…"
+}
+
+/** Format time ago (compact) */
+function formatTimeAgo(date: string): string {
+  if (!date) return "?"
+  const diff = Date.now() - new Date(date).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  return `${days}d`
+}
 

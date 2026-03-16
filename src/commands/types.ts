@@ -44,6 +44,7 @@ export interface Command {
   requiresPR?: boolean // Only show when PR is selected
   dangerous?: boolean // Requires confirmation
   available?: (ctx: CommandContext) => boolean // Dynamic visibility
+  getLabel?: (ctx: CommandContext) => string // Dynamic label based on state
 
   // Execution
   execute: (ctx: CommandContext) => Promise<CommandResult>

@@ -50,6 +50,7 @@ export type ChangeType =
   | "ci_passed"
   | "ci_failed"
   | "review_requested"
+  | "manual" // Manually marked as unread
 
 /** A single detected change */
 export interface DetectedChange {

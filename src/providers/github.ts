@@ -4,7 +4,7 @@
  */
 
 import { $ } from "bun"
-import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck } from "../types"
+import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck, PreviewComment } from "../types"
 import { listPRsGraphQL, getPRsGraphQL } from "./graphql"
 
 /** Fields to fetch from GitHub */
@@ -253,6 +253,7 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
     mergeable: result.mergeable ?? "UNKNOWN",
     commentCount: result.comments?.length ?? 0,
     reviewCommentCount: 0, // Not available via gh CLI
+    recentComments: parseRecentComments(result.comments ?? [], result.reviews ?? []),
   }
 }
 
@@ -305,6 +306,41 @@ function dedupeReviews(reviews: any[]): PRReview[] {
     state: r.state ?? "PENDING",
     submittedAt: r.submittedAt ?? "",
   }))
+}
+
+/** Parse recent comments from PR comments and review bodies */
+function parseRecentComments(comments: any[], reviews: any[]): PreviewComment[] {
+  const all: PreviewComment[] = []
+
+  // PR-level comments
+  for (const c of comments ?? []) {
+    if (c.body?.trim()) {
+      all.push({
+        author: c.author?.login ?? "unknown",
+        body: c.body,
+        createdAt: c.createdAt ?? "",
+        isReviewComment: false,
+      })
+    }
+  }
+
+  // Review comments (from review body, not inline diff comments)
+  for (const r of reviews ?? []) {
+    if (r.body?.trim()) {
+      all.push({
+        author: r.author?.login ?? "unknown",
+        body: r.body,
+        createdAt: r.submittedAt ?? "",
+        isReviewComment: true,
+      })
+    }
+  }
+
+  // Sort by date descending, take last 5, then reverse to show oldest first
+  return all
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5)
+    .reverse()
 }
 
 function parsePreviewChecks(rollup: any[]): PreviewCheckStatus {

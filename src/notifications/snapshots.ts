@@ -116,6 +116,47 @@ export function prHasChanges(history: History, prKey: string): boolean {
   return history.prSnapshots[prKey]?.hasChanges ?? false
 }
 
+/** Toggle the unread/hasChanges state manually */
+export function togglePRUnread(history: History, prKey: string): History {
+  const snapshot = history.prSnapshots[prKey]
+  const now = new Date().toISOString()
+
+  if (!snapshot) {
+    // Create a minimal snapshot with hasChanges = true
+    return {
+      ...history,
+      prSnapshots: {
+        ...history.prSnapshots,
+        [prKey]: {
+          prState: "ready",
+          reviewDecision: null,
+          checkState: "NONE",
+          commentCount: 0,
+          snapshotAt: now,
+          seenAt: now,
+          hasChanges: true,
+          changes: [{ type: "manual", message: "Marked as unread" }],
+        },
+      },
+    }
+  }
+
+  // Toggle hasChanges
+  const wasUnread = snapshot.hasChanges
+  return {
+    ...history,
+    prSnapshots: {
+      ...history.prSnapshots,
+      [prKey]: {
+        ...snapshot,
+        hasChanges: !wasUnread,
+        changes: wasUnread ? undefined : [{ type: "manual", message: "Marked as unread" }],
+        seenAt: wasUnread ? now : snapshot.seenAt,
+      },
+    },
+  }
+}
+
 /** Update snapshots for all tracked PRs */
 export function updateAllSnapshots(
   history: History,
