@@ -399,7 +399,11 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
 
           {/* Conversation section (comments) */}
           {preview.recentComments.length > 0 && (
-            <CommentsSection comments={preview.recentComments} maxWidth={contentWidth} seenAt={seenAt} />
+            <CommentsSection 
+              comments={preview.recentComments} 
+              maxWidth={contentWidth} 
+              newCommentCount={getNewCommentCount(changes)}
+            />
           )}
 
           {/* Reviews section */}
@@ -607,30 +611,39 @@ function truncatePath(path: string, maxLen: number): string {
 // Comments Section (spec 022)
 // ============================================================================
 
-/** Check if a comment is "new" (created after seenAt) */
-function isNewComment(comment: PreviewComment, seenAt: string | undefined): boolean {
-  if (!seenAt) return false
-  return new Date(comment.createdAt) > new Date(seenAt)
+/**
+ * Extract new comment count from detected changes.
+ * The change detection system tracks comment count changes, so we use that
+ * rather than comparing timestamps (which can be unreliable).
+ */
+function getNewCommentCount(changes: DetectedChange[] | null | undefined): number {
+  if (!changes) return 0
+  const commentChange = changes.find(c => c.type === "new_comments")
+  if (!commentChange) return 0
+  // Parse count from message like "1 new comment" or "3 new comments"
+  const match = commentChange.message.match(/^(\d+)/)
+  return match ? parseInt(match[1], 10) : 0
 }
 
-function CommentsSection({ comments, maxWidth, seenAt }: { 
+function CommentsSection({ comments, maxWidth, newCommentCount }: { 
   comments: PreviewComment[]
   maxWidth: number
-  seenAt?: string
+  /** Number of new comments detected by change detection (marks N most recent as new) */
+  newCommentCount: number
 }) {
   if (comments.length === 0) return null
-
-  // Count new comments
-  const newCount = comments.filter(c => isNewComment(c, seenAt)).length
 
   // Reserve space: indicator (2) + author (~10) + gap (1) + time (~4) + gap (1) = ~18 chars
   const bodyWidth = Math.max(20, maxWidth - 18)
 
+  // Comments are sorted oldest-first, so "new" comments are the last N
+  const newStartIndex = comments.length - newCommentCount
+
   return (
     <box flexDirection="column" marginTop={1}>
       <text>
-        <span fg={theme.textMuted}>Comments ({comments.length})</span>
-        {newCount > 0 && <span fg={theme.primary}> • {newCount} new</span>}
+        <span fg={theme.textMuted}>▼ Comments ({comments.length})</span>
+        {newCommentCount > 0 && <span fg={theme.primary}> • {newCommentCount} new</span>}
         <span fg={theme.textMuted}>:</span>
       </text>
       {comments.map((comment, i) => (
@@ -638,7 +651,7 @@ function CommentsSection({ comments, maxWidth, seenAt }: {
           key={i} 
           comment={comment} 
           bodyWidth={bodyWidth} 
-          isNew={isNewComment(comment, seenAt)}
+          isNew={i >= newStartIndex && newCommentCount > 0}
         />
       ))}
     </box>
