@@ -38,8 +38,7 @@ const PR_FRAGMENT = `
   updatedAt
   author { login }
   reviewDecision
-  comments { totalCount }
-  reviews { totalCount }
+  totalCommentsCount
   headRefOid
   commits(last: 1) {
     nodes {
@@ -99,7 +98,7 @@ function transformGraphQLPR(raw: any): PR {
     author: { login: raw.author?.login ?? "unknown" },
     reviewDecision: raw.reviewDecision,
     statusCheckRollup,
-    commentCount: (raw.comments?.totalCount ?? 0) + (raw.reviews?.totalCount ?? 0),
+    commentCount: raw.totalCommentsCount ?? 0,
     headRefOid: raw.headRefOid ?? null,
   }
 }
