@@ -13,6 +13,8 @@ export interface Repository {
   starredOnly?: boolean
   /** Don't fetch by default, only when explicitly filtered with repo:name (default: false) */
   disabled?: boolean
+  /** Local path to the repo clone (for checkout feature) */
+  localPath?: string
 }
 
 /** Custom tool definition */
@@ -25,10 +27,19 @@ export interface CustomTool {
   description?: string
 }
 
+/** Paths configuration for local repos */
+export interface PathsConfig {
+  /** Base folder where repos are typically cloned (e.g., ~/Development) */
+  basePath?: string
+}
+
 /** Main configuration interface */
 export interface Config {
   /** Repositories to watch (empty = current repo only) */
   repositories: Repository[]
+
+  /** Paths configuration */
+  paths: PathsConfig
 
   /** GitHub settings */
   github: {
@@ -79,6 +90,8 @@ export interface Config {
 /** Default configuration values */
 export const defaultConfig: Config = {
   repositories: [],
+
+  paths: {},
 
   github: {
     host: "github.com",

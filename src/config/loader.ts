@@ -111,6 +111,11 @@ function mergeConfig(defaults: Config, overrides: Record<string, unknown>): Conf
   return {
     repositories: parseRepositories(overrides.repositories),
 
+    paths: {
+      ...defaults.paths,
+      ...parsePaths(overrides.paths),
+    },
+
     github: {
       ...defaults.github,
       ...parseObject(overrides.github),
@@ -153,6 +158,17 @@ function parseNotifications(value: unknown): Partial<Config["notifications"]> {
   return result
 }
 
+/** Parse paths settings */
+function parsePaths(value: unknown): Partial<Config["paths"]> {
+  if (typeof value !== "object" || value === null) return {}
+  const obj = value as Record<string, unknown>
+  const result: Partial<Config["paths"]> = {}
+  // Handle both snake_case (TOML) and camelCase
+  if (typeof obj.base_path === "string") result.basePath = obj.base_path
+  if (typeof obj.basePath === "string") result.basePath = obj.basePath
+  return result
+}
+
 /** Parse repositories array from TOML */
 function parseRepositories(value: unknown): Repository[] {
   if (!Array.isArray(value)) return []
@@ -162,8 +178,10 @@ function parseRepositories(value: unknown): Repository[] {
     .map((item) => ({
       name: String(item.name || ""),
       alias: item.alias ? String(item.alias) : undefined,
-      starredOnly: item.starredOnly === true,
+      starredOnly: item.starredOnly === true || item.starred_only === true,
       disabled: item.disabled === true,
+      // Handle both snake_case (TOML) and camelCase
+      localPath: item.local_path ? String(item.local_path) : item.localPath ? String(item.localPath) : undefined,
     }))
     .filter((repo) => repo.name.length > 0)
 }

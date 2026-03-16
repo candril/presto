@@ -5,6 +5,7 @@
 import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
 import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
+import { checkoutPR } from "../actions/checkout"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { saveColumnVisibility } from "../cache"
 import { getRepoName, type ColumnId } from "../types"
@@ -157,6 +158,20 @@ export const commands: Command[] = [
         ctx.renderer.resume()
       }
       return { type: "success" }
+    },
+  },
+  {
+    id: "action.checkout",
+    label: "Checkout PR locally",
+    category: "action",
+    shortcut: "Space",
+    requiresPR: true,
+    execute: async (ctx) => {
+      const result = await checkoutPR(ctx.selectedPR!, ctx.config)
+      return {
+        type: result.success ? "success" : "error",
+        message: result.message,
+      }
     },
   },
   {

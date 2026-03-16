@@ -33,6 +33,7 @@ const HELP_SECTIONS = [
   {
     title: "Actions",
     keys: [
+      ["Space", "Checkout PR locally"],
       ["y", "Copy PR number"],
       ["Y", "Copy PR URL"],
       ["s", "Star/unstar author"],

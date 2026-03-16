@@ -5,6 +5,7 @@
 
 import { useKeyboard, useRenderer } from "@opentui/react"
 import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions"
+import { checkoutPR } from "../actions/checkout"
 import {
   toggleStarAuthor,
   saveHistory,
@@ -320,6 +321,25 @@ export function useKeyboardNav({
         })
         .catch(() => {
           dispatch({ type: "SHOW_MESSAGE", message: "Failed to copy URL" })
+        })
+      return
+    }
+
+    // Checkout PR locally (Space)
+    if (key.name === "space") {
+      dispatch({ type: "SHOW_MESSAGE", message: "Checking out..." })
+      checkoutPR(selectedPR, config)
+        .then((result) => {
+          dispatch({
+            type: "SHOW_MESSAGE",
+            message: result.message,
+          })
+        })
+        .catch((err) => {
+          dispatch({
+            type: "SHOW_MESSAGE",
+            message: `Checkout failed: ${err}`,
+          })
         })
       return
     }
