@@ -643,9 +643,7 @@ function CommentsSection({ comments, maxWidth, newCommentCount }: {
   // Reserve space: indicator (2) + author (~10) + gap (1) + time (~4) + gap (1) = ~18 chars
   const bodyWidth = Math.max(20, maxWidth - 18)
 
-  // Comments are sorted oldest-first, so "new" comments are the last N
-  const newStartIndex = comments.length - newCommentCount
-
+  // Comments are sorted newest-first, so "new" comments are the first N
   return (
     <box flexDirection="column" marginTop={1}>
       <text>
@@ -658,7 +656,7 @@ function CommentsSection({ comments, maxWidth, newCommentCount }: {
           key={i} 
           comment={comment} 
           bodyWidth={bodyWidth} 
-          isNew={i >= newStartIndex && newCommentCount > 0}
+          isNew={i < newCommentCount}
         />
       ))}
     </box>

@@ -367,11 +367,10 @@ function parseRecentComments(comments: any[], reviews: any[]): PreviewComment[] 
     }
   }
 
-  // Sort by date descending, take last 5, then reverse to show oldest first
+  // Sort by date descending (newest first), take top 5
   return all
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5)
-    .reverse()
 }
 
 function parsePreviewChecks(rollup: any[]): PreviewCheckStatus {
