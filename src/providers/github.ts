@@ -6,6 +6,7 @@
 import { $ } from "bun"
 import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck, PreviewComment } from "../types"
 import { listPRsGraphQL, getPRsGraphQL } from "./graphql"
+import { isBot } from "../utils/bots"
 
 /** Fields to fetch from GitHub */
 const PR_FIELDS = [
@@ -334,15 +335,17 @@ function dedupeReviews(reviews: any[]): PRReview[] {
   }))
 }
 
-/** Parse recent comments from PR comments and review bodies */
+/** Parse recent comments from PR comments and review bodies (excludes bots) */
 function parseRecentComments(comments: any[], reviews: any[]): PreviewComment[] {
   const all: PreviewComment[] = []
 
-  // PR-level comments
+  // PR-level comments (skip bots)
   for (const c of comments ?? []) {
+    const author = c.author?.login ?? "unknown"
+    if (isBot(author)) continue
     if (c.body?.trim()) {
       all.push({
-        author: c.author?.login ?? "unknown",
+        author,
         body: c.body,
         createdAt: c.createdAt ?? "",
         isReviewComment: false,
@@ -350,11 +353,13 @@ function parseRecentComments(comments: any[], reviews: any[]): PreviewComment[] 
     }
   }
 
-  // Review comments (from review body, not inline diff comments)
+  // Review comments (from review body, not inline diff comments) - skip bots
   for (const r of reviews ?? []) {
+    const author = r.author?.login ?? "unknown"
+    if (isBot(author)) continue
     if (r.body?.trim()) {
       all.push({
-        author: r.author?.login ?? "unknown",
+        author,
         body: r.body,
         createdAt: r.submittedAt ?? "",
         isReviewComment: true,

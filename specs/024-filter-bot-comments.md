@@ -1,6 +1,6 @@
 # Filter Bot Comments
 
-**Status**: Draft
+**Status**: Done
 
 ## Description
 

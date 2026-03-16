@@ -5,6 +5,7 @@
 
 import { $ } from "bun"
 import type { PR } from "../types"
+import { isBot } from "../utils/bots"
 
 /** Cached GitHub token */
 let cachedToken: string | null = null
@@ -38,8 +39,13 @@ const PR_FRAGMENT = `
   updatedAt
   author { login }
   reviewDecision
-  totalCommentsCount
   headRefOid
+  comments(first: 100) {
+    nodes { author { login } }
+  }
+  reviews(first: 50) {
+    nodes { author { login } }
+  }
   commits(last: 1) {
     nodes {
       commit {
@@ -87,6 +93,14 @@ function transformGraphQLPR(raw: any): PR {
     }]
   }
 
+  // Count non-bot comments
+  const prComments = raw.comments?.nodes ?? []
+  const reviewComments = raw.reviews?.nodes ?? []
+  
+  const humanCommentCount = 
+    prComments.filter((c: any) => !isBot(c?.author?.login ?? "")).length +
+    reviewComments.filter((r: any) => !isBot(r?.author?.login ?? "")).length
+
   return {
     number: raw.number,
     title: raw.title,
@@ -98,7 +112,7 @@ function transformGraphQLPR(raw: any): PR {
     author: { login: raw.author?.login ?? "unknown" },
     reviewDecision: raw.reviewDecision,
     statusCheckRollup,
-    commentCount: raw.totalCommentsCount ?? 0,
+    commentCount: humanCommentCount,
     headRefOid: raw.headRefOid ?? null,
   }
 }
