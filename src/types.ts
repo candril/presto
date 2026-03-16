@@ -40,6 +40,8 @@ export interface PR {
   statusCheckRollup: StatusCheckRollup | null
   /** Number of comments on the PR */
   commentCount: number
+  /** HEAD commit SHA (for detecting new pushes) */
+  headRefOid: string | null
 }
 
 /** Helper to get full repo name from PR URL */

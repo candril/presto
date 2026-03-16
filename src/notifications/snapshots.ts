@@ -32,6 +32,7 @@ export function createSnapshot(pr: PR): PRSnapshot {
     reviewDecision: pr.reviewDecision,
     checkState: computeCheckState(pr.statusCheckRollup),
     commentCount: pr.commentCount,
+    headCommitSha: pr.headRefOid,
     snapshotAt: now,
     seenAt: now,
     hasChanges: false,
@@ -54,6 +55,7 @@ export function updateSnapshot(history: History, pr: PR): History {
         reviewDecision: pr.reviewDecision,
         checkState,
         commentCount: pr.commentCount,
+        headCommitSha: pr.headRefOid,
         snapshotAt: now,
         // Keep existing seenAt, hasChanges, and change info if we have them
         seenAt: existing?.seenAt ?? now,
@@ -132,6 +134,7 @@ export function togglePRUnread(history: History, prKey: string): History {
           reviewDecision: null,
           checkState: "NONE",
           commentCount: 0,
+          headCommitSha: null,
           snapshotAt: now,
           seenAt: now,
           hasChanges: true,

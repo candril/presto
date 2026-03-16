@@ -4,4 +4,10 @@ export {
   getAvailableCommands,
   groupCommands,
   formatCategory,
+  getRepoMergeSettings,
+  getPRMergeState,
+  executeMerge,
+  type MergeMethod,
+  type RepoMergeSettings,
+  type PRMergeState,
 } from "./definitions"

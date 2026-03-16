@@ -72,26 +72,6 @@ export function detectChanges(
       }
     }
 
-    // CI changes (most relevant for my PRs)
-    const checkState = computeCheckState(pr.statusCheckRollup)
-    if (checkState !== snapshot.checkState) {
-      if (checkState === "SUCCESS" && snapshot.checkState !== "SUCCESS") {
-        changes.push({
-          prKey,
-          pr,
-          changeType: "ci_passed",
-          message: "CI passed",
-        })
-      } else if (checkState === "FAILURE" && snapshot.checkState !== "FAILURE") {
-        changes.push({
-          prKey,
-          pr,
-          changeType: "ci_failed",
-          message: "CI failed",
-        })
-      }
-    }
-
     // New comments (for all tracked PRs - you want to know when someone comments on PRs you're watching)
     if (pr.commentCount > snapshot.commentCount) {
       const newCount = pr.commentCount - snapshot.commentCount
@@ -100,6 +80,20 @@ export function detectChanges(
         pr,
         changeType: "new_comments",
         message: `${newCount} new comment${newCount > 1 ? "s" : ""}`,
+      })
+    }
+
+    // New push (HEAD commit changed)
+    if (
+      pr.headRefOid &&
+      snapshot.headCommitSha &&
+      pr.headRefOid !== snapshot.headCommitSha
+    ) {
+      changes.push({
+        prKey,
+        pr,
+        changeType: "new_push",
+        message: "new commits pushed",
       })
     }
   }

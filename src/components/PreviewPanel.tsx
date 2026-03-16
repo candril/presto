@@ -440,14 +440,21 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
             <box flexDirection="column" marginTop={1}>
               <SectionHeader title="Commits" count={preview.commits.length} />
               <box flexDirection="column" paddingLeft={2}>
-                {preview.commits.map((commit) => (
-                  <box key={commit.oid} height={1}>
-                    <text>
-                      <span fg={theme.warning}>{commit.oid}</span>
-                      <span fg={theme.text}> {truncate(commit.message, contentWidth - 11)}</span>
-                    </text>
-                  </box>
-                ))}
+                {[...preview.commits]
+                  .sort((a, b) => new Date(b.committedAt).getTime() - new Date(a.committedAt).getTime())
+                  .map((commit) => {
+                    const timeAgo = formatTimeAgo(commit.committedAt).padStart(3)
+                    const msgWidth = contentWidth - 12 // 3 for time + 1 space + 7 for SHA + 1 space
+                    return (
+                      <box key={commit.oid} height={1}>
+                        <text>
+                          <span fg={theme.textMuted}>{timeAgo} </span>
+                          <span fg={theme.warning}>{commit.oid}</span>
+                          <span fg={theme.text}> {truncate(commit.message, msgWidth)}</span>
+                        </text>
+                      </box>
+                    )
+                  })}
               </box>
             </box>
           )}

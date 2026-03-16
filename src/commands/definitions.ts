@@ -11,6 +11,71 @@ import { prHasChanges, togglePRUnread } from "../notifications"
 import { saveColumnVisibility } from "../cache"
 import { getRepoName, type ColumnId } from "../types"
 
+/** Repo merge settings cache */
+export interface RepoMergeSettings {
+  allowMergeCommit: boolean
+  allowSquashMerge: boolean
+  allowRebaseMerge: boolean
+}
+const repoMergeSettingsCache = new Map<string, RepoMergeSettings>()
+
+/** PR merge state */
+export interface PRMergeState {
+  mergeable: boolean
+  mergeableState: string // "clean", "dirty", "blocked", "behind", "unknown"
+}
+
+/** Fetch PR merge state */
+export async function getPRMergeState(repo: string, number: number): Promise<PRMergeState> {
+  try {
+    const result = await $`gh api repos/${repo}/pulls/${number} --jq '{mergeable: .mergeable, mergeableState: .mergeable_state}'`.json()
+    return result as PRMergeState
+  } catch {
+    return { mergeable: true, mergeableState: "unknown" }
+  }
+}
+
+/** Fetch and cache repo merge settings */
+export async function getRepoMergeSettings(repo: string): Promise<RepoMergeSettings> {
+  const cached = repoMergeSettingsCache.get(repo)
+  if (cached) return cached
+
+  try {
+    const result = await $`gh api repos/${repo} --jq '{allowMergeCommit: .allow_merge_commit, allowSquashMerge: .allow_squash_merge, allowRebaseMerge: .allow_rebase_merge}'`.json()
+    const settings = result as RepoMergeSettings
+    repoMergeSettingsCache.set(repo, settings)
+    return settings
+  } catch {
+    // Default to all allowed if we can't fetch
+    return { allowMergeCommit: true, allowSquashMerge: true, allowRebaseMerge: true }
+  }
+}
+
+export type MergeMethod = "merge" | "squash" | "rebase"
+
+/** Execute the actual merge with selected method */
+export async function executeMerge(
+  pr: { number: number; url: string },
+  repo: string,
+  method: MergeMethod,
+  dispatch: (action: any) => void
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const flag = method === "merge" ? "--merge" : method === "squash" ? "--squash" : "--rebase"
+    const result = await $`gh pr merge ${pr.number} -R ${repo} ${flag}`.quiet()
+    if (result.exitCode !== 0) {
+      return { success: false, message: result.stderr.toString().trim() || "Merge failed" }
+    }
+    // Update UI only on success
+    dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
+    const methodLabel = method === "merge" ? "Merged" : method === "squash" ? "Squash merged" : "Rebase merged"
+    return { success: true, message: `${methodLabel} #${pr.number}` }
+  } catch (e: any) {
+    const stderr = e?.stderr?.toString?.()?.trim() || e?.message || "Merge failed"
+    return { success: false, message: stderr }
+  }
+}
+
 /** Column display names */
 const COLUMN_NAMES: Record<ColumnId, string> = {
   state: "State",
@@ -417,55 +482,17 @@ export const commands: Command[] = [
     label: "Merge PR",
     category: "state",
     requiresPR: true,
-    dangerous: true,
+    dangerous: false, // Uses its own confirmation via merge method dialog
+    // This command triggers a merge method selection dialog
+    // The actual merge method is handled by the dialog
     available: (ctx) =>
       ctx.selectedPR?.state === "OPEN" && !ctx.selectedPR?.isDraft,
     execute: async (ctx) => {
-      const pr = ctx.selectedPR!
-      const repo = getRepoName(pr)
-      // Optimistic update - mark as merged
-      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
-      // API call
-      await $`gh pr merge ${pr.number} -R ${repo} --merge`.quiet()
-      return { type: "success", message: `Merged #${pr.number}` }
+      // This will be handled by the merge dialog - return a special result
+      return { type: "merge_dialog" } as any
     },
   },
-  {
-    id: "state.squash",
-    label: "Squash and merge PR",
-    category: "state",
-    requiresPR: true,
-    dangerous: true,
-    available: (ctx) =>
-      ctx.selectedPR?.state === "OPEN" && !ctx.selectedPR?.isDraft,
-    execute: async (ctx) => {
-      const pr = ctx.selectedPR!
-      const repo = getRepoName(pr)
-      // Optimistic update - mark as merged
-      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
-      // API call
-      await $`gh pr merge ${pr.number} -R ${repo} --squash`.quiet()
-      return { type: "success", message: `Squash merged #${pr.number}` }
-    },
-  },
-  {
-    id: "state.rebase",
-    label: "Rebase and merge PR",
-    category: "state",
-    requiresPR: true,
-    dangerous: true,
-    available: (ctx) =>
-      ctx.selectedPR?.state === "OPEN" && !ctx.selectedPR?.isDraft,
-    execute: async (ctx) => {
-      const pr = ctx.selectedPR!
-      const repo = getRepoName(pr)
-      // Optimistic update - mark as merged
-      ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
-      // API call
-      await $`gh pr merge ${pr.number} -R ${repo} --rebase`.quiet()
-      return { type: "success", message: `Rebase merged #${pr.number}` }
-    },
-  },
+
 
   // Column commands are generated dynamically in getAvailableCommands
 ]

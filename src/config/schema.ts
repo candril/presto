@@ -116,13 +116,13 @@ export const defaultConfig: Config = {
   },
 
   notifications: {
-    desktop: true,
+    desktop: false,
   },
 
   keys: {
     quit: "q",
     help: "?",
-    refresh: "R",
+    refresh: "r",
     search: "/",
     openBrowser: "o",
     openRiff: "r",

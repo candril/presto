@@ -156,6 +156,8 @@ function getChangeIcon(type: ChangeType): string {
       return "→"
     case "new_comments":
       return "◇"
+    case "new_push":
+      return "↑"
     case "manual":
       return "●"
   }
@@ -184,6 +186,8 @@ function getChangeColor(type: ChangeType): string {
     case "review_requested":
       return theme.primary
     case "new_comments":
+      return theme.primary
+    case "new_push":
       return theme.primary
     case "manual":
       return theme.warning

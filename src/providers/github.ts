@@ -21,6 +21,7 @@ const PR_FIELDS = [
   "statusCheckRollup",
   "comments",
   "reviews",
+  "headRefOid",
 ].join(",")
 
 /** Raw PR from GitHub API (comments and reviews are arrays) */

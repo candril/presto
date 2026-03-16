@@ -40,6 +40,7 @@ const PR_FRAGMENT = `
   reviewDecision
   comments { totalCount }
   reviews { totalCount }
+  headRefOid
   commits(last: 1) {
     nodes {
       commit {
@@ -55,13 +56,35 @@ const PR_FRAGMENT = `
 function transformGraphQLPR(raw: any): PR {
   const statusRollup = raw.commits?.nodes?.[0]?.commit?.statusCheckRollup
 
-  // Map GraphQL state to a synthetic check for the list view
+  // Map GraphQL rollup state to a synthetic CheckRun for computeCheckState
+  // The rollup state can be: SUCCESS, FAILURE, PENDING, ERROR, EXPECTED
   let statusCheckRollup: any[] = []
   if (statusRollup?.state) {
+    const rollupState = statusRollup.state
+    // Map to CheckRun format: status=COMPLETED + conclusion
+    let conclusion: string | null = null
+    let status = "COMPLETED"
+    
+    switch (rollupState) {
+      case "SUCCESS":
+        conclusion = "SUCCESS"
+        break
+      case "FAILURE":
+      case "ERROR":
+        conclusion = "FAILURE"
+        break
+      case "PENDING":
+      case "EXPECTED":
+        status = "IN_PROGRESS"
+        conclusion = null
+        break
+    }
+    
     statusCheckRollup = [{
       __typename: "StatusContext",
-      context: "Overall",
-      state: statusRollup.state,
+      name: "Overall",
+      status,
+      conclusion,
     }]
   }
 
@@ -77,6 +100,7 @@ function transformGraphQLPR(raw: any): PR {
     reviewDecision: raw.reviewDecision,
     statusCheckRollup,
     commentCount: (raw.comments?.totalCount ?? 0) + (raw.reviews?.totalCount ?? 0),
+    headRefOid: raw.headRefOid ?? null,
   }
 }
 

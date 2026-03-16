@@ -16,6 +16,7 @@ export type CommandResult =
   | { type: "success"; message?: string }
   | { type: "error"; message: string }
   | { type: "refresh" } // Trigger PR list refresh after state change
+  | { type: "merge_dialog" } // Open merge method selection dialog
 
 /** Context passed to command execute function */
 export interface CommandContext {

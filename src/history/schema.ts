@@ -40,6 +40,7 @@ export interface VisitedRepo {
 /** Types of changes that can be detected */
 export type ChangeType =
   | "new_comments"
+  | "new_push"
   | "approved"
   | "changes_requested"
   | "merged"
@@ -71,6 +72,8 @@ export interface PRSnapshot {
   checkState: string
   /** Total comment count */
   commentCount: number
+  /** HEAD commit SHA (for detecting new pushes) */
+  headCommitSha: string | null
   /** When this snapshot was taken */
   snapshotAt: string // ISO date
   /** When user last "saw" this PR (selected or opened) */
