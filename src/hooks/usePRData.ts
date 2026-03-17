@@ -375,21 +375,14 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       )
     }
 
-    const fetchPromises: Promise<void>[] = []
+    const fetchPromises: Promise<PR[]>[] = []
 
     // Fetch closed PRs if needed
     if (wantsClosed) {
       for (const repo of reposToCheck) {
         if (fetchedClosedRepos.current.has(repo.toLowerCase())) continue
         fetchedClosedRepos.current.add(repo.toLowerCase())
-        
-        fetchPromises.push(
-          listClosedPRs(repo).then((closedPRs) => {
-            if (closedPRs.length > 0) {
-              dispatch({ type: "APPEND_PRS", prs: closedPRs })
-            }
-          }).catch(() => {})
-        )
+        fetchPromises.push(listClosedPRs(repo).catch(() => []))
       }
     }
 
@@ -398,21 +391,18 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       for (const repo of reposToCheck) {
         if (fetchedMergedRepos.current.has(repo.toLowerCase())) continue
         fetchedMergedRepos.current.add(repo.toLowerCase())
-        
-        fetchPromises.push(
-          listMergedPRs(repo).then((mergedPRs) => {
-            if (mergedPRs.length > 0) {
-              dispatch({ type: "APPEND_PRS", prs: mergedPRs })
-            }
-          }).catch(() => {})
-        )
+        fetchPromises.push(listMergedPRs(repo).catch(() => []))
       }
     }
 
     if (fetchPromises.length > 0) {
-      dispatch({ type: "SHOW_MESSAGE", message: "Loading closed/merged PRs..." })
-      Promise.all(fetchPromises).then(() => {
-        dispatch({ type: "CLEAR_MESSAGE" })
+      dispatch({ type: "SET_REFRESHING", refreshing: true })
+      Promise.all(fetchPromises).then((results) => {
+        const allPRs = results.flat()
+        if (allPRs.length > 0) {
+          dispatch({ type: "APPEND_PRS", prs: allPRs })
+        }
+        dispatch({ type: "SET_REFRESHING", refreshing: false })
       })
     }
   }, [filter.states.join(","), filter.repos.join(","), config.repositories])
