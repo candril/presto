@@ -219,12 +219,15 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     debouncedSaveTabs(state.tabs, state.activeTabId)
   }, [state.tabs, state.activeTabId])
 
-  // Tab notification dots - update based on displayed PRs
+  // Tab notification dots - update based on displayed PRs (smart refresh)
   useTabNotifications({
     tabs: state.tabs,
     activeTabId: state.activeTabId,
     filteredPRs,
+    allPRs: state.prs,
     history,
+    config,
+    currentUser,
     dispatch,
   })
 

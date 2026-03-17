@@ -1,6 +1,6 @@
 # Dynamic PR Tabs
 
-**Status**: In Progress (P1 Complete)
+**Status**: In Progress (P1 + P2 Complete)
 
 ## Description
 

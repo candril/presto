@@ -47,6 +47,12 @@ interface MergeDialogState {
   mergeableState: string
 }
 
+/** Rename tab dialog state */
+interface RenameDialogState {
+  currentName: string
+  newName: string
+}
+
 export function CommandPalette({
   visible,
   context,
@@ -60,6 +66,8 @@ export function CommandPalette({
   // Merge dialog state
   const [mergeDialog, setMergeDialog] = useState<MergeDialogState | null>(null)
   const [loadingMergeOptions, setLoadingMergeOptions] = useState(false)
+  // Rename tab dialog state
+  const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null)
 
   // Reset state when opened
   useEffect(() => {
@@ -70,6 +78,7 @@ export function CommandPalette({
       setExecuting(false)
       setMergeDialog(null)
       setLoadingMergeOptions(false)
+      setRenameDialog(null)
     }
   }, [visible])
 
@@ -154,6 +163,19 @@ export function CommandPalette({
         return
       }
       
+      // Handle rename tab dialog
+      if (result.type === "rename_tab") {
+        setExecuting(false)
+        const activeTab = context.tabs.find(t => t.id === context.activeTabId)
+        if (activeTab) {
+          setRenameDialog({
+            currentName: activeTab.titleOverride ?? activeTab.title,
+            newName: activeTab.titleOverride ?? activeTab.title,
+          })
+        }
+        return
+      }
+      
       onClose()
       onResult(result)
     } catch (err) {
@@ -179,6 +201,35 @@ export function CommandPalette({
 
   useKeyboard((key) => {
     if (!visible) return
+
+    // Rename dialog mode
+    if (renameDialog) {
+      if (key.name === "escape") {
+        setRenameDialog(null)
+        onClose()
+      } else if (key.name === "return") {
+        // Save and close
+        const newName = renameDialog.newName.trim()
+        context.dispatch({ 
+          type: "RENAME_TAB", 
+          tabId: context.activeTabId, 
+          title: newName 
+        })
+        setRenameDialog(null)
+        onClose()
+        onResult({ type: "success", message: newName ? `Renamed to "${newName}"` : "Tab name reset" })
+      } else if (key.name === "backspace") {
+        setRenameDialog({ ...renameDialog, newName: renameDialog.newName.slice(0, -1) })
+      } else if (
+        key.sequence &&
+        key.sequence.length === 1 &&
+        !key.ctrl &&
+        !key.meta
+      ) {
+        setRenameDialog({ ...renameDialog, newName: renameDialog.newName + key.sequence })
+      }
+      return
+    }
 
     // Merge dialog mode
     if (mergeDialog) {
@@ -315,6 +366,70 @@ export function CommandPalette({
               <span fg={theme.textMuted}>es / </span>
               <span fg={theme.error}>n</span>
               <span fg={theme.textMuted}>o</span>
+            </text>
+          </box>
+        </box>
+      </box>
+    )
+  }
+
+  // Rename tab dialog view
+  if (renameDialog) {
+    return (
+      <box
+        id="command-palette-overlay"
+        width="100%"
+        height="100%"
+        position="absolute"
+        top={0}
+        left={0}
+      >
+        {/* Dim background */}
+        <box
+          width="100%"
+          height="100%"
+          position="absolute"
+          top={0}
+          left={0}
+          backgroundColor={theme.overlayBg}
+        />
+        {/* Rename dialog */}
+        <box
+          position="absolute"
+          top={2}
+          left="25%"
+          width="50%"
+          flexDirection="column"
+          backgroundColor={theme.modalBg}
+        >
+          {/* Header */}
+          <box
+            flexDirection="row"
+            justifyContent="space-between"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+          >
+            <text fg={theme.primary}>Rename Tab</text>
+            <text fg={theme.textMuted}>esc</text>
+          </box>
+          {/* Input */}
+          <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
+            <text>
+              {renameDialog.newName ? (
+                <span fg={theme.text}>{renameDialog.newName}</span>
+              ) : (
+                <span fg={theme.textMuted}>Enter name (empty to reset)</span>
+              )}
+              <span fg={theme.primary}>_</span>
+            </text>
+          </box>
+          {/* Footer */}
+          <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
+            <text>
+              <span fg={theme.success}>Enter</span>
+              <span fg={theme.textMuted}> to save</span>
             </text>
           </box>
         </box>

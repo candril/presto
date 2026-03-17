@@ -41,11 +41,13 @@ export type AppAction =
   // Tab actions (spec 011)
   | { type: "DUPLICATE_TAB" }
   | { type: "CLOSE_TAB"; tabId: string }
+  | { type: "CLOSE_OTHER_TABS" }
   | { type: "SWITCH_TAB"; tabId: string }
   | { type: "UPDATE_TAB_NOTIFICATION"; tabId: string; hasNotification: boolean }
   | { type: "LOAD_TABS"; tabs: Tab[]; activeTabId: string }
   | { type: "STORE_CLOSED_TAB"; tab: Tab; index: number }
   | { type: "UNDO_CLOSE_TAB" }
+  | { type: "RENAME_TAB"; tabId: string; title: string }
 
 /** Create initial state, loading persisted filter from cache */
 export function createInitialState(): AppState {
@@ -369,6 +371,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         discoveryQuery: tab.filterQuery,
         closedTab: null,
       }
+    }
+
+    case "CLOSE_OTHER_TABS": {
+      // Keep only the active tab
+      const activeTab = state.tabs.find((t: Tab) => t.id === state.activeTabId)
+      if (!activeTab) return state
+
+      return {
+        ...state,
+        tabs: [activeTab],
+        closedTab: null, // Can't undo closing multiple tabs
+      }
+    }
+
+    case "RENAME_TAB": {
+      const tabs = state.tabs.map((t: Tab) =>
+        t.id === action.tabId
+          ? { ...t, titleOverride: action.title || undefined }
+          : t
+      )
+      return { ...state, tabs }
     }
 
     default:

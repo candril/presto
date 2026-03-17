@@ -120,10 +120,20 @@ export function getTabCommands(ctx: CommandContext): Command[] {
       id: "tab.close",
       label: "Close Tab",
       category: "action" as const,
-      shortcut: "t",
+      shortcut: "d",
       execute: async (execCtx: CommandContext) => {
         execCtx.dispatch({ type: "CLOSE_TAB", tabId: execCtx.activeTabId })
         return { type: "success", message: "Tab closed" }
+      },
+    })
+
+    cmds.push({
+      id: "tab.close_others",
+      label: "Close Other Tabs",
+      category: "action" as const,
+      execute: async (execCtx: CommandContext) => {
+        execCtx.dispatch({ type: "CLOSE_OTHER_TABS" })
+        return { type: "success", message: "Closed other tabs" }
       },
     })
   }
@@ -137,6 +147,17 @@ export function getTabCommands(ctx: CommandContext): Command[] {
     execute: async (execCtx: CommandContext) => {
       execCtx.dispatch({ type: "DUPLICATE_TAB" })
       return { type: "success", message: "Tab duplicated" }
+    },
+  })
+
+  // Rename tab
+  cmds.push({
+    id: "tab.rename",
+    label: "Rename Tab",
+    category: "action" as const,
+    execute: async (_execCtx: CommandContext) => {
+      // Return special result to trigger rename dialog
+      return { type: "rename_tab" }
     },
   })
 
