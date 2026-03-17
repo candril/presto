@@ -8,6 +8,7 @@ import { useTerminalDimensions } from "@opentui/react"
 import { useRenderer } from "@opentui/react"
 import { Shell } from "./components/Shell"
 import { Header } from "./components/Header"
+import { TabBar } from "./components/TabBar"
 import { StatusBar } from "./components/StatusBar"
 import { PRList } from "./components/PRList"
 import { PreviewPanel } from "./components/PreviewPanel"
@@ -42,7 +43,9 @@ import {
   useHeaderInfo,
   usePreview,
   useAutoRefresh,
+  useTabNotifications,
 } from "./hooks"
+import { debouncedSaveTabs } from "./tabs"
 import type { FocusCallback } from "./utils/focus-reporting"
 
 interface AppProps {
@@ -171,6 +174,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     terminalHeight,
     showHelp,
     setShowHelp,
+    tabs: state.tabs,
+    activeTabId: state.activeTabId,
   })
 
   // Feature: PR Preview
@@ -209,6 +214,20 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     hiddenCount,
   })
 
+  // Tab persistence - save when tabs change
+  useEffect(() => {
+    debouncedSaveTabs(state.tabs, state.activeTabId)
+  }, [state.tabs, state.activeTabId])
+
+  // Tab notification dots - update based on displayed PRs
+  useTabNotifications({
+    tabs: state.tabs,
+    activeTabId: state.activeTabId,
+    filteredPRs,
+    history,
+    dispatch,
+  })
+
   // Command palette context
   const commandContext: CommandContext = {
     selectedPR,
@@ -220,6 +239,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     fetchPRs,
     setShowHelp,
     columnVisibility: state.columnVisibility,
+    tabs: state.tabs,
+    activeTabId: state.activeTabId,
   }
 
   // Handle command palette results
@@ -241,6 +262,12 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
         right={headerRight}
         lastRefresh={state.lastRefresh}
         isStale={isStale}
+      />
+      <TabBar
+        tabs={state.tabs}
+        activeTabId={state.activeTabId}
+        onTabChange={(tabId) => dispatch({ type: "SWITCH_TAB", tabId })}
+        repositories={config.repositories}
       />
 
       {/* Main content area */}
@@ -266,7 +293,23 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
               <text fg={theme.textDim}>Press {config.keys.refresh} to retry</text>
             </box>
           ) : (
-            <PRList prs={filteredPRs} selectedIndex={state.selectedIndex} columnVisibility={state.columnVisibility} previewPosition={state.previewPosition} history={history} />
+            <PRList 
+              prs={filteredPRs} 
+              selectedIndex={state.selectedIndex} 
+              columnVisibility={state.columnVisibility} 
+              previewPosition={state.previewPosition} 
+              history={history}
+              emptyMessage={
+                filter.starred && history.starredAuthors.length === 0
+                  ? "No starred authors"
+                  : undefined
+              }
+              emptyHint={
+                filter.starred && history.starredAuthors.length === 0
+                  ? "Press 's' on a PR to star its author"
+                  : undefined
+              }
+            />
           )}
 
           {/* Suggestions popup - anchored to bottom of content area */}

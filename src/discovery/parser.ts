@@ -11,11 +11,14 @@
 import type { PR } from "../types"
 
 export interface ParsedFilter {
-  authors: string[]      // @username entries
-  repos: string[]        // repo:name entries
-  states: string[]       // state:open entries
-  text: string           // Remaining text for title search
-  showAll: boolean       // * modifier - bypass starred-only filter
+  authors: string[]         // @username entries
+  excludeAuthors: string[]  // -@username entries
+  repos: string[]           // repo:name entries
+  excludeRepos: string[]    // -repo:name entries
+  states: string[]          // state:open entries
+  excludeStates: string[]   // -state:draft entries
+  text: string              // Remaining text for title search
+  showAll: boolean          // * modifier - bypass starred-only filter
   prRef: { repo?: string; number: number } | null  // Direct PR reference (URL, #123, etc.)
   // Special filters (spec 015)
   marked: boolean        // marked: - show only marked PRs
@@ -25,8 +28,11 @@ export interface ParsedFilter {
 
 export const emptyFilter: ParsedFilter = {
   authors: [],
+  excludeAuthors: [],
   repos: [],
+  excludeRepos: [],
   states: [],
+  excludeStates: [],
   text: "",
   showAll: false,
   prRef: null,
@@ -39,8 +45,11 @@ export const emptyFilter: ParsedFilter = {
 export function isFilterActive(filter: ParsedFilter): boolean {
   return (
     filter.authors.length > 0 ||
+    filter.excludeAuthors.length > 0 ||
     filter.repos.length > 0 ||
+    filter.excludeRepos.length > 0 ||
     filter.states.length > 0 ||
+    filter.excludeStates.length > 0 ||
     filter.text.length > 0 ||
     filter.showAll ||
     filter.prRef !== null ||
@@ -54,8 +63,11 @@ export function isFilterActive(filter: ParsedFilter): boolean {
 export function parseFilter(query: string): ParsedFilter {
   const result: ParsedFilter = {
     authors: [],
+    excludeAuthors: [],
     repos: [],
+    excludeRepos: [],
     states: [],
+    excludeStates: [],
     text: "",
     showAll: false,
     prRef: null,
@@ -84,10 +96,16 @@ export function parseFilter(query: string): ParsedFilter {
       result.recent = true
     } else if (lower === ">starred") {
       result.starred = true
+    } else if (token.startsWith("-@")) {
+      result.excludeAuthors.push(token.slice(2).toLowerCase())
     } else if (token.startsWith("@")) {
       result.authors.push(token.slice(1).toLowerCase())
+    } else if (token.startsWith("-repo:")) {
+      result.excludeRepos.push(token.slice(6).toLowerCase())
     } else if (token.startsWith("repo:")) {
       result.repos.push(token.slice(5).toLowerCase())
+    } else if (token.startsWith("-state:")) {
+      result.excludeStates.push(token.slice(7).toLowerCase())
     } else if (token.startsWith("state:")) {
       result.states.push(token.slice(6).toLowerCase())
     } else {
@@ -118,46 +136,65 @@ export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
   }
 
   return prs.filter((pr) => {
-    // Author filter
+    const prAuthor = pr.author.login.toLowerCase()
+    const prRepo = getRepoName(pr).toLowerCase()
+
+    // Author inclusion filter
     if (filter.authors.length > 0) {
-      const prAuthor = pr.author.login.toLowerCase()
       if (!filter.authors.includes(prAuthor)) return false
     }
 
-    // Repo filter
+    // Author exclusion filter
+    if (filter.excludeAuthors.length > 0) {
+      if (filter.excludeAuthors.includes(prAuthor)) return false
+    }
+
+    // Repo inclusion filter
     if (filter.repos.length > 0) {
-      const prRepo = getRepoName(pr).toLowerCase()
       if (!filter.repos.some((r) => prRepo.includes(r))) return false
     }
 
-    // State filter (P2 but parsing is ready)
+    // Repo exclusion filter
+    if (filter.excludeRepos.length > 0) {
+      if (filter.excludeRepos.some((r) => prRepo.includes(r))) return false
+    }
+
+    // State inclusion filter
     if (filter.states.length > 0) {
-      const matches = filter.states.some((state) => {
-        switch (state) {
-          case "open":
-            return pr.state === "OPEN" && !pr.isDraft
-          case "closed":
-            return pr.state === "CLOSED"
-          case "merged":
-            return pr.state === "MERGED"
-          case "draft":
-            return pr.isDraft
-          default:
-            return false
-        }
-      })
+      const matches = filter.states.some((state) => matchesState(pr, state))
       if (!matches) return false
+    }
+
+    // State exclusion filter
+    if (filter.excludeStates.length > 0) {
+      const excluded = filter.excludeStates.some((state) => matchesState(pr, state))
+      if (excluded) return false
     }
 
     // Text search in title, author, and repo
     if (filter.text) {
-      const repoName = getRepoName(pr)
-      const searchable = `${pr.title} ${pr.author.login} ${repoName}`.toLowerCase()
+      const searchable = `${pr.title} ${pr.author.login} ${prRepo}`.toLowerCase()
       if (!searchable.includes(filter.text)) return false
     }
 
     return true
   })
+}
+
+/** Check if a PR matches a state filter */
+function matchesState(pr: PR, state: string): boolean {
+  switch (state) {
+    case "open":
+      return pr.state === "OPEN" && !pr.isDraft
+    case "closed":
+      return pr.state === "CLOSED"
+    case "merged":
+      return pr.state === "MERGED"
+    case "draft":
+      return pr.isDraft
+    default:
+      return false
+  }
 }
 
 /** Parse PR reference patterns like #123, repo#123, owner/repo#123, or GitHub URLs */

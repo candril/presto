@@ -49,13 +49,30 @@ function transformPRs(raws: RawPR[]): PR[] {
 
 /**
  * List PRs from a specific repo or current repo
+ * @param repo - Repository name (owner/repo)
+ * @param state - PR state: "open" (default), "closed", "merged", or "all"
  */
-export async function listPRs(repo?: string): Promise<PR[]> {
+export async function listPRs(repo?: string, state: "open" | "closed" | "merged" | "all" = "open"): Promise<PR[]> {
   const args = ["pr", "list", "--json", PR_FIELDS, "--limit", "50"]
   if (repo) args.push("-R", repo)
+  if (state !== "open") args.push("--state", state)
 
   const result = await $`gh ${args}`.json()
   return transformPRs(result as RawPR[])
+}
+
+/**
+ * List closed PRs from a repo
+ */
+export async function listClosedPRs(repo: string): Promise<PR[]> {
+  return listPRs(repo, "closed")
+}
+
+/**
+ * List merged PRs from a repo
+ */
+export async function listMergedPRs(repo: string): Promise<PR[]> {
+  return listPRs(repo, "merged")
 }
 
 /**

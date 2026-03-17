@@ -1,6 +1,6 @@
 # Dynamic PR Tabs
 
-**Status**: Draft
+**Status**: In Progress (P1 Complete)
 
 ## Description
 
@@ -17,11 +17,13 @@ Tabs are saved views created on-the-fly. Press `t` to open a new tab with defaul
 
 - **Tab creation**: `t` duplicates current tab (copies filter state)
 - **Tab bar visibility**: Only shown when >1 tab exists
-- **Tab switching**: Number keys `1-9` switch to tab N
+- **Tab switching**: Number keys `1-9` switch to tab N, `[`/`]` for prev/next
 - **Independent filters**: Each tab has its own filter/search state
 - **Smart titles**: Tab title derived from filter (e.g., "author:alice draft:true" → "Alice's Drafts")
-- **Tab closing**: Ctrl-p action to close current tab (can't close last tab)
-- **Notification dot**: Show dot on tab if any PR in that tab's list has unread activity
+- **Tab closing**: `d` closes current tab (can't close last tab)
+- **Tab undo**: `u` restores last closed tab
+- **Selection per tab**: Each tab remembers its selected PR index
+- **Notification dot**: Show `*` on tab if any PR in that tab's list has unread activity
 - **Tab persistence**: Tabs saved to disk, restored on app launch
 
 ### P2 - Should Have
@@ -491,10 +493,11 @@ export const initialState: AppState = {
 2. **Filter**: User applies filter (author:alice), title updates to "Alice's PRs"
 3. **Duplicate**: User presses `t`, tab duplicated with same filter, tab bar appears
 4. **Modify**: User changes filter on new tab, title updates independently
-5. **Switch**: User presses `1` to go back to first tab, `2` for second
-6. **Close**: User opens Ctrl-p, selects "Close Tab", switches to adjacent tab
-7. **Notification**: Background refresh marks tabs with unread activity dots
-8. **Quit**: Tabs automatically saved, restored on next launch
+5. **Switch**: User presses `1` to go back to first tab, `2` for second, or `[`/`]` to cycle
+6. **Close**: User presses `d` to close tab, switches to adjacent tab
+7. **Undo**: User presses `u` to restore the closed tab
+8. **Notification**: Background refresh marks tabs with unread activity `*`
+9. **Quit**: Tabs automatically saved (including selection per tab), restored on next launch
 
 ## File Structure
 

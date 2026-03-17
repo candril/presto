@@ -110,6 +110,39 @@ export function getColumnCommands(ctx: CommandContext): Command[] {
   }))
 }
 
+/** Get tab commands based on current context */
+export function getTabCommands(ctx: CommandContext): Command[] {
+  const cmds: Command[] = []
+
+  // Close tab - only if more than one tab
+  if (ctx.tabs.length > 1) {
+    cmds.push({
+      id: "tab.close",
+      label: "Close Tab",
+      category: "action" as const,
+      shortcut: "t",
+      execute: async (execCtx: CommandContext) => {
+        execCtx.dispatch({ type: "CLOSE_TAB", tabId: execCtx.activeTabId })
+        return { type: "success", message: "Tab closed" }
+      },
+    })
+  }
+
+  // New tab (duplicate current)
+  cmds.push({
+    id: "tab.duplicate",
+    label: "Duplicate Tab",
+    category: "action" as const,
+    shortcut: "t",
+    execute: async (execCtx: CommandContext) => {
+      execCtx.dispatch({ type: "DUPLICATE_TAB" })
+      return { type: "success", message: "Tab duplicated" }
+    },
+  })
+
+  return cmds
+}
+
 /** All available commands */
 export const commands: Command[] = [
   // ============================================================================
@@ -507,7 +540,8 @@ export function getAvailableCommands(ctx: CommandContext): Command[] {
     return true
   })
   // Add dynamic column commands with current visibility state
-  return [...filtered, ...getColumnCommands(ctx)]
+  // Add tab commands
+  return [...filtered, ...getColumnCommands(ctx), ...getTabCommands(ctx)]
 }
 
 /** Group commands by category */

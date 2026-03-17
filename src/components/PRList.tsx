@@ -66,12 +66,16 @@ interface PRListProps {
   columnVisibility: ColumnVisibility
   previewPosition: "right" | "bottom" | null
   history: History
+  /** Custom message when list is empty */
+  emptyMessage?: string
+  /** Secondary hint when list is empty */
+  emptyHint?: string
 }
 
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, emptyMessage, emptyHint }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
 
@@ -96,8 +100,9 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
 
   if (prs.length === 0) {
     return (
-      <box flexGrow={1} justifyContent="center" alignItems="center">
-        <text fg={theme.textDim}>No pull requests found</text>
+      <box flexGrow={1} justifyContent="center" alignItems="center" flexDirection="column">
+        <text fg={theme.textDim}>{emptyMessage ?? "No pull requests found"}</text>
+        {emptyHint && <text fg={theme.textMuted}>{emptyHint}</text>}
       </box>
     )
   }

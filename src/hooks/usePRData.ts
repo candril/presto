@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useCallback, useRef } from "react"
-import { listPRs, listPRsFromRepos, getPR, getPRsBulk } from "../providers/github"
+import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs } from "../providers/github"
 import { loadCache, saveCache, isCacheValidForRepos } from "../cache"
 import { recordPRView, saveHistory, type History } from "../history"
 import type { Config } from "../config"
@@ -350,6 +350,72 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       dispatch({ type: "SHOW_MESSAGE", message: "Failed to load PRs" })
     })
   }, [filter.repos.join(",")])
+
+  // Track which repos have had closed/merged PRs fetched
+  const fetchedClosedRepos = useRef<Set<string>>(new Set())
+  const fetchedMergedRepos = useRef<Set<string>>(new Set())
+
+  // Fetch closed/merged PRs when state:closed or state:merged filter is active
+  useEffect(() => {
+    const wantsClosed = filter.states.includes("closed")
+    const wantsMerged = filter.states.includes("merged")
+    
+    if (!wantsClosed && !wantsMerged) return
+
+    // Get repos to fetch from - either filtered repos or enabled repos
+    const enabledRepos = config.repositories
+      .filter((r) => !r.disabled)
+      .map((r) => r.name)
+    
+    // If repo filter is active, only fetch those repos
+    let reposToCheck = enabledRepos
+    if (filter.repos.length > 0) {
+      reposToCheck = enabledRepos.filter((repo) =>
+        filter.repos.some((f) => repo.toLowerCase().includes(f))
+      )
+    }
+
+    const fetchPromises: Promise<void>[] = []
+
+    // Fetch closed PRs if needed
+    if (wantsClosed) {
+      for (const repo of reposToCheck) {
+        if (fetchedClosedRepos.current.has(repo.toLowerCase())) continue
+        fetchedClosedRepos.current.add(repo.toLowerCase())
+        
+        fetchPromises.push(
+          listClosedPRs(repo).then((closedPRs) => {
+            if (closedPRs.length > 0) {
+              dispatch({ type: "APPEND_PRS", prs: closedPRs })
+            }
+          }).catch(() => {})
+        )
+      }
+    }
+
+    // Fetch merged PRs if needed
+    if (wantsMerged) {
+      for (const repo of reposToCheck) {
+        if (fetchedMergedRepos.current.has(repo.toLowerCase())) continue
+        fetchedMergedRepos.current.add(repo.toLowerCase())
+        
+        fetchPromises.push(
+          listMergedPRs(repo).then((mergedPRs) => {
+            if (mergedPRs.length > 0) {
+              dispatch({ type: "APPEND_PRS", prs: mergedPRs })
+            }
+          }).catch(() => {})
+        )
+      }
+    }
+
+    if (fetchPromises.length > 0) {
+      dispatch({ type: "SHOW_MESSAGE", message: "Loading closed/merged PRs..." })
+      Promise.all(fetchPromises).then(() => {
+        dispatch({ type: "CLEAR_MESSAGE" })
+      })
+    }
+  }, [filter.states.join(","), filter.repos.join(","), config.repositories])
 
   return { fetchPRs }
 }

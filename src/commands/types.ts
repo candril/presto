@@ -3,7 +3,7 @@
  */
 
 import type { CliRenderer } from "@opentui/core"
-import type { PR, ColumnVisibility } from "../types"
+import type { PR, ColumnVisibility, Tab } from "../types"
 import type { Config } from "../config"
 import type { History } from "../history"
 import type { AppAction } from "../state"
@@ -29,6 +29,9 @@ export interface CommandContext {
   fetchPRs: (showAsRefresh?: boolean) => void
   setShowHelp: (show: boolean) => void
   columnVisibility: ColumnVisibility
+  // Tab state (spec 011)
+  tabs: Tab[]
+  activeTabId: string
 }
 
 /** Command definition */

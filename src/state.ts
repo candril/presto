@@ -2,8 +2,9 @@
  * Application state management
  */
 
-import type { AppState, PR, View, PreviewPosition, ColumnId } from "./types"
+import type { AppState, PR, View, PreviewPosition, ColumnId, Tab } from "./types"
 import { loadCache, getColumnVisibility } from "./cache"
+import { getInitialTabsState, duplicateTab, generateTabTitle } from "./tabs"
 
 /** Action types for the reducer */
 export type AppAction =
@@ -37,10 +38,24 @@ export type AppAction =
   | { type: "REMOVE_PR"; url: string }
   // Column visibility
   | { type: "TOGGLE_COLUMN"; column: ColumnId }
+  // Tab actions (spec 011)
+  | { type: "DUPLICATE_TAB" }
+  | { type: "CLOSE_TAB"; tabId: string }
+  | { type: "SWITCH_TAB"; tabId: string }
+  | { type: "UPDATE_TAB_NOTIFICATION"; tabId: string; hasNotification: boolean }
+  | { type: "LOAD_TABS"; tabs: Tab[]; activeTabId: string }
+  | { type: "STORE_CLOSED_TAB"; tab: Tab; index: number }
+  | { type: "UNDO_CLOSE_TAB" }
 
 /** Create initial state, loading persisted filter from cache */
 export function createInitialState(): AppState {
   const cache = loadCache()
+  const tabsState = getInitialTabsState()
+  
+  // Use filter from active tab if available, otherwise from cache
+  const activeTab = tabsState.tabs.find((t: Tab) => t.id === tabsState.activeTabId)
+  const filterQuery = activeTab?.filterQuery ?? cache.filterQuery ?? ""
+  
   return {
     view: "list",
     prs: [],
@@ -50,7 +65,7 @@ export function createInitialState(): AppState {
     lastRefresh: null,
     error: null,
     discoveryVisible: false,
-    discoveryQuery: cache.filterQuery || "",
+    discoveryQuery: filterQuery,
     message: null,
     // Preview state (spec 014)
     previewPosition: null,
@@ -61,6 +76,10 @@ export function createInitialState(): AppState {
     commandPaletteVisible: false,
     // Column visibility (persisted)
     columnVisibility: getColumnVisibility(),
+    // Tab state (spec 011)
+    tabs: tabsState.tabs,
+    activeTabId: tabsState.activeTabId,
+    closedTab: null,
   }
 }
 
@@ -141,11 +160,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         // Keep the query - filter stays active
       }
 
-    case "SET_DISCOVERY_QUERY":
+    case "SET_DISCOVERY_QUERY": {
+      // Update both the global query and the current tab's filter
+      // Note: title is computed at render time with config for alias lookup
+      const tabs = state.tabs.map((t: Tab) =>
+        t.id === state.activeTabId
+          ? { ...t, filterQuery: action.query }
+          : t
+      )
       return {
         ...state,
         discoveryQuery: action.query,
+        tabs,
       }
+    }
 
     case "SHOW_MESSAGE":
       return {
@@ -235,6 +263,112 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         [action.column]: !state.columnVisibility[action.column],
       }
       return { ...state, columnVisibility }
+    }
+
+    // Tab actions (spec 011)
+    case "DUPLICATE_TAB": {
+      const currentTab = state.tabs.find((t: Tab) => t.id === state.activeTabId)
+      if (!currentTab) return state
+
+      const newTab = duplicateTab(currentTab)
+      return {
+        ...state,
+        tabs: [...state.tabs, newTab],
+        activeTabId: newTab.id,
+      }
+    }
+
+    case "CLOSE_TAB": {
+      // Can't close last tab
+      if (state.tabs.length <= 1) return state
+
+      const closingIndex = state.tabs.findIndex((t: Tab) => t.id === action.tabId)
+      const newTabs = state.tabs.filter((t: Tab) => t.id !== action.tabId)
+      const needNewActive = state.activeTabId === action.tabId
+
+      // Switch to adjacent tab (prefer left, fallback to first)
+      let newActiveId = state.activeTabId
+      if (needNewActive) {
+        const newIndex = Math.min(closingIndex, newTabs.length - 1)
+        newActiveId = newTabs[newIndex].id
+      }
+
+      // Load the new active tab's filter and selection
+      const newActiveTab = newTabs.find((t: Tab) => t.id === newActiveId)
+
+      return {
+        ...state,
+        tabs: newTabs,
+        activeTabId: newActiveId,
+        discoveryQuery: newActiveTab?.filterQuery ?? "",
+        selectedIndex: newActiveTab?.selectedIndex ?? 0,
+      }
+    }
+
+    case "SWITCH_TAB": {
+      const tab = state.tabs.find((t: Tab) => t.id === action.tabId)
+      if (!tab || tab.id === state.activeTabId) return state
+
+      // Save current tab's selection before switching
+      const tabs = state.tabs.map((t: Tab) =>
+        t.id === state.activeTabId
+          ? { ...t, selectedIndex: state.selectedIndex }
+          : t
+      )
+
+      return {
+        ...state,
+        tabs,
+        activeTabId: action.tabId,
+        discoveryQuery: tab.filterQuery,
+        selectedIndex: tab.selectedIndex,
+      }
+    }
+
+    case "UPDATE_TAB_NOTIFICATION": {
+      const tabs = state.tabs.map((t: Tab) =>
+        t.id === action.tabId ? { ...t, hasNotification: action.hasNotification } : t
+      )
+      return { ...state, tabs }
+    }
+
+    case "LOAD_TABS": {
+      const activeTab = action.tabs.find((t: Tab) => t.id === action.activeTabId)
+      return {
+        ...state,
+        tabs: action.tabs,
+        activeTabId: action.activeTabId,
+        discoveryQuery: activeTab?.filterQuery ?? "",
+        selectedIndex: activeTab?.selectedIndex ?? 0,
+      }
+    }
+
+    case "STORE_CLOSED_TAB": {
+      return {
+        ...state,
+        closedTab: { tab: action.tab, index: action.index },
+      }
+    }
+
+    case "UNDO_CLOSE_TAB": {
+      if (!state.closedTab) return state
+
+      const { tab, index } = state.closedTab
+      // Insert tab back at original position (or end if out of bounds)
+      const insertIndex = Math.min(index, state.tabs.length)
+      const newTabs = [
+        ...state.tabs.slice(0, insertIndex),
+        tab,
+        ...state.tabs.slice(insertIndex),
+      ]
+
+      return {
+        ...state,
+        tabs: newTabs,
+        activeTabId: tab.id,
+        discoveryQuery: tab.filterQuery,
+        closedTab: null,
+      }
     }
 
     default:

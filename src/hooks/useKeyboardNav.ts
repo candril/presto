@@ -19,7 +19,7 @@ import {
 import { markPRSeen } from "../notifications"
 import { isFilterActive, type ParsedFilter } from "../discovery"
 import type { Config } from "../config"
-import type { PR, PreviewPosition } from "../types"
+import type { PR, PreviewPosition, Tab } from "../types"
 import { getRepoName } from "../types"
 
 export interface UseKeyboardNavOptions {
@@ -37,6 +37,9 @@ export interface UseKeyboardNavOptions {
   terminalHeight: number
   showHelp: boolean
   setShowHelp: (show: boolean) => void
+  // Tab state (spec 011)
+  tabs: Tab[]
+  activeTabId: string
 }
 
 export function useKeyboardNav({
@@ -54,6 +57,8 @@ export function useKeyboardNav({
   terminalHeight,
   showHelp,
   setShowHelp,
+  tabs,
+  activeTabId,
 }: UseKeyboardNavOptions) {
   const renderer = useRenderer()
 
@@ -83,6 +88,53 @@ export function useKeyboardNav({
     // Open command palette with Ctrl-p
     if (key.ctrl && key.name === "p") {
       dispatch({ type: "OPEN_COMMAND_PALETTE" })
+      return
+    }
+
+    // Tab shortcuts (spec 011)
+    // 't' to duplicate current tab
+    if (key.name === "t" && !key.shift && !key.ctrl) {
+      dispatch({ type: "DUPLICATE_TAB" })
+      dispatch({ type: "SHOW_MESSAGE", message: "Tab duplicated" })
+      return
+    }
+
+    // 'd' to close current tab (if more than one)
+    if (key.name === "d" && !key.shift && !key.ctrl && tabs.length > 1) {
+      const currentIndex = tabs.findIndex(t => t.id === activeTabId)
+      const currentTab = tabs[currentIndex]
+      dispatch({ type: "CLOSE_TAB", tabId: activeTabId })
+      dispatch({ type: "SHOW_MESSAGE", message: `Closed "${currentTab?.title}"` })
+      // Store for undo
+      dispatch({ type: "STORE_CLOSED_TAB", tab: currentTab, index: currentIndex })
+      return
+    }
+
+    // 'u' to undo last closed tab
+    if (key.name === "u" && !key.shift && !key.ctrl) {
+      dispatch({ type: "UNDO_CLOSE_TAB" })
+      return
+    }
+
+    // '[' and ']' to navigate between tabs
+    if (key.name === "[" && tabs.length > 1) {
+      const currentIndex = tabs.findIndex(t => t.id === activeTabId)
+      const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
+      dispatch({ type: "SWITCH_TAB", tabId: tabs[prevIndex].id })
+      return
+    }
+    if (key.name === "]" && tabs.length > 1) {
+      const currentIndex = tabs.findIndex(t => t.id === activeTabId)
+      const nextIndex = (currentIndex + 1) % tabs.length
+      dispatch({ type: "SWITCH_TAB", tabId: tabs[nextIndex].id })
+      return
+    }
+
+    // Number keys 1-9 to switch tabs
+    const numKey = parseInt(key.name, 10)
+    if (!isNaN(numKey) && numKey >= 1 && numKey <= 9 && numKey <= tabs.length) {
+      const targetTab = tabs[numKey - 1]
+      dispatch({ type: "SWITCH_TAB", tabId: targetTab.id })
       return
     }
 

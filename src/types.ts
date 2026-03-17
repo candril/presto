@@ -229,6 +229,10 @@ export function computeCheckState(checks: StatusCheckRollup | null): CheckState 
   return hasSuccess ? "SUCCESS" : "NONE"
 }
 
+// Tab types (re-exported from tabs module)
+import type { Tab } from "./tabs/types"
+export type { Tab }
+
 /**
  * Application state
  */
@@ -267,4 +271,12 @@ export interface AppState {
   // Column visibility
   /** Which columns are visible in the PR list */
   columnVisibility: ColumnVisibility
+
+  // Tab state (spec 011)
+  /** All tabs */
+  tabs: Tab[]
+  /** Currently active tab ID */
+  activeTabId: string
+  /** Last closed tab for undo */
+  closedTab: { tab: Tab; index: number } | null
 }

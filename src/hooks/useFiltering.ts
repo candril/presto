@@ -151,13 +151,33 @@ export function useFiltering({
       return { filteredPRs: recentPRs, hiddenCount: 0 }
     }
 
-    // >starred - show PRs from starred authors only (bypasses starredOnly repo setting)
+    // >starred - apply starred-only filter on top of other filters
+    // This is a modifier, not a standalone filter:
+    // - `>starred` alone = all PRs from starred authors
+    // - `repo:a >starred` = PRs from repo:a, but only starred authors
     if (filter.starred) {
-      let result = prs.filter((pr) => 
+      // Use normal filtering flow, but force starred-only at the end
+      const enabledRepoNames = new Set(
+        config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
+      )
+      const hasRepoFilter = filter.repos.length > 0
+      
+      // Filter to enabled repos (or repos matching explicit repo: filter)
+      let result = prs.filter((pr) => {
+        const repoName = getRepoName(pr).toLowerCase()
+        if (enabledRepoNames.has(repoName)) return true
+        if (hasRepoFilter && filter.repos.some((r) => repoName.includes(r))) return true
+        return false
+      })
+      
+      // Apply other filters first (repo:, state:, text search, etc.)
+      result = applyFilter(result, { ...filter, starred: false })
+      
+      // Then filter to starred authors only (this is what >starred does)
+      result = result.filter((pr) => 
         history.starredAuthors.includes(pr.author.login)
       )
-      // Apply other filters on top (including repo: filter)
-      result = applyFilter(result, { ...filter, starred: false })
+      
       return { filteredPRs: result, hiddenCount: 0 }
     }
 
