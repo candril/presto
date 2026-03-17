@@ -38,13 +38,13 @@ function prHasUnread(pr: PR, history: History): boolean {
 
 /**
  * Apply a tab's filter to PRs (simplified version for notification checking)
- * This doesn't include repo config or starred-only logic, but is good enough
- * for checking if a tab has any notifications.
+ * This includes repo config filtering to match what the user actually sees.
  */
 function applyTabFilter(
   prs: PR[], 
   filterQuery: string, 
   history: History,
+  config: Config,
   currentUser: string | null
 ): PR[] {
   const filter = parseFilter(filterQuery)
@@ -54,7 +54,7 @@ function applyTabFilter(
     filter.authors = filter.authors.map(a => a === "me" ? currentUser.toLowerCase() : a)
   }
   
-  // Handle special filters
+  // Handle special filters (these bypass repo config)
   if (filter.marked) {
     return prs.filter(pr => {
       const prKey = getPRKey(getRepoName(pr), pr.number)
@@ -70,12 +70,30 @@ function applyTabFilter(
     })
   }
   
+  // First, filter to enabled repos (unless there's an explicit repo filter)
+  const enabledRepoNames = new Set(
+    config.repositories.filter(r => !r.disabled).map(r => r.name.toLowerCase())
+  )
+  const hasRepoFilter = filter.repos.length > 0
+  
+  let filtered = prs.filter(pr => {
+    const repoName = getRepoName(pr).toLowerCase()
+    // Always allow if repo is in enabled config
+    if (enabledRepoNames.has(repoName)) return true
+    // Allow if there's a repo filter and this PR matches it
+    if (hasRepoFilter && filter.repos.some(r => repoName.includes(r))) return true
+    return false
+  })
+  
+  // Apply the filter
+  filtered = applyFilter(filtered, filter)
+  
+  // Handle starred filter on top
   if (filter.starred) {
-    let result = applyFilter(prs, { ...filter, starred: false })
-    return result.filter(pr => history.starredAuthors.includes(pr.author.login))
+    filtered = filtered.filter(pr => history.starredAuthors.includes(pr.author.login))
   }
   
-  return applyFilter(prs, filter)
+  return filtered
 }
 
 /**
@@ -101,13 +119,13 @@ export function useTabNotifications({
         result[tab.id] = filteredPRs.some(pr => prHasUnread(pr, history))
       } else {
         // For inactive tabs, apply simplified filter
-        const tabPRs = applyTabFilter(allPRs, tab.filterQuery, history, currentUser)
+        const tabPRs = applyTabFilter(allPRs, tab.filterQuery, history, config, currentUser)
         result[tab.id] = tabPRs.some(pr => prHasUnread(pr, history))
       }
     }
     
     return result
-  }, [tabs, activeTabId, filteredPRs, allPRs, history, currentUser])
+  }, [tabs, activeTabId, filteredPRs, allPRs, history, config, currentUser])
 
   // Update tabs with changed notification state
   useEffect(() => {

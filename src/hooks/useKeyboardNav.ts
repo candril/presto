@@ -21,6 +21,7 @@ import { isFilterActive, type ParsedFilter } from "../discovery"
 import type { Config } from "../config"
 import type { PR, PreviewPosition, Tab } from "../types"
 import { getRepoName } from "../types"
+import { useKeybindings } from "../keybindings"
 
 export interface UseKeyboardNavOptions {
   config: Config
@@ -61,6 +62,7 @@ export function useKeyboardNav({
   activeTabId,
 }: UseKeyboardNavOptions) {
   const renderer = useRenderer()
+  const keys = useKeybindings(config)
 
   useKeyboard((key) => {
     // Command palette is open - let it handle its own keys
@@ -69,12 +71,13 @@ export function useKeyboardNav({
     }
 
     // Help overlay - ? toggles, Esc closes
-    if (key.name === "?" || (key.name === "/" && key.shift)) {
+    if (keys.matches(key, "ui.help")) {
       setShowHelp(!showHelp)
       return
     }
     if (showHelp) {
-      if (key.name === "escape") {
+      // Close help with Escape or any navigation key
+      if (key.name === "escape" || key.name === "q") {
         setShowHelp(false)
       }
       return
@@ -85,22 +88,22 @@ export function useKeyboardNav({
       return
     }
 
-    // Open command palette with Ctrl-p
-    if (key.ctrl && key.name === "p") {
+    // Open command palette
+    if (keys.matches(key, "ui.commandPalette")) {
       dispatch({ type: "OPEN_COMMAND_PALETTE" })
       return
     }
 
     // Tab shortcuts (spec 011)
-    // 't' to duplicate current tab
-    if (key.name === "t" && !key.shift && !key.ctrl) {
+    // New tab (duplicate current)
+    if (keys.matches(key, "tab.new")) {
       dispatch({ type: "DUPLICATE_TAB" })
       dispatch({ type: "SHOW_MESSAGE", message: "Tab duplicated" })
       return
     }
 
-    // 'd' to close current tab (if more than one)
-    if (key.name === "d" && !key.shift && !key.ctrl && tabs.length > 1) {
+    // Close current tab (if more than one)
+    if (keys.matches(key, "tab.close") && tabs.length > 1) {
       const currentIndex = tabs.findIndex(t => t.id === activeTabId)
       const currentTab = tabs[currentIndex]
       dispatch({ type: "CLOSE_TAB", tabId: activeTabId })
@@ -110,20 +113,20 @@ export function useKeyboardNav({
       return
     }
 
-    // 'u' to undo last closed tab
-    if (key.name === "u" && !key.shift && !key.ctrl) {
+    // Undo last closed tab
+    if (keys.matches(key, "tab.undo")) {
       dispatch({ type: "UNDO_CLOSE_TAB" })
       return
     }
 
-    // '[' and ']' to navigate between tabs
-    if (key.name === "[" && tabs.length > 1) {
+    // Navigate between tabs
+    if (keys.matches(key, "tab.prev") && tabs.length > 1) {
       const currentIndex = tabs.findIndex(t => t.id === activeTabId)
       const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
       dispatch({ type: "SWITCH_TAB", tabId: tabs[prevIndex].id })
       return
     }
-    if (key.name === "]" && tabs.length > 1) {
+    if (keys.matches(key, "tab.next") && tabs.length > 1) {
       const currentIndex = tabs.findIndex(t => t.id === activeTabId)
       const nextIndex = (currentIndex + 1) % tabs.length
       dispatch({ type: "SWITCH_TAB", tabId: tabs[nextIndex].id })
@@ -131,55 +134,55 @@ export function useKeyboardNav({
     }
 
     // Number keys 1-9 to switch tabs
-    const numKey = parseInt(key.name, 10)
-    if (!isNaN(numKey) && numKey >= 1 && numKey <= 9 && numKey <= tabs.length) {
-      const targetTab = tabs[numKey - 1]
-      dispatch({ type: "SWITCH_TAB", tabId: targetTab.id })
-      return
+    for (let i = 1; i <= 9; i++) {
+      if (keys.matches(key, `tab.${i}` as any) && i <= tabs.length) {
+        dispatch({ type: "SWITCH_TAB", tabId: tabs[i - 1].id })
+        return
+      }
     }
 
     // Special filter shortcuts (spec 015)
-    // Ctrl+M: Toggle >marked filter
-    if (key.ctrl && key.name === "m") {
+    // Toggle >marked filter
+    if (keys.matches(key, "filter.marked")) {
       const current = filter.marked ? "" : ">marked"
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }
-    // Ctrl+R: Toggle >recent filter
-    if (key.ctrl && key.name === "r") {
+    // Toggle >recent filter
+    if (keys.matches(key, "filter.recent")) {
       const current = filter.recent ? "" : ">recent"
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }
-    // Ctrl+S: Toggle >starred filter
-    if (key.ctrl && key.name === "s") {
+    // Toggle >starred filter
+    if (keys.matches(key, "filter.starred")) {
       const current = filter.starred ? "" : ">starred"
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }
-    // Ctrl+E: Toggle @me filter (my PRs)
-    if (key.ctrl && key.name === "e") {
+    // Toggle @me filter (my PRs)
+    if (keys.matches(key, "filter.expanded")) {
       const hasMe = filter.authors.includes("me") || (filter.authors.length === 1 && filter.authors[0] === "me")
       const current = hasMe ? "" : "@me"
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }
 
-    // Preview mode: Ctrl-d/Ctrl-u for scrolling
+    // Preview mode: page down/up for scrolling
     if (previewPosition) {
       const halfPage = Math.floor((terminalHeight - 6) / 2)
-      if (key.ctrl && key.name === "d") {
+      if (keys.matches(key, "nav.pageDown")) {
         dispatch({ type: "SCROLL_PREVIEW", delta: halfPage })
         return
       }
-      if (key.ctrl && key.name === "u") {
+      if (keys.matches(key, "nav.pageUp")) {
         dispatch({ type: "SCROLL_PREVIEW", delta: -halfPage })
         return
       }
     }
 
-    // Preview controls: p = toggle on/off, P = cycle position
-    if (key.name === "p" && !key.shift) {
+    // Preview controls: toggle on/off, cycle position
+    if (keys.matches(key, "ui.preview")) {
       // If closing preview, mark PR as seen (clear notification dot)
       if (previewPosition) {
         const pr = filteredPRs[selectedIndex]
@@ -195,31 +198,31 @@ export function useKeyboardNav({
       dispatch({ type: "TOGGLE_PREVIEW" })
       return
     }
-    if (key.name === "p" && key.shift) {
+    if (keys.matches(key, "ui.previewCycle")) {
       dispatch({ type: "CYCLE_PREVIEW_POSITION" })
       return
     }
 
     // Quit
-    if (key.name === config.keys.quit) {
+    if (keys.matches(key, "ui.quit")) {
       renderer.destroy()
       process.exit(0)
     }
 
-    // Open discovery bar with /
-    if (key.name === "/") {
+    // Open discovery bar
+    if (keys.matches(key, "filter.open")) {
       dispatch({ type: "OPEN_DISCOVERY" })
       return
     }
 
-    // Clear filter with Escape or Backspace
-    if ((key.name === "escape" || key.name === "backspace") && isFilterActive(filter)) {
+    // Clear filter (only when filter is active)
+    if (keys.matches(key, "filter.clear") && isFilterActive(filter)) {
       dispatch({ type: "SET_DISCOVERY_QUERY", query: "" })
       return
     }
 
-    // Star/unstar author with s
-    if (key.name === "s") {
+    // Star/unstar author
+    if (keys.matches(key, "action.star")) {
       const pr = filteredPRs[selectedIndex]
       if (pr) {
         const newHistory = toggleStarAuthor(history, pr.author.login)
@@ -234,8 +237,8 @@ export function useKeyboardNav({
       return
     }
 
-    // Mark/unmark PR with m (spec 015)
-    if (key.name === "m") {
+    // Mark/unmark PR (spec 015)
+    if (keys.matches(key, "action.mark")) {
       const pr = filteredPRs[selectedIndex]
       if (pr) {
         const prKey = getPRKey(getRepoName(pr), pr.number)
@@ -252,14 +255,14 @@ export function useKeyboardNav({
     }
 
     // Refresh
-    if (key.name === config.keys.refresh || (key.name === "r" && key.shift)) {
+    if (keys.matches(key, "action.refresh") || keys.matches(key, "action.forceRefresh")) {
       fetchPRs(true)
       return
     }
 
     // Navigation - clamp to filtered list bounds
-    if (key.name === "j" || key.name === "down") {
-      // If preview is open, mark current PR as seen before navigating away
+    // Helper to mark current PR as seen when navigating with preview open
+    const markCurrentAsSeen = () => {
       if (previewPosition) {
         const pr = filteredPRs[selectedIndex]
         if (pr) {
@@ -271,34 +274,27 @@ export function useKeyboardNav({
           }
         }
       }
+    }
+
+    if (keys.matches(key, "nav.down") || key.name === "down") {
+      markCurrentAsSeen()
       const newIndex = Math.min(selectedIndex + 1, filteredPRs.length - 1)
       dispatch({ type: "SELECT", index: newIndex })
       return
     }
-    if (key.name === "k" || key.name === "up") {
-      // If preview is open, mark current PR as seen before navigating away
-      if (previewPosition) {
-        const pr = filteredPRs[selectedIndex]
-        if (pr) {
-          const prKey = getPRKey(getRepoName(pr), pr.number)
-          if (history.prSnapshots?.[prKey]?.hasChanges) {
-            const newHistory = markPRSeen(history, prKey)
-            setHistory(newHistory)
-            saveHistory(newHistory)
-          }
-        }
-      }
+    if (keys.matches(key, "nav.up") || key.name === "up") {
+      markCurrentAsSeen()
       const newIndex = Math.max(selectedIndex - 1, 0)
       dispatch({ type: "SELECT", index: newIndex })
       return
     }
 
     // Jump to top/bottom
-    if (key.name === "g" && !key.shift) {
+    if (keys.matches(key, "nav.top")) {
       dispatch({ type: "SELECT", index: 0 })
       return
     }
-    if (key.name === "g" && key.shift) {
+    if (keys.matches(key, "nav.bottom")) {
       dispatch({ type: "SELECT", index: filteredPRs.length - 1 })
       return
     }
@@ -307,11 +303,10 @@ export function useKeyboardNav({
     const selectedPR = filteredPRs[selectedIndex]
     if (!selectedPR) return
 
-    // Open in browser
-    if (key.name === "o") {
+    // Helper to record PR interaction (view, repo visit, mark seen)
+    const recordPRInteraction = () => {
       const repo = getRepoName(selectedPR)
       const prKey = getPRKey(repo, selectedPR.number)
-      // Record to recent history (spec 015), visited repo (spec 018), and mark seen
       let newHistory = recordPRView(history, {
         repo,
         number: selectedPR.number,
@@ -322,7 +317,11 @@ export function useKeyboardNav({
       newHistory = markPRSeen(newHistory, prKey)
       setHistory(newHistory)
       saveHistory(newHistory)
+    }
 
+    // Open in browser
+    if (keys.matches(key, "action.browser")) {
+      recordPRInteraction()
       dispatch({ type: "SHOW_MESSAGE", message: "Opening in browser..." })
       openInBrowser(selectedPR).catch(() => {
         dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
@@ -330,22 +329,9 @@ export function useKeyboardNav({
       return
     }
 
-    // Open in riff
-    if (key.name === "return") {
-      const repo = getRepoName(selectedPR)
-      const prKey = getPRKey(repo, selectedPR.number)
-      // Record to recent history (spec 015), visited repo (spec 018), and mark seen
-      let newHistory = recordPRView(history, {
-        repo,
-        number: selectedPR.number,
-        title: selectedPR.title,
-        author: selectedPR.author.login,
-      })
-      newHistory = recordRepoVisit(newHistory, repo)
-      newHistory = markPRSeen(newHistory, prKey)
-      setHistory(newHistory)
-      saveHistory(newHistory)
-
+    // Open in default tool (riff)
+    if (keys.matches(key, "action.open")) {
+      recordPRInteraction()
       renderer.suspend()
       openInRiff(selectedPR).finally(() => {
         renderer.resume()
@@ -353,8 +339,8 @@ export function useKeyboardNav({
       return
     }
 
-    // Copy PR number (y)
-    if (key.name === "y" && !key.shift) {
+    // Copy PR number
+    if (keys.matches(key, "action.copyNumber")) {
       copyPRNumber(selectedPR)
         .then(() => {
           dispatch({ type: "SHOW_MESSAGE", message: `Copied #${selectedPR.number}` })
@@ -365,8 +351,8 @@ export function useKeyboardNav({
       return
     }
 
-    // Copy URL (Y / shift+y)
-    if (key.name === "y" && key.shift) {
+    // Copy URL
+    if (keys.matches(key, "action.copyUrl")) {
       copyPRUrl(selectedPR)
         .then(() => {
           dispatch({ type: "SHOW_MESSAGE", message: `Copied ${selectedPR.url}` })
@@ -377,8 +363,8 @@ export function useKeyboardNav({
       return
     }
 
-    // Checkout PR locally (Space)
-    if (key.name === "space") {
+    // Checkout PR locally
+    if (keys.matches(key, "action.checkout")) {
       dispatch({ type: "SHOW_MESSAGE", message: "Checking out..." })
       checkoutPR(selectedPR, config)
         .then((result) => {

@@ -83,7 +83,14 @@ export interface Config {
     desktop: boolean
   }
 
-  /** Keybinding overrides */
+  /** 
+   * Keybinding overrides
+   * 
+   * Keys are action names like "nav.down", "action.browser", "ui.quit"
+   * Values are key combinations like "j", "ctrl+p", "G" (shift+g)
+   * 
+   * See src/keybindings/defaults.ts for all available actions
+   */
   keys: Record<string, string>
 }
 
@@ -119,14 +126,5 @@ export const defaultConfig: Config = {
     desktop: false,
   },
 
-  keys: {
-    quit: "q",
-    help: "?",
-    refresh: "r",
-    search: "/",
-    openBrowser: "o",
-    openRiff: "r",
-    copyUrl: "y",
-    actionsMenu: "a",
-  },
+  keys: {},
 }

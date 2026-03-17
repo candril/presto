@@ -6,6 +6,7 @@
 import { useReducer, useState, useEffect, useCallback } from "react"
 import { useTerminalDimensions } from "@opentui/react"
 import { useRenderer } from "@opentui/react"
+import { useKeybindings } from "./keybindings"
 import { Shell } from "./components/Shell"
 import { Header } from "./components/Header"
 import { TabBar } from "./components/TabBar"
@@ -63,6 +64,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
   const [initialSnapshotsDone, setInitialSnapshotsDone] = useState(false)
   const { height: terminalHeight } = useTerminalDimensions()
   const renderer = useRenderer()
+  const keys = useKeybindings(config)
 
   // Feature: Filtering
   const { filter, filteredPRs, hiddenCount } = useFiltering({
@@ -360,7 +362,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
       <StatusBar filterQuery={state.discoveryVisible ? undefined : state.discoveryQuery} />
 
       {/* Help overlay */}
-      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} keys={keys} />}
 
       {/* Command palette */}
       <CommandPalette
