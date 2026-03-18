@@ -33,6 +33,12 @@ export interface PathsConfig {
   basePath?: string
 }
 
+/** Bot filtering configuration */
+export interface BotPatternsConfig {
+  /** Additional regex patterns to identify bot accounts */
+  patterns?: string[]
+}
+
 /** Main configuration interface */
 export interface Config {
   /** Repositories to watch (empty = current repo only) */
@@ -40,6 +46,9 @@ export interface Config {
 
   /** Paths configuration */
   paths: PathsConfig
+
+  /** Bot filtering - exclude from comment counts */
+  botPatterns: BotPatternsConfig
 
   /** GitHub settings */
   github: {
@@ -99,6 +108,8 @@ export const defaultConfig: Config = {
   repositories: [],
 
   paths: {},
+
+  botPatterns: {},
 
   github: {
     host: "github.com",

@@ -5,9 +5,13 @@ import { loadConfig } from "./config"
 import { getCurrentUser } from "./providers/github"
 import { initGraphQL } from "./providers/graphql"
 import { setupFocusReporting, type FocusCallback } from "./utils/focus-reporting"
+import { initBotPatterns } from "./utils/bots"
 
 // Load configuration
 const config = loadConfig()
+
+// Initialize bot patterns from config
+initBotPatterns(config.botPatterns.patterns)
 
 // Initialize GitHub API (pre-warm token cache for faster first fetch)
 const [currentUser] = await Promise.all([

@@ -90,6 +90,12 @@ relative_time = true   # "2h ago" vs "2024-01-15"
 interval = 300   # Seconds between auto-refresh (0 to disable)
 on_focus = true  # Refresh when terminal gains focus
 
+# Bot patterns - filter out bots from comment counts (optional)
+# These are regex patterns matched against commenter usernames
+# Default patterns already cover: [bot], dependabot, renovate, codecov, etc.
+# [bot_patterns]
+# patterns = ["-ci$", "^my-internal-bot$"]
+
 # Keybinding overrides (optional)
 # [keys]
 # quit = "q"
@@ -142,6 +148,11 @@ function mergeConfig(defaults: Config, overrides: Record<string, unknown>): Conf
       ...parseNotifications(overrides.notifications),
     },
 
+    botPatterns: {
+      ...defaults.botPatterns,
+      ...parseBotPatterns(overrides.bot_patterns ?? overrides.botPatterns),
+    },
+
     keys: {
       ...defaults.keys,
       ...parseKeys(overrides.keys),
@@ -155,6 +166,19 @@ function parseNotifications(value: unknown): Partial<Config["notifications"]> {
   const obj = value as Record<string, unknown>
   const result: Partial<Config["notifications"]> = {}
   if (typeof obj.desktop === "boolean") result.desktop = obj.desktop
+  return result
+}
+
+/** Parse bot patterns settings */
+function parseBotPatterns(value: unknown): Partial<Config["botPatterns"]> {
+  if (typeof value !== "object" || value === null) return {}
+  const obj = value as Record<string, unknown>
+  const result: Partial<Config["botPatterns"]> = {}
+  
+  if (Array.isArray(obj.patterns)) {
+    result.patterns = obj.patterns.filter((p): p is string => typeof p === "string")
+  }
+  
   return result
 }
 
