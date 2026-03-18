@@ -148,7 +148,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     if (state.prs.length > 0 && !state.loading) {
       handlePRsUpdated(state.prs, state.lastRefresh !== null)
     }
-  }, [state.prs, state.loading])
+  }, [state.prs, state.loading, handlePRsUpdated])
 
   // Feature: Auto-refresh
   const { isStale } = useAutoRefresh({
