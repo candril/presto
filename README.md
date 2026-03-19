@@ -37,7 +37,7 @@ Or add to your flake inputs:
 A dev shell is also available:
 
 ```bash
-nix develop github:candril/presto
+nix develop
 ```
 
 ### From source
