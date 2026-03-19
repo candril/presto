@@ -105,6 +105,58 @@ export function useFiltering({
     setFetchedPRs(newFetched)
   }, [prs, fetchedPRs])
 
+  // Fetch PR by number from configured repos when prRef filter matches nothing locally
+  const fetchPRByNumber = useCallback(async (prRef: { repo?: string; number: number }) => {
+    // Determine which repos to search
+    const repos = prRef.repo
+      ? // If repo is specified, filter configured repos by that name
+        config.repositories
+          .filter((r) => r.name.toLowerCase().includes(prRef.repo!.toLowerCase()))
+          .map((r) => r.name)
+      : // Otherwise search all configured (non-disabled) repos
+        config.repositories
+          .filter((r) => !r.disabled)
+          .map((r) => r.name)
+
+    if (repos.length === 0) return
+
+    // Build keys and skip already-fetched or in-flight ones
+    const keys = repos.map((repo) => `${repo}#${prRef.number}`)
+    const missing = keys.filter((key) => {
+      const inMain = prs.some((pr) => getPRKey(getRepoName(pr), pr.number) === key)
+      const inFetched = fetchedPRs.has(key)
+      const isFetching = fetchingRef.current.has(key)
+      return !inMain && !inFetched && !isFetching
+    })
+
+    if (missing.length === 0) return
+
+    // Mark as fetching
+    for (const key of missing) {
+      fetchingRef.current.add(key)
+    }
+
+    // Fetch in parallel from each repo
+    const results = await Promise.all(
+      missing.map(async (key) => {
+        const [repo, numStr] = key.split("#")
+        const number = parseInt(numStr, 10)
+        const pr = await getPR(repo, number)
+        return { key, pr }
+      })
+    )
+
+    // Update cache with any found PRs
+    const newFetched = new Map(fetchedPRs)
+    for (const { key, pr } of results) {
+      fetchingRef.current.delete(key)
+      if (pr) {
+        newFetched.set(key, pr)
+      }
+    }
+    setFetchedPRs(newFetched)
+  }, [config.repositories, prs, fetchedPRs])
+
   // Trigger fetch when >marked or >recent filter is active
   useEffect(() => {
     if (filter.marked) {
@@ -115,8 +167,33 @@ export function useFiltering({
     }
   }, [filter.marked, filter.recent, history.markedPRs, history.recentlyViewed, fetchMissingPRs])
 
-  // Apply filters: special tokens (>marked, >recent, >starred) bypass repo settings
+  // Trigger remote fetch when prRef filter matches nothing locally
+  useEffect(() => {
+    if (!filter.prRef) return
+
+    // Check if we already have a match locally (in main prs + already-fetched)
+    const hasLocal = allPRs.some((pr) => {
+      if (pr.number !== filter.prRef!.number) return false
+      if (filter.prRef!.repo) {
+        const prRepo = getRepoName(pr).toLowerCase()
+        return prRepo.includes(filter.prRef!.repo.toLowerCase())
+      }
+      return true
+    })
+
+    if (!hasLocal) {
+      fetchPRByNumber(filter.prRef)
+    }
+  }, [filter.prRef, allPRs, fetchPRByNumber])
+
+  // Apply filters: special tokens (>marked, >recent, >starred) and prRef bypass repo settings
   const { filteredPRs, hiddenCount } = useMemo(() => {
+    // PR reference (#123, repo#123, etc.) - search allPRs (includes remotely fetched)
+    if (filter.prRef) {
+      const result = applyFilter(allPRs, filter)
+      return { filteredPRs: result, hiddenCount: 0 }
+    }
+
     // >marked - show only marked PRs (bypasses all repo settings)
     if (filter.marked) {
       let result = allPRs.filter((pr) => {
