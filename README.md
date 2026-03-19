@@ -15,15 +15,39 @@ A terminal-based pull request dashboard. Discover PRs across repositories, check
 
 ## Installation
 
+### Nix
+
+Run directly without installing:
+
+```bash
+nix run github:candril/presto
+```
+
+Or add to your flake inputs:
+
+```nix
+{
+  inputs.presto.url = "github:candril/presto";
+
+  # Then in your system/home-manager config:
+  environment.systemPackages = [ inputs.presto.packages.${system}.default ];
+}
+```
+
+A dev shell is also available:
+
+```bash
+nix develop github:candril/presto
+```
+
+### From source
+
 Requires [Bun](https://bun.sh) and [GitHub CLI](https://cli.github.com).
 
 ```bash
-# Clone and install
 git clone https://github.com/candril/presto.git
 cd presto
 bun install
-
-# Run
 bun run src/index.tsx
 ```
 
