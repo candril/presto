@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useCallback, useRef, useState } from "react"
-import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs, listPRsByAuthor } from "../providers/github"
+import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs } from "../providers/github"
 import { loadCache, saveCache, isCacheValidForRepos } from "../cache"
 import { recordPRView, saveHistory, type History } from "../history"
 import type { Config } from "../config"
@@ -139,7 +139,6 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   const fetchedMergedRepos = useRef<Set<string>>(new Set())
   const closedMergedDebounceRef = useRef<ReturnType<typeof setTimeout>>()
   const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
-  const authorDebounceRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Epoch counter to re-trigger background fetch effects after a refresh
   // (refs are cleared but effects need a dep change to re-run)
@@ -491,75 +490,6 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       }
     }
   }, [filter.states.join(","), filter.repos.join(","), filter.authors.join(","), config.repositories, refreshEpoch])
-
-  // Track which author+repo combos have been fetched for @user background fetch
-
-  // Background fetch for @user filter
-  useEffect(() => {
-    if (filter.authors.length === 0) return
-
-    // Clear previous debounce timer
-    if (authorDebounceRef.current) {
-      clearTimeout(authorDebounceRef.current)
-    }
-
-    authorDebounceRef.current = setTimeout(() => {
-      const author = filter.authors[0] // Primary author filter
-      const enabledRepos = config.repositories
-        .filter((r) => !r.disabled)
-        .map((r) => r.name)
-      
-      // Determine repos to fetch (respect repo: filter if present)
-      let reposToCheck = enabledRepos
-      if (filter.repos.length > 0) {
-        reposToCheck = enabledRepos.filter((repo) =>
-          filter.repos.some((f) => repo.toLowerCase().includes(f))
-        )
-      }
-      
-      // Skip repos already fetched for this author
-      const fetched = fetchedAuthorRepos.current.get(author) ?? new Set()
-      const reposToFetch = reposToCheck.filter(r => !fetched.has(r.toLowerCase()))
-      
-      if (reposToFetch.length === 0) return
-
-      // Determine what state to fetch based on state: filter
-      const state = filter.states.includes("merged") ? "merged" as const
-        : filter.states.includes("closed") ? "closed" as const
-        : "all" as const
-      
-      dispatch({ type: "SET_REFRESHING", refreshing: true })
-      dispatch({ type: "SHOW_MESSAGE", message: `Loading PRs by @${author}...` })
-      
-      Promise.all(
-        reposToFetch.map(repo => 
-          listPRsByAuthor(repo, author, state).catch(() => [])
-        )
-      ).then((results) => {
-        // Mark repos as fetched for this author
-        const newFetched = new Set(fetched)
-        for (const repo of reposToFetch) {
-          newFetched.add(repo.toLowerCase())
-        }
-        fetchedAuthorRepos.current.set(author, newFetched)
-        
-        const allPRs = results.flat()
-        if (allPRs.length > 0) {
-          dispatch({ type: "APPEND_PRS", prs: allPRs })
-          dispatch({ type: "SHOW_MESSAGE", message: `Found ${allPRs.length} PR${allPRs.length === 1 ? "" : "s"} by @${author}` })
-        } else {
-          dispatch({ type: "CLEAR_MESSAGE" })
-        }
-        dispatch({ type: "SET_REFRESHING", refreshing: false })
-      })
-    }, 300)
-
-    return () => {
-      if (authorDebounceRef.current) {
-        clearTimeout(authorDebounceRef.current)
-      }
-    }
-  }, [filter.authors.join(","), filter.repos.join(","), filter.states.join(","), config.repositories, refreshEpoch])
 
   return { fetchPRs }
 }
