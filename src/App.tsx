@@ -3,7 +3,7 @@
  * Uses vertical feature slices via custom hooks
  */
 
-import { useReducer, useState, useEffect, useCallback } from "react"
+import { useReducer, useState, useEffect, useCallback, useRef } from "react"
 import { useTerminalDimensions } from "@opentui/react"
 import { useRenderer } from "@opentui/react"
 import { useKeybindings } from "./keybindings"
@@ -88,11 +88,20 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
   })
 
   // Feature: Notifications - detect changes when PRs update
+  // Use refs to avoid infinite loop: handlePRsUpdated -> setHistory -> new callback -> effect re-runs
+  const historyRef = useRef(history)
+  historyRef.current = history
+  const initialSnapshotsDoneRef = useRef(initialSnapshotsDone)
+  initialSnapshotsDoneRef.current = initialSnapshotsDone
+  const lastProcessedPRsRef = useRef<typeof state.prs | null>(null)
+
   const handlePRsUpdated = useCallback(
     (prs: typeof state.prs, isRefresh: boolean) => {
+      const currentHistory = historyRef.current
+
       // On first load, just create snapshots without showing notifications
-      if (!initialSnapshotsDone) {
-        const newHistory = updateAllSnapshots(history, prs, currentUser)
+      if (!initialSnapshotsDoneRef.current) {
+        const newHistory = updateAllSnapshots(currentHistory, prs, currentUser)
         setHistory(newHistory)
         saveHistory(newHistory)
         setInitialSnapshotsDone(true)
@@ -101,7 +110,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
 
       // On refresh, detect changes first
       if (isRefresh) {
-        const changes = detectChanges(prs, history, currentUser)
+        const changes = detectChanges(prs, currentHistory, currentUser)
         if (changes.length > 0) {
           // Group changes by PR key
           const changesByPR = new Map<string, typeof changes>()
@@ -112,7 +121,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
           }
 
           // Mark PRs as having changes
-          let newHistory = history
+          let newHistory = currentHistory
           for (const [prKey, prChanges] of changesByPR) {
             const detectedChanges = prChanges.map((c) => ({ type: c.changeType, message: c.message }))
             newHistory = markPRHasChanges(newHistory, prKey, detectedChanges)
@@ -136,16 +145,18 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
       }
 
       // Just update snapshots
-      const newHistory = updateAllSnapshots(history, prs, currentUser)
+      const newHistory = updateAllSnapshots(currentHistory, prs, currentUser)
       setHistory(newHistory)
       saveHistory(newHistory)
     },
-    [history, currentUser, initialSnapshotsDone]
+    [currentUser] // Stable deps only — history accessed via ref
   )
 
   // Detect changes when PRs change (after refresh)
+  // Use ref tracking to avoid re-processing the same prs array
   useEffect(() => {
-    if (state.prs.length > 0 && !state.loading) {
+    if (state.prs.length > 0 && !state.loading && state.prs !== lastProcessedPRsRef.current) {
+      lastProcessedPRsRef.current = state.prs
       handlePRsUpdated(state.prs, state.lastRefresh !== null)
     }
   }, [state.prs, state.loading, handlePRsUpdated])

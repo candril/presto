@@ -209,6 +209,12 @@ export function useKeyboardNav({
       process.exit(0)
     }
 
+    // Toggle console
+    if (keys.matches(key, "ui.console")) {
+      renderer.console.toggle()
+      return
+    }
+
     // Open discovery bar
     if (keys.matches(key, "filter.open")) {
       dispatch({ type: "OPEN_DISCOVERY" })

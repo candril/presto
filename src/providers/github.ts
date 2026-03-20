@@ -7,6 +7,7 @@ import { $ } from "bun"
 import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck, PreviewComment } from "../types"
 import { listPRsGraphQL, getPRsGraphQL } from "./graphql"
 import { isBot } from "../utils/bots"
+import { logRequest } from "../utils/logger"
 
 /** Fields to fetch from GitHub */
 const PR_FIELDS = [
@@ -57,8 +58,16 @@ export async function listPRs(repo?: string, state: "open" | "closed" | "merged"
   if (repo) args.push("-R", repo)
   if (state !== "open") args.push("--state", state)
 
-  const result = await $`gh ${args}`.json()
-  return transformPRs(result as RawPR[])
+  const log = logRequest("gh", `pr list ${repo ?? "(current)"} --state ${state}`)
+  try {
+    const result = await $`gh ${args}`.json()
+    const prs = transformPRs(result as RawPR[])
+    log.finish(`${prs.length} PRs`)
+    return prs
+  } catch (error) {
+    log.fail(error)
+    throw error
+  }
 }
 
 /**
@@ -101,10 +110,15 @@ async function listPRsByState(
     args.push("--author", options.author)
   }
 
+  const label = `pr list ${repo} --state ${state}${options?.author ? ` --author ${options.author}` : ""}`
+  const log = logRequest("gh", label)
   try {
     const result = await $`gh ${args}`.json()
-    return transformPRs(result as RawPR[])
-  } catch {
+    const prs = transformPRs(result as RawPR[])
+    log.finish(`${prs.length} PRs`)
+    return prs
+  } catch (error) {
+    log.fail(error)
     return []
   }
 }
@@ -127,10 +141,14 @@ export async function listPRsByAuthor(
     "--state", state,
   ]
 
+  const log = logRequest("gh", `pr list ${repo} --author ${author} --state ${state}`)
   try {
     const result = await $`gh ${args}`.json()
-    return transformPRs(result as RawPR[])
-  } catch {
+    const prs = transformPRs(result as RawPR[])
+    log.finish(`${prs.length} PRs`)
+    return prs
+  } catch (error) {
+    log.fail(error)
     return []
   }
 }
@@ -139,17 +157,23 @@ export async function listPRsByAuthor(
  * List PRs authored by the current user
  */
 export async function listMyPRs(): Promise<PR[]> {
+  const log = logRequest("gh", "pr list --author @me")
   const result = await $`gh pr list --author @me --json ${PR_FIELDS} --limit 50`.json()
-  return transformPRs(result as RawPR[])
+  const prs = transformPRs(result as RawPR[])
+  log.finish(`${prs.length} PRs`)
+  return prs
 }
 
 /**
  * List PRs where review is requested from current user
  */
 export async function listReviewRequests(): Promise<PR[]> {
+  const log = logRequest("gh", "pr list --search review-requested:@me")
   const result =
     await $`gh pr list --search "review-requested:@me" --json ${PR_FIELDS} --limit 50`.json()
-  return transformPRs(result as RawPR[])
+  const prs = transformPRs(result as RawPR[])
+  log.finish(`${prs.length} PRs`)
+  return prs
 }
 
 /**
@@ -168,10 +192,14 @@ export async function listRecentPRs(repo: string, days: number): Promise<PR[]> {
     "--search", `updated:>=${sinceStr}`,
   ]
 
+  const log = logRequest("gh", `pr list ${repo} --recent ${days}d`)
   try {
     const result = await $`gh ${args}`.json()
-    return transformPRs(result as RawPR[])
-  } catch {
+    const prs = transformPRs(result as RawPR[])
+    log.finish(`${prs.length} PRs`)
+    return prs
+  } catch (error) {
+    log.fail(error)
     return []
   }
 }
@@ -185,13 +213,20 @@ export async function listPRsFromRepos(repos: string[]): Promise<PR[]> {
     return listPRs()
   }
 
+  const log = logRequest("graphql", `listPRsFromRepos (${repos.length} repos)`)
   try {
     // Use GraphQL for bulk fetching (single API call)
-    return await listPRsGraphQL(repos)
+    const prs = await listPRsGraphQL(repos)
+    log.finish(`${prs.length} PRs`)
+    return prs
   } catch (error) {
     // Fallback to REST API (parallel calls per repo)
+    log.fail(error)
     console.error("GraphQL bulk fetch failed, falling back to REST:", error)
-    return listPRsFromReposREST(repos)
+    const log2 = logRequest("gh", `listPRsFromReposREST (${repos.length} repos)`)
+    const prs = await listPRsFromReposREST(repos)
+    log2.finish(`${prs.length} PRs`)
+    return prs
   }
 }
 
@@ -241,10 +276,13 @@ export async function listRecentPRsFromRepos(repos: string[], days: number): Pro
  * Fetch a single PR by repo and number
  */
 export async function getPR(repo: string, number: number): Promise<PR | null> {
+  const log = logRequest("gh", `pr view ${repo}#${number}`)
   try {
     const result = await $`gh pr view ${number} -R ${repo} --json ${PR_FIELDS}`.json()
+    log.finish()
     return transformPR(result as RawPR)
-  } catch {
+  } catch (error) {
+    log.fail(error)
     return null
   }
 }
@@ -257,16 +295,23 @@ export async function getPRsBulk(
 ): Promise<PR[]> {
   if (prs.length === 0) return []
 
+  const log = logRequest("graphql", `getPRsBulk (${prs.length} PRs)`)
   try {
     // Use GraphQL for efficient bulk fetch
-    return await getPRsGraphQL(prs)
+    const result = await getPRsGraphQL(prs)
+    log.finish(`${result.length} PRs`)
+    return result
   } catch (error) {
     // Fallback to individual REST calls
+    log.fail(error)
     console.error("GraphQL bulk PR fetch failed, falling back to REST:", error)
+    const log2 = logRequest("gh", `getPRsBulk REST fallback (${prs.length} PRs)`)
     const results = await Promise.all(
       prs.map(({ repo, number }) => getPR(repo, number))
     )
-    return results.filter((pr): pr is PR => pr !== null)
+    const found = results.filter((pr): pr is PR => pr !== null)
+    log2.finish(`${found.length} PRs`)
+    return found
   }
 }
 
@@ -274,7 +319,9 @@ export async function getPRsBulk(
  * Get current GitHub username
  */
 export async function getCurrentUser(): Promise<string> {
+  const log = logRequest("gh", "api user")
   const result = await $`gh api user --jq .login`.text()
+  log.finish(result.trim())
   return result.trim()
 }
 
@@ -282,10 +329,13 @@ export async function getCurrentUser(): Promise<string> {
  * Get current repository name (owner/repo)
  */
 export async function getCurrentRepo(): Promise<string | null> {
+  const log = logRequest("gh", "repo view")
   try {
     const result = await $`gh repo view --json nameWithOwner --jq .nameWithOwner`.text()
+    log.finish(result.trim())
     return result.trim()
-  } catch {
+  } catch (error) {
+    log.fail(error)
     return null
   }
 }
@@ -319,6 +369,7 @@ const PREVIEW_FIELDS = [
  * Fetch detailed PR preview data
  */
 export async function fetchPRPreview(repo: string, number: number): Promise<PRPreview> {
+  const log = logRequest("gh", `pr preview ${repo}#${number}`)
   const result = await $`gh pr view ${number} -R ${repo} --json ${PREVIEW_FIELDS}`.json()
 
   // Calculate total additions/deletions
@@ -326,7 +377,7 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
   const additions = result.additions ?? files.reduce((sum, f) => sum + f.additions, 0)
   const deletions = result.deletions ?? files.reduce((sum, f) => sum + f.deletions, 0)
 
-  return {
+  const preview = {
     repo,
     number,
     title: result.title ?? "",
@@ -351,6 +402,8 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
     reviewCommentCount: 0, // Not available via gh CLI
     recentComments: parseRecentComments(result.comments ?? [], result.reviews ?? []),
   }
+  log.finish(`${files.length} files, +${additions}/-${deletions}`)
+  return preview
 }
 
 function parseFiles(files: any[]): ChangedFile[] {

@@ -3,7 +3,7 @@
  * Handles initial load, refresh, and on-demand PR fetching
  */
 
-import { useEffect, useCallback, useRef } from "react"
+import { useEffect, useCallback, useRef, useState } from "react"
 import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs, listPRsByAuthor } from "../providers/github"
 import { loadCache, saveCache, isCacheValidForRepos } from "../cache"
 import { recordPRView, saveHistory, type History } from "../history"
@@ -133,6 +133,18 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     return { priority, rest }
   }, [config.repositories, filter.repos, history.visitedRepos])
 
+  // Background fetch cache refs - declared before fetchPRs so it can clear them on refresh
+  const fullyFetchedRepos = useRef<Set<string>>(new Set())
+  const fetchedClosedRepos = useRef<Set<string>>(new Set())
+  const fetchedMergedRepos = useRef<Set<string>>(new Set())
+  const closedMergedDebounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
+  const authorDebounceRef = useRef<ReturnType<typeof setTimeout>>()
+
+  // Epoch counter to re-trigger background fetch effects after a refresh
+  // (refs are cleared but effects need a dep change to re-run)
+  const [refreshEpoch, setRefreshEpoch] = useState(0)
+
   // Fetch PRs from GitHub
   // When repo filter is active: fetch filtered repos first, then background load the rest
   const fetchPRs = useCallback(async (showAsRefresh = false) => {
@@ -146,8 +158,13 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       dispatch({ type: "SET_LOADING", loading: true })
     }
 
-    // Clear preview cache on refresh
+    // Clear preview cache and background fetch caches on refresh
+    // This ensures state:merged/closed effects re-fetch after SET_PRS replaces all PRs
     dispatch({ type: "CLEAR_PREVIEW_CACHE" })
+    fetchedClosedRepos.current.clear()
+    fetchedMergedRepos.current.clear()
+    fetchedAuthorRepos.current.clear()
+    fullyFetchedRepos.current.clear()
 
     try {
       const { priority, rest } = getPriorityRepos()
@@ -197,8 +214,9 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
               backgroundPRs = [...backgroundPRs, ...markedPRs]
             }
             
-            // Update with full data
+            // Update with full data, then bump epoch to re-trigger background effects
             dispatch({ type: "SET_PRS", prs: backgroundPRs })
+            setRefreshEpoch(e => e + 1)
             saveCache(backgroundPRs.filter(pr => {
               const repoName = getRepoName(pr).toLowerCase()
               return allEnabledRepos.some(r => r.toLowerCase() === repoName)
@@ -210,6 +228,8 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
             const repoName = getRepoName(pr).toLowerCase()
             return allEnabledRepos.some(r => r.toLowerCase() === repoName)
           }), allEnabledRepos)
+          // Bump epoch so background fetch effects re-run (caches were cleared above)
+          setRefreshEpoch(e => e + 1)
         }
       } else {
         // No priority repos, fetch all at once
@@ -235,6 +255,8 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
         dispatch({ type: "SET_PRS", prs: allFetchedPRs })
         dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
+        // Bump epoch so background fetch effects re-run (caches were cleared above)
+        setRefreshEpoch(e => e + 1)
         saveCache(allFetchedPRs.filter(pr => {
           const repoName = getRepoName(pr).toLowerCase()
           return allEnabledRepos.some(r => r.toLowerCase() === repoName)
@@ -322,7 +344,6 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   }, [filter.prRef?.repo, filter.prRef?.number])
 
   // Track which repos have been fully fetched (not just individual PRs)
-  const fullyFetchedRepos = useRef<Set<string>>(new Set())
 
   // Fetch PRs on-demand when filtering by a repo not in current PR list (spec 018)
   useEffect(() => {
@@ -389,13 +410,10 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     }).catch(() => {
       dispatch({ type: "SHOW_MESSAGE", message: "Failed to load PRs" })
     })
-  }, [filter.repos.join(",")])
+  }, [filter.repos.join(","), refreshEpoch])
 
   // Track which repos have had closed/merged PRs fetched
   // Cache key includes author to re-fetch when author filter changes
-  const fetchedClosedRepos = useRef<Set<string>>(new Set())
-  const fetchedMergedRepos = useRef<Set<string>>(new Set())
-  const closedMergedDebounceRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Fetch closed/merged PRs when state:closed or state:merged filter is active
   useEffect(() => {
@@ -472,11 +490,9 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         clearTimeout(closedMergedDebounceRef.current)
       }
     }
-  }, [filter.states.join(","), filter.repos.join(","), filter.authors.join(","), config.repositories])
+  }, [filter.states.join(","), filter.repos.join(","), filter.authors.join(","), config.repositories, refreshEpoch])
 
   // Track which author+repo combos have been fetched for @user background fetch
-  const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
-  const authorDebounceRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Background fetch for @user filter
   useEffect(() => {
@@ -543,7 +559,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         clearTimeout(authorDebounceRef.current)
       }
     }
-  }, [filter.authors.join(","), filter.repos.join(","), filter.states.join(","), config.repositories])
+  }, [filter.authors.join(","), filter.repos.join(","), filter.states.join(","), config.repositories, refreshEpoch])
 
   return { fetchPRs }
 }

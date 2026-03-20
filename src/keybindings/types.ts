@@ -49,6 +49,7 @@ export type KeyAction =
   | "ui.preview"
   | "ui.previewCycle"
   | "ui.commandPalette"
+  | "ui.console"
 
 /** Parsed key combination */
 export interface KeyCombo {

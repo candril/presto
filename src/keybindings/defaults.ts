@@ -55,4 +55,5 @@ export const defaultBindings: Record<KeyAction, string> = {
   "ui.preview": "p",
   "ui.previewCycle": "P",
   "ui.commandPalette": "ctrl+p",
+  "ui.console": "`",
 }

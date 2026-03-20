@@ -6,6 +6,7 @@
 import { $ } from "bun"
 import type { PR } from "../types"
 import { isBot } from "../utils/bots"
+import { logRequest } from "../utils/logger"
 
 /** Cached GitHub token */
 let cachedToken: string | null = null
@@ -133,6 +134,7 @@ async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
     }
   }`
 
+  const log = logRequest("graphql", `fetchRepoPRs ${repo}`)
   try {
     const response = await fetch("https://api.github.com/graphql", {
       method: "POST",
@@ -143,14 +145,23 @@ async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
       body: JSON.stringify({ query }),
     })
 
-    if (!response.ok) return []
+    if (!response.ok) {
+      log.fail(`HTTP ${response.status}`)
+      return []
+    }
 
     const result = await response.json() as { data?: { repository?: { pullRequests?: { nodes?: any[] } } } }
     const nodes = result.data?.repository?.pullRequests?.nodes
-    if (!nodes) return []
+    if (!nodes) {
+      log.finish("0 PRs (no data)")
+      return []
+    }
 
-    return nodes.filter(Boolean).map(transformGraphQLPR)
-  } catch {
+    const prs = nodes.filter(Boolean).map(transformGraphQLPR)
+    log.finish(`${prs.length} PRs`)
+    return prs
+  } catch (error) {
+    log.fail(error)
     return []
   }
 }
@@ -203,7 +214,7 @@ export async function getPRsGraphQL(
   }
 
   const batchResults = await Promise.allSettled(
-    batches.map(async (batch) => {
+    batches.map(async (batch, batchIndex) => {
       const prQueries = batch.map(({ repo, number }, index) => {
         const [owner, name] = repo.split("/")
         if (!owner || !name) return ""
@@ -217,6 +228,7 @@ export async function getPRsGraphQL(
 
       const query = `query { ${prQueries} }`
 
+      const log = logRequest("graphql", `getPRsBatch ${batchIndex + 1}/${batches.length} (${batch.length} PRs)`)
       const response = await fetch("https://api.github.com/graphql", {
         method: "POST",
         headers: {
@@ -226,7 +238,10 @@ export async function getPRsGraphQL(
         body: JSON.stringify({ query }),
       })
 
-      if (!response.ok) return []
+      if (!response.ok) {
+        log.fail(`HTTP ${response.status}`)
+        return []
+      }
 
       const result = await response.json() as { data?: Record<string, { nameWithOwner?: string; pullRequest?: any }> }
       const fetchedPRs: PR[] = []
@@ -237,6 +252,7 @@ export async function getPRsGraphQL(
         fetchedPRs.push(transformGraphQLPR(repo.pullRequest))
       }
 
+      log.finish(`${fetchedPRs.length} PRs`)
       return fetchedPRs
     })
   )

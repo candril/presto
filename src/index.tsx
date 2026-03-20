@@ -1,4 +1,4 @@
-import { createCliRenderer } from "@opentui/core"
+import { createCliRenderer, ConsolePosition } from "@opentui/core"
 import { createRoot } from "@opentui/react"
 import { App } from "./App"
 import { loadConfig } from "./config"
@@ -20,7 +20,15 @@ const [currentUser] = await Promise.all([
 ])
 
 // Create renderer and mount app
-const renderer = await createCliRenderer({ exitOnCtrlC: false })
+const renderer = await createCliRenderer({
+  exitOnCtrlC: false,
+  useConsole: true,
+  consoleOptions: {
+    position: ConsolePosition.BOTTOM,
+    sizePercent: 30,
+    title: "presto console",
+  },
+})
 
 // Set up terminal focus reporting for tmux/terminal window switches
 const focusCallbacks: FocusCallback[] = []

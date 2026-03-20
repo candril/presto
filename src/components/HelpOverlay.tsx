@@ -63,6 +63,7 @@ function getHelpSections(keys: KeybindingsContext) {
       items: [
         [keys.getKeyDisplay("ui.help"), "Toggle help"],
         [keys.getKeyDisplay("ui.commandPalette"), "Command palette"],
+        [keys.getKeyDisplay("ui.console"), "Toggle console"],
         [keys.getKeyDisplay("ui.quit"), "Quit"],
       ],
     },
