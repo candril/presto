@@ -78,7 +78,7 @@ export function NotificationToast({ changes, onDismiss }: NotificationToastProps
       position="absolute"
       bottom={2}
       right={2}
-      width={45}
+      minWidth={45}
       flexDirection="column"
       backgroundColor={theme.headerBg}
       paddingX={2}
@@ -124,7 +124,7 @@ function NotificationRow({ change }: { change: PRChange }) {
         {" "}
         <span fg={theme.textDim}>#{change.pr.number}</span>
         {" "}
-        <span fg={theme.text}>{truncate(change.pr.title, 18)}</span>
+        <span fg={theme.text}>{change.pr.title}</span>
         {" "}
         <span fg={color}>{change.message}</span>
       </text>
@@ -194,6 +194,3 @@ function getChangeColor(type: ChangeType): string {
   }
 }
 
-function truncate(str: string, len: number): string {
-  return str.length > len ? str.slice(0, len - 1) + "…" : str
-}
