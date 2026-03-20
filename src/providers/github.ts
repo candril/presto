@@ -62,17 +62,77 @@ export async function listPRs(repo?: string, state: "open" | "closed" | "merged"
 }
 
 /**
- * List closed PRs from a repo
+ * List closed PRs from a repo (recent, last 30 days by default)
  */
-export async function listClosedPRs(repo: string): Promise<PR[]> {
-  return listPRs(repo, "closed")
+export async function listClosedPRs(repo: string, options?: { author?: string; days?: number }): Promise<PR[]> {
+  return listPRsByState(repo, "closed", options)
 }
 
 /**
- * List merged PRs from a repo
+ * List merged PRs from a repo (recent, last 30 days by default)
  */
-export async function listMergedPRs(repo: string): Promise<PR[]> {
-  return listPRs(repo, "merged")
+export async function listMergedPRs(repo: string, options?: { author?: string; days?: number }): Promise<PR[]> {
+  return listPRsByState(repo, "merged", options)
+}
+
+/**
+ * List PRs by state with optional author and date filtering.
+ * Uses --search qualifier for date range to get recent PRs rather than oldest.
+ */
+async function listPRsByState(
+  repo: string,
+  state: "closed" | "merged",
+  options?: { author?: string; days?: number }
+): Promise<PR[]> {
+  const days = options?.days ?? 30
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+  const sinceStr = since.toISOString().split("T")[0]
+
+  const args = [
+    "pr", "list",
+    "-R", repo,
+    "--json", PR_FIELDS,
+    "--limit", "100",
+    "--state", state,
+    "--search", `updated:>=${sinceStr}`,
+  ]
+  if (options?.author) {
+    args.push("--author", options.author)
+  }
+
+  try {
+    const result = await $`gh ${args}`.json()
+    return transformPRs(result as RawPR[])
+  } catch {
+    return []
+  }
+}
+
+/**
+ * List PRs by a specific author across states.
+ * Used for @user background fetch.
+ */
+export async function listPRsByAuthor(
+  repo: string,
+  author: string,
+  state: "open" | "closed" | "merged" | "all" = "all"
+): Promise<PR[]> {
+  const args = [
+    "pr", "list",
+    "-R", repo,
+    "--json", PR_FIELDS,
+    "--limit", "50",
+    "--author", author,
+    "--state", state,
+  ]
+
+  try {
+    const result = await $`gh ${args}`.json()
+    return transformPRs(result as RawPR[])
+  } catch {
+    return []
+  }
 }
 
 /**

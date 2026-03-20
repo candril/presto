@@ -103,16 +103,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "SET_ERROR":
       return { ...state, error: action.error, loading: false }
 
-    case "SET_PRS":
+    case "SET_PRS": {
+      const sorted = [...action.prs].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )
       return {
         ...state,
-        prs: action.prs,
+        prs: sorted,
         loading: false,
         refreshing: false,
         error: null,
         // Reset selection if out of bounds
-        selectedIndex: Math.min(state.selectedIndex, Math.max(0, action.prs.length - 1)),
+        selectedIndex: Math.min(state.selectedIndex, Math.max(0, sorted.length - 1)),
       }
+    }
 
     case "APPEND_PRS": {
       // Merge new PRs, avoiding duplicates by PR URL, keep sorted by updatedAt
