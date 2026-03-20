@@ -10,6 +10,7 @@ import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, remo
 import { prHasChanges, togglePRUnread } from "../notifications"
 import { saveColumnVisibility } from "../cache"
 import { getRepoName, type ColumnId } from "../types"
+import type { AppAction } from "../state"
 
 /** Repo merge settings cache */
 export interface RepoMergeSettings {
@@ -58,7 +59,7 @@ export async function executeMerge(
   pr: { number: number; url: string },
   repo: string,
   method: MergeMethod,
-  dispatch: (action: any) => void
+  dispatch: (action: AppAction) => void
 ): Promise<{ success: boolean; message: string }> {
   try {
     const flag = method === "merge" ? "--merge" : method === "squash" ? "--squash" : "--rebase"

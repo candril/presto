@@ -22,6 +22,7 @@ import { isFilterActive, type ParsedFilter } from "../discovery"
 import type { Config } from "../config"
 import type { PR, PreviewPosition, Tab } from "../types"
 import { getRepoName } from "../types"
+import type { AppAction } from "../state"
 import { useKeybindings } from "../keybindings"
 
 export interface UseKeyboardNavOptions {
@@ -34,7 +35,7 @@ export interface UseKeyboardNavOptions {
   previewPosition: PreviewPosition
   history: History
   setHistory: (history: History) => void
-  dispatch: (action: any) => void
+  dispatch: (action: AppAction) => void
   fetchPRs: (showAsRefresh?: boolean) => void
   terminalHeight: number
   showHelp: boolean

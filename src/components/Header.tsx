@@ -1,6 +1,6 @@
 import { theme } from "../theme"
 import { Spinner } from "./Loading"
-import { formatRelativeTime } from "../hooks/useAutoRefresh"
+import { formatRelativeTime } from "../utils/time"
 
 interface HeaderProps {
   title: string

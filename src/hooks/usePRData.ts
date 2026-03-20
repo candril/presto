@@ -10,13 +10,14 @@ import { recordPRView, saveHistory, type History } from "../history"
 import type { Config } from "../config"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
+import type { AppAction } from "../state"
 import type { ParsedFilter } from "../discovery"
 
 interface UsePRDataOptions {
   config: Config
   filter: ParsedFilter
   prs: PR[]
-  dispatch: (action: any) => void
+  dispatch: (action: AppAction) => void
   history: History
   setHistory: (history: History) => void
   currentUser: string | null

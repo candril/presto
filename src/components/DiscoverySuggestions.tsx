@@ -496,6 +496,4 @@ function getAllRepos(prs: PR[]): { name: string; count: number }[] {
     .sort((a, b) => b.count - a.count)
 }
 
-function getTopRepos(prs: PR[], limit: number): { name: string; count: number }[] {
-  return getAllRepos(prs).slice(0, limit)
-}
+

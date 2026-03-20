@@ -4,11 +4,11 @@
 
 /**
  * Format a date as relative time (e.g., "2h ago", "3d ago")
+ * Accepts either a date string or Date object.
  */
-export function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+export function formatRelativeTime(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date
+  const diffMs = Date.now() - d.getTime()
   const diffSeconds = Math.floor(diffMs / 1000)
 
   if (diffSeconds < 60) {
@@ -42,4 +42,19 @@ export function formatRelativeTime(dateString: string): string {
 
   const diffYears = Math.floor(diffDays / 365)
   return `${diffYears}y ago`
+}
+
+/**
+ * Format a date as compact relative time without "ago" suffix (e.g., "2h", "3d")
+ * Used in space-constrained contexts like preview panels.
+ */
+export function formatCompactTime(date: string): string {
+  if (!date) return "?"
+  const diff = Date.now() - new Date(date).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  return `${days}d`
 }

@@ -8,6 +8,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useKeyboard } from "@opentui/react"
 import { theme } from "../theme"
+import { truncate } from "../utils/string"
 import {
   getAvailableCommands,
   groupCommands,
@@ -706,10 +707,6 @@ function CommandRow({
       {command.shortcut && <text fg={shortcutFg}>{command.shortcut}</text>}
     </box>
   )
-}
-
-function truncate(str: string, len: number): string {
-  return str.length > len ? str.slice(0, len - 1) + "..." : str
 }
 
 /** Get human-readable reason why PR cannot be merged */

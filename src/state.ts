@@ -2,13 +2,12 @@
  * Application state management
  */
 
-import type { AppState, PR, View, PreviewPosition, ColumnId, Tab } from "./types"
+import type { AppState, PR, PreviewPosition, ColumnId, Tab } from "./types"
 import { loadCache, getColumnVisibility } from "./cache"
 import { getInitialTabsState, duplicateTab, generateTabTitle } from "./tabs"
 
 /** Action types for the reducer */
 export type AppAction =
-  | { type: "SET_VIEW"; view: View }
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "SET_REFRESHING"; refreshing: boolean }
   | { type: "SET_LAST_REFRESH"; time: Date }
@@ -89,9 +88,6 @@ export function createInitialState(): AppState {
 /** State reducer */
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case "SET_VIEW":
-      return { ...state, view: action.view }
-
     case "SET_LOADING":
       return { ...state, loading: action.loading }
 

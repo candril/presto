@@ -7,8 +7,9 @@
 import { useEffect, useMemo } from "react"
 import { useKeyboard } from "@opentui/react"
 import { theme } from "../theme"
-import type { PRChange, ChangeType } from "../notifications"
+import type { PRChange } from "../notifications"
 import { getRepoName } from "../types"
+import { getChangeIcon, getChangeColor } from "../utils/changes"
 
 interface NotificationToastProps {
   changes: PRChange[]
@@ -132,65 +133,5 @@ function NotificationRow({ change }: { change: PRChange }) {
   )
 }
 
-function getChangeIcon(type: ChangeType): string {
-  switch (type) {
-    case "merged":
-      return "◆"
-    case "closed":
-      return "✕"
-    case "reopened":
-      return "○"
-    case "ready":
-      return "►"
-    case "draft":
-      return "◌"
-    case "approved":
-      return "✓"
-    case "changes_requested":
-      return "!"
-    case "ci_passed":
-      return "✓"
-    case "ci_failed":
-      return "✗"
-    case "review_requested":
-      return "→"
-    case "new_comments":
-      return "◇"
-    case "new_push":
-      return "↑"
-    case "manual":
-      return "●"
-  }
-}
 
-function getChangeColor(type: ChangeType): string {
-  switch (type) {
-    case "merged":
-      return theme.prMerged
-    case "closed":
-      return theme.textDim
-    case "reopened":
-      return theme.success
-    case "ready":
-      return theme.success
-    case "draft":
-      return theme.textMuted
-    case "approved":
-      return theme.success
-    case "changes_requested":
-      return theme.warning
-    case "ci_passed":
-      return theme.success
-    case "ci_failed":
-      return theme.error
-    case "review_requested":
-      return theme.primary
-    case "new_comments":
-      return theme.primary
-    case "new_push":
-      return theme.primary
-    case "manual":
-      return theme.warning
-  }
-}
 

@@ -13,6 +13,7 @@ import { getPRKey, isPRMarked } from "../history"
 import { getRepoName, type PR, type Tab } from "../types"
 import type { History } from "../history"
 import type { Config } from "../config"
+import type { AppAction } from "../state"
 import { parseFilter, applyFilter } from "../discovery"
 
 interface UseTabNotificationsOptions {
@@ -25,7 +26,7 @@ interface UseTabNotificationsOptions {
   history: History
   config: Config
   currentUser: string | null
-  dispatch: (action: any) => void
+  dispatch: (action: AppAction) => void
 }
 
 /**

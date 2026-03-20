@@ -3,7 +3,7 @@
  */
 
 // View modes for the application
-export type View = "list" | "detail"
+export type View = "list"
 
 // Preview panel position
 export type PreviewPosition = "right" | "bottom" | null

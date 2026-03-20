@@ -10,6 +10,7 @@ import { getPR } from "../providers/github"
 import type { Config } from "../config"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
+import type { AppAction } from "../state"
 import type { History } from "../history"
 import { getPRKey, isPRMarked } from "../history"
 
@@ -18,7 +19,7 @@ export interface UseFilteringOptions {
   prs: PR[]
   discoveryQuery: string
   history: History
-  dispatch: (action: any) => void
+  dispatch: (action: AppAction) => void
   currentUser: string | null
 }
 

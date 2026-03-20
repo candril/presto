@@ -9,6 +9,7 @@
  */
 
 import type { PR } from "../types"
+import { getRepoName } from "../types"
 
 export interface ParsedFilter {
   authors: string[]         // @username entries
@@ -230,9 +231,4 @@ export function parsePRReference(
   return null
 }
 
-/** Get repo name from PR (handles url field) */
-function getRepoName(pr: PR): string {
-  // Extract from URL: https://github.com/owner/repo/pull/123
-  const match = pr.url.match(/github\.com\/([^/]+\/[^/]+)\/pull/)
-  return match ? match[1] : ""
-}
+

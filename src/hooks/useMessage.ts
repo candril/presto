@@ -3,10 +3,11 @@
  */
 
 import { useEffect } from "react"
+import type { AppAction } from "../state"
 
 interface UseMessageOptions {
   message: string | null
-  dispatch: (action: any) => void
+  dispatch: (action: AppAction) => void
   timeout?: number
 }
 

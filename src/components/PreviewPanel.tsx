@@ -10,34 +10,11 @@ import { theme } from "../theme"
 import { Spinner } from "./Loading"
 import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile, PreviewPosition, PreviewComment } from "../types"
 import type { DetectedChange } from "../notifications"
+import { truncate } from "../utils/string"
+import { formatCompactTime } from "../utils/time"
+import { getChangeIcon, getChangeColor } from "../utils/changes"
 
-/** Get icon for change type */
-function getChangeIcon(changeType: DetectedChange["type"]): string {
-  switch (changeType) {
-    case "new_comments":
-      return "◇"
-    case "approved":
-      return "✓"
-    case "changes_requested":
-      return "●"
-    case "merged":
-      return "◆"
-    case "closed":
-      return "✕"
-    case "reopened":
-      return "○"
-    case "ready":
-      return "►"
-    case "draft":
-      return "◌"
-    case "ci_passed":
-      return "✓"
-    case "ci_failed":
-      return "✗"
-    default:
-      return "●"
-  }
-}
+
 
 /** Format change type into human readable message */
 function formatChangeMessage(change: DetectedChange): string {
@@ -67,33 +44,7 @@ function formatChangeMessage(change: DetectedChange): string {
   }
 }
 
-/** Get color for change type */
-function getChangeColor(changeType: DetectedChange["type"]): string {
-  switch (changeType) {
-    case "new_comments":
-      return theme.primary
-    case "approved":
-      return theme.success
-    case "changes_requested":
-      return theme.warning
-    case "merged":
-      return theme.prMerged
-    case "closed":
-      return theme.textDim
-    case "reopened":
-      return theme.success
-    case "ready":
-      return theme.success
-    case "draft":
-      return theme.textMuted
-    case "ci_passed":
-      return theme.success
-    case "ci_failed":
-      return theme.error
-    default:
-      return theme.warning
-  }
-}
+
 
 /** Get status color and label (like riff) */
 function getStatusInfo(state: string, isDraft?: boolean): { label: string; color: string } {
@@ -178,7 +129,7 @@ function ReviewRow({ review }: { review: PRReview }) {
         <span fg={theme.primary}>@{review.author}</span>
         <span fg={theme.textDim}> {stateLabel}</span>
         {review.submittedAt && (
-          <span fg={theme.textMuted}>  {formatTimeAgo(review.submittedAt)}</span>
+          <span fg={theme.textMuted}>  {formatCompactTime(review.submittedAt)}</span>
         )}
       </text>
     </box>
@@ -430,7 +381,7 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
           {/* Files section */}
           <box flexDirection="column" marginTop={1}>
             <SectionHeader title="Files" count={preview.files.length} />
-            <box paddingLeft={2}>
+            <box flexDirection="column" paddingLeft={2}>
               <FilesList files={preview.files} maxWidth={contentWidth - 2} />
             </box>
           </box>
@@ -443,7 +394,7 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
                 {[...preview.commits]
                   .sort((a, b) => new Date(b.committedAt).getTime() - new Date(a.committedAt).getTime())
                   .map((commit) => {
-                    const timeAgo = formatTimeAgo(commit.committedAt).padStart(3)
+                    const timeAgo = formatCompactTime(commit.committedAt).padStart(3)
                     const msgWidth = contentWidth - 12 // 3 for time + 1 space + 7 for SHA + 1 space
                     return (
                       <box key={commit.oid} height={1}>
@@ -504,30 +455,6 @@ function MergeableIndicator({ state }: { state: string }) {
   return null
 }
 
-function CommentsIndicator({ count }: { count: number }) {
-  if (count === 0) return null
-  return <span fg={theme.textDim}>  {count} comments</span>
-}
-
-function ReviewBadge({ review }: { review: PRReview }) {
-  const icon =
-    review.state === "APPROVED" ? "✓" :
-    review.state === "CHANGES_REQUESTED" ? "✗" :
-    "○"
-
-  const color =
-    review.state === "APPROVED" ? theme.success :
-    review.state === "CHANGES_REQUESTED" ? theme.error :
-    theme.warning
-
-  return (
-    <span>
-      <span fg={color}>{icon}</span>
-      <span fg={theme.text}> {review.author}</span>
-    </span>
-  )
-}
-
 function FilesList({ files, maxWidth }: { files: ChangedFile[]; maxWidth: number }) {
   // Reserve space for: status icon (1) + space (1) + stats (~12: " +999/-999")
   const maxPathLen = Math.max(20, maxWidth - 14)
@@ -575,12 +502,6 @@ function FileRow({ file, maxPathLen }: FileRowProps) {
       </text>
     </box>
   )
-}
-
-/** Truncate string from the end */
-function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
 }
 
 /** Truncate file path from the middle, keeping filename visible */
@@ -668,7 +589,7 @@ function CommentRow({ comment, bodyWidth, isNew }: {
   bodyWidth: number
   isNew: boolean
 }) {
-  const timeAgo = formatTimeAgo(comment.createdAt)
+  const timeAgo = formatCompactTime(comment.createdAt)
   // Truncate author to 10 chars and pad
   const author = comment.author.slice(0, 10).padEnd(10)
   const body = truncateCommentBody(comment.body, bodyWidth - 2) // Account for indicator
@@ -693,15 +614,5 @@ function truncateCommentBody(body: string, maxLen: number): string {
   return oneLine.slice(0, maxLen - 1) + "…"
 }
 
-/** Format time ago (compact) */
-function formatTimeAgo(date: string): string {
-  if (!date) return "?"
-  const diff = Date.now() - new Date(date).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}m`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  return `${days}d`
-}
+
 

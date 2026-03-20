@@ -12,6 +12,7 @@ import { theme } from "../theme"
 import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
 import { getRepoName, getShortRepoName, computeCheckState } from "../types"
 import { formatRelativeTime } from "../utils/time"
+import { truncate } from "../utils/string"
 import { getPRKey, isPRMarked, getPRRecencyLevel, type History } from "../history"
 import { prHasChanges } from "../notifications"
 
@@ -295,22 +296,10 @@ function getReviewIndicator(decision?: ReviewDecision | null): { icon: string; c
   }
 }
 
-/** Truncate text to max length */
-function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  return text.slice(0, maxLength - 1) + "…"
-}
-
 /** Pad string to the right (left-align) */
 function padRight(text: string, width: number): string {
   if (text.length >= width) return text.slice(0, width)
   return text + " ".repeat(width - text.length)
-}
-
-/** Pad string to the left (right-align) */
-function padLeft(text: string, width: number): string {
-  if (text.length >= width) return text.slice(0, width)
-  return " ".repeat(width - text.length) + text
 }
 
 /** Format comment count for display */
