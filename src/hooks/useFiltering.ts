@@ -157,15 +157,14 @@ export function useFiltering({
     setFetchedPRs(newFetched)
   }, [config.repositories, prs, fetchedPRs])
 
-  // Trigger fetch when >marked or >recent filter is active
+  // Trigger fetch when >recent filter is active
+  // Note: >marked PRs are always fetched during the normal refresh cycle (usePRData)
   useEffect(() => {
-    if (filter.marked) {
-      fetchMissingPRs(history.markedPRs)
-    } else if (filter.recent) {
+    if (filter.recent) {
       const recentKeys = history.recentlyViewed.map(r => `${r.repo}#${r.number}`)
       fetchMissingPRs(recentKeys)
     }
-  }, [filter.marked, filter.recent, history.markedPRs, history.recentlyViewed, fetchMissingPRs])
+  }, [filter.recent, history.recentlyViewed, fetchMissingPRs])
 
   // Trigger remote fetch when prRef filter matches nothing locally
   useEffect(() => {

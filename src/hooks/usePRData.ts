@@ -22,6 +22,29 @@ interface UsePRDataOptions {
   currentUser: string | null
 }
 
+/**
+ * Find marked PRs that are missing from the loaded set.
+ * This catches marked PRs from configured repos that have been closed/merged
+ * (and thus aren't in the initial open-only fetch).
+ */
+function getMissingMarkedPRs(
+  loadedPRs: PR[],
+  history: History
+): Array<{ repo: string; number: number }> {
+  const loadedKeys = new Set(
+    loadedPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`)
+  )
+
+  const missing: Array<{ repo: string; number: number }> = []
+  for (const key of history.markedPRs ?? []) {
+    if (loadedKeys.has(key)) continue
+    const match = key.match(/^(.+)#(\d+)$/)
+    if (!match) continue
+    missing.push({ repo: match[1], number: parseInt(match[2], 10) })
+  }
+  return missing
+}
+
 export function usePRData({ config, filter, prs, dispatch, history, setHistory, currentUser }: UsePRDataOptions) {
 
   /**
@@ -137,9 +160,12 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         dispatch({ type: "SET_PRS", prs: priorityPRs })
         dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
         
-        // Background load: rest of configured repos + tracked PRs
+        // Background load: rest of configured repos + tracked PRs + missing marked PRs
         // Don't await - let it run in background
-        if (rest.length > 0 || getTrackedPRsFromNonConfiguredRepos().length > 0) {
+        const hasBackgroundWork = rest.length > 0 
+          || getTrackedPRsFromNonConfiguredRepos().length > 0
+          || (history.markedPRs ?? []).length > 0
+        if (hasBackgroundWork) {
           (async () => {
             let backgroundPRs = [...priorityPRs]
             
@@ -162,6 +188,13 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
                 (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
               )
               backgroundPRs = [...backgroundPRs, ...newTracked]
+            }
+            
+            // Fetch marked PRs that are missing (e.g. closed/merged PRs from configured repos)
+            const missingMarked = getMissingMarkedPRs(backgroundPRs, history)
+            if (missingMarked.length > 0) {
+              const markedPRs = await getPRsBulk(missingMarked)
+              backgroundPRs = [...backgroundPRs, ...markedPRs]
             }
             
             // Update with full data
@@ -191,6 +224,13 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
             (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
           )
           allFetchedPRs = [...allFetchedPRs, ...newTracked]
+        }
+
+        // Fetch marked PRs that are missing (e.g. closed/merged PRs from configured repos)
+        const missingMarked = getMissingMarkedPRs(allFetchedPRs, history)
+        if (missingMarked.length > 0) {
+          const markedPRs = await getPRsBulk(missingMarked)
+          allFetchedPRs = [...allFetchedPRs, ...markedPRs]
         }
 
         dispatch({ type: "SET_PRS", prs: allFetchedPRs })
