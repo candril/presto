@@ -47,6 +47,19 @@ export function saveHistory(history: History): void {
   writeFileSync(HISTORY_FILE, JSON.stringify(trimmed, null, 2))
 }
 
+/** Debounced save history - coalesces rapid writes (e.g. during fast j/k navigation) */
+let debouncedSaveTimeout: ReturnType<typeof setTimeout> | null = null
+
+export function debouncedSaveHistory(history: History): void {
+  if (debouncedSaveTimeout) {
+    clearTimeout(debouncedSaveTimeout)
+  }
+  debouncedSaveTimeout = setTimeout(() => {
+    saveHistory(history)
+    debouncedSaveTimeout = null
+  }, 500)
+}
+
 /** Toggle star status for an author */
 export function toggleStarAuthor(history: History, author: string): History {
   const starred = new Set(history.starredAuthors)

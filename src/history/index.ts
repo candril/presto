@@ -1,6 +1,7 @@
 export {
   loadHistory,
   saveHistory,
+  debouncedSaveHistory,
   toggleStarAuthor,
   isAuthorStarred,
   recordAuthorView,

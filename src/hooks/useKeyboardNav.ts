@@ -9,6 +9,7 @@ import { checkoutPR } from "../actions/checkout"
 import {
   toggleStarAuthor,
   saveHistory,
+  debouncedSaveHistory,
   toggleMarkPR,
   isPRMarked,
   getPRKey,
@@ -268,6 +269,7 @@ export function useKeyboardNav({
 
     // Navigation - clamp to filtered list bounds
     // Helper to mark current PR as seen when navigating with preview open
+    // Uses debounced save to avoid blocking I/O on every keystroke during rapid j/k navigation
     const markCurrentAsSeen = () => {
       if (previewPosition) {
         const pr = filteredPRs[selectedIndex]
@@ -276,7 +278,7 @@ export function useKeyboardNav({
           if (history.prSnapshots?.[prKey]?.hasChanges) {
             const newHistory = markPRSeen(history, prKey)
             setHistory(newHistory)
-            saveHistory(newHistory)
+            debouncedSaveHistory(newHistory)
           }
         }
       }

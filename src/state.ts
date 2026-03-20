@@ -44,6 +44,7 @@ export type AppAction =
   | { type: "CLOSE_OTHER_TABS" }
   | { type: "SWITCH_TAB"; tabId: string }
   | { type: "UPDATE_TAB_NOTIFICATION"; tabId: string; hasNotification: boolean }
+  | { type: "SET_TAB_NOTIFICATIONS"; notifications: Record<string, boolean> }
   | { type: "LOAD_TABS"; tabs: Tab[]; activeTabId: string }
   | { type: "STORE_CLOSED_TAB"; tab: Tab; index: number }
   | { type: "UNDO_CLOSE_TAB" }
@@ -336,6 +337,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         t.id === action.tabId ? { ...t, hasNotification: action.hasNotification } : t
       )
       return { ...state, tabs }
+    }
+
+    case "SET_TAB_NOTIFICATIONS": {
+      // Batch update all tab notifications in a single dispatch to avoid cascading re-renders
+      let changed = false
+      const tabs = state.tabs.map((t: Tab) => {
+        const hasNotification = action.notifications[t.id] ?? false
+        if (t.hasNotification !== hasNotification) {
+          changed = true
+          return { ...t, hasNotification }
+        }
+        return t
+      })
+      return changed ? { ...state, tabs } : state
     }
 
     case "LOAD_TABS": {

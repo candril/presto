@@ -18,7 +18,7 @@ export function Loading({ message = "Loading..." }: LoadingProps) {
   useEffect(() => {
     const timer = setInterval(() => {
       setFrame((f) => (f + 1) % SPINNER_FRAMES.length)
-    }, 80)
+    }, 120)
     return () => clearInterval(timer)
   }, [])
 
@@ -39,7 +39,7 @@ export function Spinner() {
   useEffect(() => {
     const timer = setInterval(() => {
       setFrame((f) => (f + 1) % SPINNER_FRAMES.length)
-    }, 80)
+    }, 120)
     return () => clearInterval(timer)
   }, [])
 

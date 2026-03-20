@@ -127,17 +127,16 @@ export function useTabNotifications({
     return result
   }, [tabs, activeTabId, filteredPRs, allPRs, history, config, currentUser])
 
-  // Update tabs with changed notification state
+  // Update tabs with changed notification state (batched to avoid cascading re-renders)
   useEffect(() => {
-    for (const tab of tabs) {
-      const hasNotification = tabNotifications[tab.id] ?? false
-      if (tab.hasNotification !== hasNotification) {
-        dispatch({
-          type: "UPDATE_TAB_NOTIFICATION",
-          tabId: tab.id,
-          hasNotification,
-        })
-      }
+    const hasChanges = tabs.some(
+      tab => (tab.hasNotification ?? false) !== (tabNotifications[tab.id] ?? false)
+    )
+    if (hasChanges) {
+      dispatch({
+        type: "SET_TAB_NOTIFICATIONS",
+        notifications: tabNotifications,
+      })
     }
   }, [tabs, tabNotifications, dispatch])
 }
