@@ -19,8 +19,7 @@
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter = path: type:
-              let baseName = builtins.baseNameOf path; in
-              baseName == "package.json" || baseName == "bun.lock";
+              builtins.elem (baseNameOf path) [ "package.json" "bun.lock" ];
           };
 
           nativeBuildInputs = [ pkgs.bun ];
