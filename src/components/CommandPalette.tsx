@@ -621,12 +621,16 @@ export function CommandPalette({
         </box>
 
         {/* Search input */}
-        <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
-          {query ? (
-            <text fg={theme.text}>{query}</text>
-          ) : (
-            <text fg={theme.textMuted}>Search...</text>
-          )}
+        <box paddingLeft={2} paddingRight={2} paddingBottom={1} height={2}>
+          <input
+            value={query}
+            placeholder="Search..."
+            focused
+            backgroundColor={theme.modalBg}
+            textColor={theme.text}
+            placeholderColor={theme.textMuted}
+            width="100%"
+          />
         </box>
 
         {/* Commands list */}
