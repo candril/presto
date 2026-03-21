@@ -2,4 +2,4 @@
  * Actions module - external tool integration
  */
 
-export { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "./tools"
+export { openInBrowser, openRepoInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "./tools"

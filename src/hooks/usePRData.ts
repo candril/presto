@@ -6,7 +6,7 @@
 import { useEffect, useCallback, useRef, useState } from "react"
 import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs } from "../providers/github"
 import { loadCache, saveCache, isCacheValidForRepos } from "../cache"
-import { recordPRView, saveHistory, type History } from "../history"
+import { recordPRView, recordRepoVisit, saveHistory, type History } from "../history"
 import type { Config } from "../config"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
@@ -359,6 +359,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
     // Find repos that match filter and need fetching
     const reposToFetch: string[] = []
+    const adHocRepos: string[] = []
     for (const filterRepo of filterRepos) {
       // Skip if this is an enabled config repo (already fully loaded)
       const isEnabledRepo = [...enabledConfigRepos].some((r) => r.includes(filterRepo))
@@ -370,6 +371,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
       // Find full repo name from config (disabled) or visited repos
       let fullRepoName: string | null = null
+      let isAdHoc = false
       
       const configRepo = config.repositories.find(
         (r) => r.disabled && r.name.toLowerCase().includes(filterRepo)
@@ -386,8 +388,19 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         }
       }
 
+      // Ad-hoc repo: if filter looks like owner/repo but isn't configured or visited,
+      // treat it as a direct repo name and try fetching from GitHub
+      if (!fullRepoName && filterRepo.includes("/")) {
+        const parts = filterRepo.split("/")
+        if (parts.length === 2 && parts[0].length > 0 && parts[1].length > 0) {
+          fullRepoName = filterRepo
+          isAdHoc = true
+        }
+      }
+
       if (fullRepoName) {
         reposToFetch.push(fullRepoName)
+        if (isAdHoc) adHocRepos.push(fullRepoName)
       }
     }
 
@@ -398,6 +411,16 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       // Mark repos as fully fetched
       for (const repo of reposToFetch) {
         fullyFetchedRepos.current.add(repo.toLowerCase())
+      }
+
+      // Record ad-hoc repos as visited so they appear in suggestions next time
+      if (adHocRepos.length > 0) {
+        let newHistory = history
+        for (const repo of adHocRepos) {
+          newHistory = recordRepoVisit(newHistory, repo)
+        }
+        setHistory(newHistory)
+        saveHistory(newHistory)
       }
       
       if (fetchedPRs.length > 0) {

@@ -17,6 +17,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   // Actions
   "action.open": "return",
   "action.browser": "o",
+  "action.repoBrowser": "O",
   "action.checkout": "space",
   "action.copyNumber": "y",
   "action.copyUrl": "Y",

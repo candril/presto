@@ -4,7 +4,7 @@
 
 import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
-import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
+import { openInBrowser, openRepoInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
 import { checkoutPR } from "../actions/checkout"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { prHasChanges, togglePRUnread } from "../notifications"
@@ -263,6 +263,17 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       await openInBrowser(ctx.selectedPR!)
       return { type: "success", message: "Opened in browser" }
+    },
+  },
+  {
+    id: "action.repo_browser",
+    label: "Open repository in GitHub",
+    category: "action",
+    shortcut: "O",
+    requiresPR: true,
+    execute: async (ctx) => {
+      await openRepoInBrowser(ctx.selectedPR!)
+      return { type: "success", message: "Opened repository in browser" }
     },
   },
   {

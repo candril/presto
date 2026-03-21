@@ -4,7 +4,7 @@
  */
 
 import { useKeyboard, useRenderer } from "@opentui/react"
-import { openInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions"
+import { openInBrowser, openRepoInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions"
 import { checkoutPR } from "../actions/checkout"
 import {
   toggleStarAuthor,
@@ -333,6 +333,16 @@ export function useKeyboardNav({
       recordPRInteraction()
       dispatch({ type: "SHOW_MESSAGE", message: "Opening in browser..." })
       openInBrowser(selectedPR).catch(() => {
+        dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
+      })
+      return
+    }
+
+    // Open repository in browser
+    if (keys.matches(key, "action.repoBrowser")) {
+      const repo = getRepoName(selectedPR)
+      dispatch({ type: "SHOW_MESSAGE", message: `Opening ${repo}...` })
+      openRepoInBrowser(selectedPR).catch(() => {
         dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
       })
       return

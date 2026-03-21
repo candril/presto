@@ -14,6 +14,7 @@ export type KeyAction =
   // Actions
   | "action.open"
   | "action.browser"
+  | "action.repoBrowser"
   | "action.checkout"
   | "action.copyNumber"
   | "action.copyUrl"

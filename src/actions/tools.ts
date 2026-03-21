@@ -15,6 +15,14 @@ export async function openInBrowser(pr: PR): Promise<void> {
 }
 
 /**
+ * Open a repository's GitHub page in the browser
+ */
+export async function openRepoInBrowser(pr: PR): Promise<void> {
+  const repo = getRepoName(pr)
+  await $`gh repo view ${repo} --web`.quiet()
+}
+
+/**
  * Open PR in riff for code review
  * Spawns riff with full terminal inheritance
  */
