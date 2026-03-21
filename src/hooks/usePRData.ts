@@ -5,7 +5,7 @@
 
 import { useEffect, useCallback, useRef, useState } from "react"
 import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs } from "../providers/github"
-import { loadCache, saveCache, isCacheValidForRepos } from "../cache"
+import { saveCache } from "../cache"
 import { recordPRView, recordRepoVisit, saveHistory, type History } from "../history"
 import type { Config } from "../config"
 import type { PR } from "../types"
@@ -128,6 +128,15 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       )
       if (visitedRepo) {
         priority.push(visitedRepo.name)
+        continue
+      }
+
+      // Ad-hoc repo: if filter looks like owner/repo, treat as direct repo name
+      if (filterRepo.includes("/")) {
+        const parts = filterRepo.split("/")
+        if (parts.length === 2 && parts[0].length > 0 && parts[1].length > 0) {
+          priority.push(filterRepo)
+        }
       }
     }
 
@@ -172,6 +181,28 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       // If we have priority repos (matching current filter), fetch those first
       if (priority.length > 0) {
         const priorityPRs = await listPRsFromRepos(priority)
+
+        // Mark priority repos as fully fetched so the repo: filter effect doesn't re-fetch
+        for (const repo of priority) {
+          fullyFetchedRepos.current.add(repo.toLowerCase())
+        }
+
+        // Record ad-hoc priority repos as visited
+        const configRepoNames = new Set(config.repositories.map((r) => r.name.toLowerCase()))
+        const visitedRepoNames = new Set((history.visitedRepos ?? []).map((r) => r.name.toLowerCase()))
+        let updatedHistory = history
+        let historyChanged = false
+        for (const repo of priority) {
+          const repoLower = repo.toLowerCase()
+          if (!configRepoNames.has(repoLower) && !visitedRepoNames.has(repoLower)) {
+            updatedHistory = recordRepoVisit(updatedHistory, repo)
+            historyChanged = true
+          }
+        }
+        if (historyChanged) {
+          setHistory(updatedHistory)
+          saveHistory(updatedHistory)
+        }
         
         // Dispatch priority PRs immediately for fast UI update
         dispatch({ type: "SET_PRS", prs: priorityPRs })
@@ -274,21 +305,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     }
   }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos])
 
-  // Load cached data on mount, then revalidate
+  // Revalidate on mount - PRs are already hydrated from cache in createInitialState()
+  // so always do a background refresh (stale data shows immediately)
   useEffect(() => {
-    const repos = config.repositories
-      .filter((r) => !r.disabled)
-      .map((r) => r.name)
-
-    const cache = loadCache()
-    if (isCacheValidForRepos(cache, repos) && cache.prs.length > 0) {
-      // Load cached PRs for instant display, then refresh in background
-      // Note: filter query is loaded in createInitialState()
-      dispatch({ type: "SET_PRS", prs: cache.prs })
-      fetchPRs(true)
-    } else {
-      fetchPRs(false)
-    }
+    const hasPRs = prs.length > 0
+    fetchPRs(hasPRs)
   }, []) // Only run on mount
 
   // Fetch PR on-demand when a URL/reference is pasted in filter bar

@@ -288,7 +288,7 @@ export const commands: Command[] = [
         await openInRiff(ctx.selectedPR!)
       } finally {
         ctx.renderer.resume()
-        ctx.fetchPRs()
+        ctx.fetchPRs(true)
       }
       return { type: "success" }
     },

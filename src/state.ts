@@ -53,16 +53,19 @@ export type AppAction =
 export function createInitialState(): AppState {
   const cache = loadCache()
   const tabsState = getInitialTabsState()
-  
+
   // Use filter from active tab if available, otherwise from cache
   const activeTab = tabsState.tabs.find((t: Tab) => t.id === tabsState.activeTabId)
   const filterQuery = activeTab?.filterQuery ?? cache.filterQuery ?? ""
-  
+
+  // Hydrate PRs from cache for instant display (avoids blocking loading screen on resume)
+  const hasCachedPRs = cache.prs.length > 0
+
   return {
     view: "list",
-    prs: [],
+    prs: hasCachedPRs ? cache.prs : [],
     selectedIndex: 0,
-    loading: true,
+    loading: !hasCachedPRs,
     refreshing: false,
     lastRefresh: null,
     error: null,
