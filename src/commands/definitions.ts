@@ -288,6 +288,7 @@ export const commands: Command[] = [
         await openInRiff(ctx.selectedPR!)
       } finally {
         ctx.renderer.resume()
+        ctx.fetchPRs()
       }
       return { type: "success" }
     },

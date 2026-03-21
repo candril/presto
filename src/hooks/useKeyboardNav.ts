@@ -354,6 +354,7 @@ export function useKeyboardNav({
       renderer.suspend()
       openInRiff(selectedPR).finally(() => {
         renderer.resume()
+        fetchPRs()
       })
       return
     }
