@@ -144,12 +144,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectedIndex: Math.max(0, Math.min(state.prs.length - 1, state.selectedIndex + action.delta)),
       }
 
-    case "OPEN_DISCOVERY":
+    case "OPEN_DISCOVERY": {
+      // When reopening with an existing query, append a space so
+      // the suggestions show new tokens to add (instead of completions
+      // for the last token).
+      const q = state.discoveryQuery
+      const discoveryQuery = q && !q.endsWith(" ") ? q + " " : q
       return {
         ...state,
         discoveryVisible: true,
-        // Keep existing query so filter is still visible
+        discoveryQuery,
       }
+    }
 
     case "CLOSE_DISCOVERY":
       return {
