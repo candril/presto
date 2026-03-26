@@ -28,6 +28,8 @@ export interface ParsedFilter {
   starred: boolean       // >starred - show PRs from starred authors
   // Letter-based mark categories (spec 028)
   marks: string[]        // marks:a marks:d - filter to specific mark letters
+  // Unread filter
+  unread: boolean        // >unread - show PRs with unseen changes
 }
 
 export const emptyFilter: ParsedFilter = {
@@ -45,6 +47,7 @@ export const emptyFilter: ParsedFilter = {
   recent: false,
   starred: false,
   marks: [],
+  unread: false,
 }
 
 /** Check if a filter has any active criteria */
@@ -63,7 +66,8 @@ export function isFilterActive(filter: ParsedFilter): boolean {
     filter.marked ||
     filter.recent ||
     filter.starred ||
-    filter.marks.length > 0
+    filter.marks.length > 0 ||
+    filter.unread
   )
 }
 
@@ -84,6 +88,7 @@ export function parseFilter(query: string): ParsedFilter {
     recent: false,
     starred: false,
     marks: [],
+    unread: false,
   }
 
   // Check if query is a PR reference (URL, #123, repo#123, etc.)
@@ -113,6 +118,8 @@ export function parseFilter(query: string): ParsedFilter {
       result.recent = true
     } else if (lower === ">starred") {
       result.starred = true
+    } else if (lower === ">unread") {
+      result.unread = true
     } else if (lower.startsWith("marks:")) {
       const letter = lower.slice(6)
       if (letter.length === 1 && letter >= "a" && letter <= "z") {

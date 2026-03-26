@@ -48,6 +48,12 @@ export function generateTabTitle(filterQuery: string, options?: TitleOptions): s
 
   // Special filters - if alone, return just the name
   // If combined with other filters, add as modifier
+  if (filter.unread) {
+    if (!filter.repos.length && !filter.authors.length && !filter.states.length && !filter.text && !filter.showAll && !filter.marks.length && !filter.marked) {
+      return "Unread"
+    }
+    modifiers.push("unread")
+  }
   if (filter.marked) {
     if (!filter.repos.length && !filter.authors.length && !filter.states.length && !filter.text && !filter.showAll && !filter.marks.length) {
       return "Marked"

@@ -209,6 +209,12 @@ export function useKeyboardNav({
       dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
       return
     }
+    // Toggle >unread filter
+    if (keys.matches(key, "filter.unread")) {
+      const current = filter.unread ? "" : ">unread"
+      dispatch({ type: "SET_DISCOVERY_QUERY", query: current })
+      return
+    }
     // Toggle @me filter (my PRs)
     if (keys.matches(key, "filter.expanded")) {
       const hasMe = filter.authors.includes("me") || (filter.authors.length === 1 && filter.authors[0] === "me")

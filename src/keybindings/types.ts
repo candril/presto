@@ -30,6 +30,7 @@ export type KeyAction =
   | "filter.recent"
   | "filter.starred"
   | "filter.expanded"
+  | "filter.unread"
   // Tabs
   | "tab.new"
   | "tab.close"

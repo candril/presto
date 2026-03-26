@@ -11,6 +11,7 @@ export {
   markPRHasChanges,
   markPRSeen,
   prHasChanges,
+  countUnreadPRs,
   togglePRUnread,
   updateAllSnapshots,
   computePRState,

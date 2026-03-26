@@ -118,6 +118,11 @@ export function prHasChanges(history: History, prKey: string): boolean {
   return history.prSnapshots[prKey]?.hasChanges ?? false
 }
 
+/** Count PRs with unseen changes */
+export function countUnreadPRs(history: History): number {
+  return Object.values(history.prSnapshots).filter(s => s.hasChanges).length
+}
+
 /** Toggle the unread/hasChanges state manually */
 export function togglePRUnread(history: History, prKey: string): History {
   const snapshot = history.prSnapshots[prKey]

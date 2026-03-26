@@ -7,6 +7,7 @@ import { useKeyboard } from "@opentui/react"
 import { theme } from "../theme"
 import type { History } from "../history"
 import { getMarkedPRCount, getUsedMarkLetters, getPRsWithMark } from "../history"
+import { countUnreadPRs } from "../notifications"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
 import type { Repository } from "../config"
@@ -171,6 +172,7 @@ function buildSuggestions(
 
     // Show special filter tokens first (if not already in query)
     const specialFilters = [
+      { token: ">unread", label: "Unread PRs", count: countUnreadPRs(history) },
       { token: ">marked", label: "Marked PRs", count: getMarkedPRCount(history) },
       { token: ">recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
       { token: ">starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
@@ -274,6 +276,7 @@ function buildSuggestions(
       const partial = lastToken.slice(1).toLowerCase()
       
       const specialFilters = [
+        { token: ">unread", label: "Unread PRs", count: countUnreadPRs(history) },
         { token: ">marked", label: "Marked PRs", count: getMarkedPRCount(history) },
         { token: ">recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
         { token: ">starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },

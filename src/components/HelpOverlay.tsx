@@ -33,6 +33,7 @@ function getHelpSections(keys: KeybindingsContext) {
         [keys.getKeyDisplay("filter.open"), "Open filter"],
         [keys.getKeyDisplay("filter.clear"), "Clear filter"],
         ["Tab", "Autocomplete"],
+        [keys.getKeyDisplay("filter.unread"), "Show unread PRs"],
         [keys.getKeyDisplay("filter.marked"), "Show marked PRs"],
         [keys.getKeyDisplay("filter.recent"), "Show recent PRs"],
         [keys.getKeyDisplay("filter.starred"), "Show starred authors"],

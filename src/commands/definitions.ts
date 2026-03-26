@@ -241,6 +241,16 @@ export const commands: Command[] = [
     },
   },
   {
+    id: "filter.unread",
+    label: "Show unread PRs",
+    category: "filter",
+    shortcut: "Ctrl+U",
+    execute: async (ctx) => {
+      ctx.dispatch({ type: "SET_DISCOVERY_QUERY", query: ">unread" })
+      return { type: "success" }
+    },
+  },
+  {
     id: "filter.starred",
     label: "Show PRs from starred authors",
     category: "filter",

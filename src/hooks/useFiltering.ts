@@ -13,6 +13,7 @@ import { getRepoName } from "../types"
 import type { AppAction } from "../state"
 import type { History } from "../history"
 import { getPRKey, isPRMarked, getPRMark } from "../history"
+import { prHasChanges } from "../notifications"
 
 export interface UseFilteringOptions {
   config: Config
@@ -249,6 +250,17 @@ export function useFiltering({
     // Branch reference (e.g. feature/my-thing) - search allPRs (includes remotely fetched)
     if (filter.branchRef) {
       const result = applyFilter(allPRs, filter)
+      return { filteredPRs: result, hiddenCount: 0 }
+    }
+
+    // >unread - show PRs with unseen changes (bypasses all repo settings)
+    if (filter.unread) {
+      let result = allPRs.filter((pr) => {
+        const prKey = getPRKey(getRepoName(pr), pr.number)
+        return prHasChanges(history, prKey)
+      })
+      // Apply other filters on top (text search, etc.)
+      result = applyFilter(result, { ...filter, unread: false })
       return { filteredPRs: result, hiddenCount: 0 }
     }
 

@@ -34,6 +34,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "filter.recent": "ctrl+r",
   "filter.starred": "ctrl+s",
   "filter.expanded": "ctrl+e",
+  "filter.unread": "ctrl+u",
 
   // Tabs
   "tab.new": "t",
