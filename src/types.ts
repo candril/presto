@@ -281,4 +281,10 @@ export interface AppState {
   activeTabId: string
   /** Last closed tab for undo */
   closedTab: { tab: Tab; index: number } | null
+
+  // Mark categories (spec 028)
+  /** Waiting for a letter after pressing M (Shift+M) */
+  markPending: boolean
+  /** Waiting for a letter after pressing ' (quote) */
+  jumpPending: boolean
 }

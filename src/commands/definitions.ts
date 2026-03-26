@@ -365,21 +365,15 @@ export const commands: Command[] = [
   },
   {
     id: "action.mark",
-    label: "Mark/unmark PR",
+    label: "Mark PR with letter",
     category: "action",
-    shortcut: "m",
+    shortcut: "m + a-z",
     requiresPR: true,
     execute: async (ctx) => {
-      const pr = ctx.selectedPR!
-      const prKey = getPRKey(getRepoName(pr), pr.number)
-      const newHistory = toggleMarkPR(ctx.history, prKey)
-      ctx.setHistory(newHistory)
-      saveHistory(newHistory)
-      const isMarked = isPRMarked(newHistory, prKey)
-      return {
-        type: "success",
-        message: isMarked ? "Marked" : "Unmarked",
-      }
+      // Trigger mark-pending mode — user will press a letter next
+      ctx.dispatch({ type: "SET_MARK_PENDING", pending: true })
+      ctx.dispatch({ type: "SHOW_MESSAGE", message: "Mark: _" })
+      return { type: "success" }
     },
   },
   {

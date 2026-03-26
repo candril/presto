@@ -48,6 +48,9 @@ export type AppAction =
   | { type: "STORE_CLOSED_TAB"; tab: Tab; index: number }
   | { type: "UNDO_CLOSE_TAB" }
   | { type: "RENAME_TAB"; tabId: string; title: string }
+  // Mark categories (spec 028)
+  | { type: "SET_MARK_PENDING"; pending: boolean }
+  | { type: "SET_JUMP_PENDING"; pending: boolean }
 
 /** Create initial state, loading persisted filter from cache */
 export function createInitialState(): AppState {
@@ -85,6 +88,9 @@ export function createInitialState(): AppState {
     tabs: tabsState.tabs,
     activeTabId: tabsState.activeTabId,
     closedTab: null,
+    // Mark categories (spec 028)
+    markPending: false,
+    jumpPending: false,
   }
 }
 
@@ -417,6 +423,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       )
       return { ...state, tabs }
     }
+
+    // Mark categories (spec 028)
+    case "SET_MARK_PENDING":
+      return { ...state, markPending: action.pending, jumpPending: false }
+
+    case "SET_JUMP_PENDING":
+      return { ...state, jumpPending: action.pending, markPending: false }
 
     default:
       return state

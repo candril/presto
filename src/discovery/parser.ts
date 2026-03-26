@@ -23,9 +23,11 @@ export interface ParsedFilter {
   prRef: { repo?: string; number: number } | null  // Direct PR reference (URL, #123, etc.)
   branchRef: string | null  // Branch name lookup (e.g. feature/my-thing)
   // Special filters (spec 015)
-  marked: boolean        // marked: - show only marked PRs
-  recent: boolean        // recent: - show only recent PRs
+  marked: boolean        // >marked - show only marked PRs (any letter)
+  recent: boolean        // >recent - show only recent PRs
   starred: boolean       // >starred - show PRs from starred authors
+  // Letter-based mark categories (spec 028)
+  marks: string[]        // marks:a marks:d - filter to specific mark letters
 }
 
 export const emptyFilter: ParsedFilter = {
@@ -42,6 +44,7 @@ export const emptyFilter: ParsedFilter = {
   marked: false,
   recent: false,
   starred: false,
+  marks: [],
 }
 
 /** Check if a filter has any active criteria */
@@ -59,7 +62,8 @@ export function isFilterActive(filter: ParsedFilter): boolean {
     filter.branchRef !== null ||
     filter.marked ||
     filter.recent ||
-    filter.starred
+    filter.starred ||
+    filter.marks.length > 0
   )
 }
 
@@ -79,6 +83,7 @@ export function parseFilter(query: string): ParsedFilter {
     marked: false,
     recent: false,
     starred: false,
+    marks: [],
   }
 
   // Check if query is a PR reference (URL, #123, repo#123, etc.)
@@ -108,6 +113,11 @@ export function parseFilter(query: string): ParsedFilter {
       result.recent = true
     } else if (lower === ">starred") {
       result.starred = true
+    } else if (lower.startsWith("marks:")) {
+      const letter = lower.slice(6)
+      if (letter.length === 1 && letter >= "a" && letter <= "z") {
+        result.marks.push(letter)
+      }
     } else if (token.startsWith("-@")) {
       result.excludeAuthors.push(token.slice(2).toLowerCase())
     } else if (token.startsWith("@")) {

@@ -7,10 +7,16 @@ export {
   recordAuthorView,
   recordPRView,
   recordFilterQuery,
-  // PR marking (spec 015)
+  // PR marking (spec 015 + 028 letter-based categories)
   getPRKey,
   toggleMarkPR,
   isPRMarked,
+  getPRMark,
+  getPRsWithMark,
+  getUsedMarkLetters,
+  getMarkedPRCount,
+  getAllMarkedPRKeys,
+  migrateMarkedPRs,
   isPRRecent,
   getPRRecencyLevel,
   clearAllMarks,

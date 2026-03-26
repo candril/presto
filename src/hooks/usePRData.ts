@@ -37,7 +37,7 @@ function getMissingMarkedPRs(
   )
 
   const missing: Array<{ repo: string; number: number }> = []
-  for (const key of history.markedPRs ?? []) {
+  for (const key of Object.keys(history.markedPRs ?? {})) {
     if (loadedKeys.has(key)) continue
     const match = key.match(/^(.+)#(\d+)$/)
     if (!match) continue
@@ -59,7 +59,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
     // Collect tracked PR keys: marked + recently viewed + my PRs (via snapshots)
     const trackedKeys = new Set([
-      ...(history.markedPRs ?? []),
+      ...Object.keys(history.markedPRs ?? {}),
       ...(history.recentlyViewed ?? []).map((r) => `${r.repo}#${r.number}`),
     ])
 
@@ -212,7 +212,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         // Don't await - let it run in background
         const hasBackgroundWork = rest.length > 0 
           || getTrackedPRsFromNonConfiguredRepos().length > 0
-          || (history.markedPRs ?? []).length > 0
+          || Object.keys(history.markedPRs ?? {}).length > 0
         if (hasBackgroundWork) {
           (async () => {
             let backgroundPRs = [...priorityPRs]

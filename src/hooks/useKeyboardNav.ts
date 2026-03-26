@@ -43,6 +43,9 @@ export interface UseKeyboardNavOptions {
   // Tab state (spec 011)
   tabs: Tab[]
   activeTabId: string
+  // Mark categories (spec 028)
+  markPending: boolean
+  jumpPending: boolean
 }
 
 export function useKeyboardNav({
@@ -62,11 +65,55 @@ export function useKeyboardNav({
   setShowHelp,
   tabs,
   activeTabId,
+  markPending,
+  jumpPending,
 }: UseKeyboardNavOptions) {
   const renderer = useRenderer()
   const keys = useKeybindings(config)
 
   useKeyboard((key) => {
+    // Mark-pending mode (spec 028): waiting for a-z letter after M
+    if (markPending) {
+      dispatch({ type: "SET_MARK_PENDING", pending: false })
+      const letter = key.name?.toLowerCase()
+      if (letter && letter.length === 1 && letter >= "a" && letter <= "z" && !key.ctrl && !key.meta) {
+        const pr = filteredPRs[selectedIndex]
+        if (pr) {
+          const prKey = getPRKey(getRepoName(pr), pr.number)
+          const newHistory = toggleMarkPR(history, prKey, letter)
+          setHistory(newHistory)
+          saveHistory(newHistory)
+          const isNowMarked = isPRMarked(newHistory, prKey, letter)
+          dispatch({
+            type: "SHOW_MESSAGE",
+            message: isNowMarked ? `Marked [${letter}]` : `Unmarked [${letter}]`,
+          })
+        }
+      } else {
+        dispatch({ type: "SHOW_MESSAGE", message: "Mark cancelled" })
+      }
+      return
+    }
+
+    // Jump-pending mode (spec 028): waiting for a-z letter after '
+    if (jumpPending) {
+      dispatch({ type: "SET_JUMP_PENDING", pending: false })
+      const letter = key.name?.toLowerCase()
+      if (letter && letter.length === 1 && letter >= "a" && letter <= "z" && !key.ctrl && !key.meta) {
+        // Check if already filtering by this mark — toggle off
+        const currentQuery = filter.marks.length === 1 && filter.marks[0] === letter
+          ? ""
+          : `marks:${letter}`
+        dispatch({ type: "SET_DISCOVERY_QUERY", query: currentQuery })
+      } else if (key.name === "'" || key.name === "'") {
+        // '' clears mark filter
+        dispatch({ type: "SET_DISCOVERY_QUERY", query: "" })
+      } else {
+        dispatch({ type: "SHOW_MESSAGE", message: "Jump cancelled" })
+      }
+      return
+    }
+
     // Command palette is open - let it handle its own keys
     if (commandPaletteVisible) {
       return
@@ -245,20 +292,19 @@ export function useKeyboardNav({
       return
     }
 
-    // Mark/unmark PR (spec 015)
+    // Mark with letter (spec 028): M enters mark-pending mode
     if (keys.matches(key, "action.mark")) {
-      const pr = filteredPRs[selectedIndex]
-      if (pr) {
-        const prKey = getPRKey(getRepoName(pr), pr.number)
-        const newHistory = toggleMarkPR(history, prKey)
-        setHistory(newHistory)
-        saveHistory(newHistory)
-        const isNowMarked = isPRMarked(newHistory, prKey)
-        dispatch({
-          type: "SHOW_MESSAGE",
-          message: isNowMarked ? "Marked" : "Unmarked",
-        })
+      if (filteredPRs[selectedIndex]) {
+        dispatch({ type: "SET_MARK_PENDING", pending: true })
+        dispatch({ type: "SHOW_MESSAGE", message: "Mark: _" })
       }
+      return
+    }
+
+    // Jump to mark (spec 028): ' enters jump-pending mode
+    if (key.name === "'" && !key.ctrl && !key.shift && !key.meta) {
+      dispatch({ type: "SET_JUMP_PENDING", pending: true })
+      dispatch({ type: "SHOW_MESSAGE", message: "Jump to mark: _" })
       return
     }
 

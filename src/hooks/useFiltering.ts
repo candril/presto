@@ -12,7 +12,7 @@ import type { PR } from "../types"
 import { getRepoName } from "../types"
 import type { AppAction } from "../state"
 import type { History } from "../history"
-import { getPRKey, isPRMarked } from "../history"
+import { getPRKey, isPRMarked, getPRMark } from "../history"
 
 export interface UseFilteringOptions {
   config: Config
@@ -252,7 +252,20 @@ export function useFiltering({
       return { filteredPRs: result, hiddenCount: 0 }
     }
 
-    // >marked - show only marked PRs (bypasses all repo settings)
+    // marks:<letter> - show PRs matching any of the specified mark letters (OR, bypasses repo settings)
+    if (filter.marks.length > 0) {
+      const letters = new Set(filter.marks)
+      let result = allPRs.filter((pr) => {
+        const prKey = getPRKey(getRepoName(pr), pr.number)
+        const mark = getPRMark(history, prKey)
+        return mark !== null && letters.has(mark)
+      })
+      // Apply other filters on top (text search, author, etc.)
+      result = applyFilter(result, { ...filter, marks: [] })
+      return { filteredPRs: result, hiddenCount: 0 }
+    }
+
+    // >marked - show only marked PRs with any letter (bypasses all repo settings)
     if (filter.marked) {
       let result = allPRs.filter((pr) => {
         const prKey = getPRKey(getRepoName(pr), pr.number)

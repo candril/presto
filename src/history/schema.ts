@@ -15,8 +15,8 @@ export interface History {
   /** Recently used filter queries */
   recentFilters: string[]
 
-  /** Marked/pinned PRs, keyed by "owner/repo#number" */
-  markedPRs: string[]
+  /** Marked PRs. Key = PR key ("owner/repo#number"), value = mark letter (a-z) */
+  markedPRs: Record<string, string>
 
   /** Snapshots of tracked PR states for change detection */
   prSnapshots: Record<string, PRSnapshot>
@@ -109,7 +109,7 @@ export const defaultHistory: History = {
   recentAuthors: [],
   recentlyViewed: [],
   recentFilters: [],
-  markedPRs: [],
+  markedPRs: {},
   prSnapshots: {},
   visitedRepos: [],
 }

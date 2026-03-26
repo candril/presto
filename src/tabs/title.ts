@@ -37,10 +37,19 @@ export function generateTabTitle(filterQuery: string, options?: TitleOptions): s
   const parts: string[] = []
   const modifiers: string[] = []
 
+  // Mark categories (spec 028) - e.g. "marks:d" -> "Marks: d", "marks:a marks:b" -> "Marks: a, b"
+  if (filter.marks.length > 0) {
+    const letters = filter.marks.join(", ")
+    if (!filter.repos.length && !filter.authors.length && !filter.states.length && !filter.text && !filter.showAll && !filter.marked) {
+      return `Marks: ${letters}`
+    }
+    modifiers.push(letters)
+  }
+
   // Special filters - if alone, return just the name
   // If combined with other filters, add as modifier
   if (filter.marked) {
-    if (!filter.repos.length && !filter.authors.length && !filter.states.length && !filter.text && !filter.showAll) {
+    if (!filter.repos.length && !filter.authors.length && !filter.states.length && !filter.text && !filter.showAll && !filter.marks.length) {
       return "Marked"
     }
     modifiers.push("marked")

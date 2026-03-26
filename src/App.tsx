@@ -189,6 +189,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     setShowHelp,
     tabs: state.tabs,
     activeTabId: state.activeTabId,
+    markPending: state.markPending,
+    jumpPending: state.jumpPending,
   })
 
   // Feature: PR Preview

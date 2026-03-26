@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useKeyboard } from "@opentui/react"
 import { theme } from "../theme"
 import type { History } from "../history"
+import { getMarkedPRCount, getUsedMarkLetters, getPRsWithMark } from "../history"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
 import type { Repository } from "../config"
@@ -159,7 +160,8 @@ function buildSuggestions(
   const isTypingSpecialFilter = lastToken.startsWith(">")
   const isTypingRepo = lastToken.startsWith("repo:")
   const isTypingState = lastToken.startsWith("state:")
-  const isTypingPrefix = isTypingAuthor || isTypingSpecialFilter || isTypingRepo || isTypingState
+  const isTypingMarks = lastToken.startsWith("marks:")
+  const isTypingPrefix = isTypingAuthor || isTypingSpecialFilter || isTypingRepo || isTypingState || isTypingMarks
   
   // Check if query ends with space (ready for new token)
   const endsWithSpace = query.endsWith(" ")
@@ -169,7 +171,7 @@ function buildSuggestions(
 
     // Show special filter tokens first (if not already in query)
     const specialFilters = [
-      { token: ">marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
+      { token: ">marked", label: "Marked PRs", count: getMarkedPRCount(history) },
       { token: ">recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
       { token: ">starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
     ]
@@ -181,6 +183,20 @@ function buildSuggestions(
           value: `${existingQuery}${filter.token}`,
           label: filter.label,
           count: filter.count,
+        })
+      }
+    }
+
+    // Show mark letter suggestions (spec 028)
+    const usedLetters = getUsedMarkLetters(history)
+    for (const letter of usedLetters) {
+      const token = `marks:${letter}`
+      if (!tokens.includes(token)) {
+        items.push({
+          type: "filter",
+          value: `${existingQuery}${token}`,
+          label: `Marks: ${letter}`,
+          count: getPRsWithMark(history, letter).length,
         })
       }
     }
@@ -258,7 +274,7 @@ function buildSuggestions(
       const partial = lastToken.slice(1).toLowerCase()
       
       const specialFilters = [
-        { token: ">marked", label: "Marked PRs", count: history.markedPRs?.length || 0 },
+        { token: ">marked", label: "Marked PRs", count: getMarkedPRCount(history) },
         { token: ">recent", label: "Recent PRs", count: Object.keys(history.recentlyViewed || {}).length },
         { token: ">starred", label: "Starred authors", count: history.starredAuthors?.length || 0 },
       ]
@@ -370,6 +386,21 @@ function buildSuggestions(
             value: `${prefixWithSpace}state:${state.value}`,
             label: state.label,
             count: state.count,
+          })
+        }
+      }
+    } else if (isTypingMarks) {
+      // Typing marks: - suggest mark letters
+      const partial = lastToken.slice(6)
+      const usedLetters = getUsedMarkLetters(history)
+
+      for (const letter of usedLetters) {
+        if (letter.includes(partial)) {
+          items.push({
+            type: "filter",
+            value: `${prefixWithSpace}marks:${letter}`,
+            label: `Marks: ${letter}`,
+            count: getPRsWithMark(history, letter).length,
           })
         }
       }

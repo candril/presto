@@ -24,7 +24,12 @@ export function loadHistory(): History {
 
   try {
     const content = readFileSync(HISTORY_FILE, "utf-8")
-    return { ...defaultHistory, ...JSON.parse(content) }
+    const raw = JSON.parse(content)
+    // Migrate markedPRs from old formats to Record<prKey, letter>
+    if (raw.markedPRs) {
+      raw.markedPRs = migrateMarkedPRs(raw.markedPRs)
+    }
+    return { ...defaultHistory, ...raw }
   } catch {
     return { ...defaultHistory }
   }
@@ -131,7 +136,7 @@ export function recordFilterQuery(history: History, query: string): History {
 }
 
 // ============================================================================
-// PR Marking (spec 015)
+// PR Marking (spec 015 + spec 028 letter-based categories)
 // ============================================================================
 
 /** Get PR key from repo and number */
@@ -139,20 +144,87 @@ export function getPRKey(repo: string, number: number): string {
   return `${repo}#${number}`
 }
 
-/** Toggle mark status for a PR */
-export function toggleMarkPR(history: History, prKey: string): History {
-  const marked = new Set(history.markedPRs ?? [])
-  if (marked.has(prKey)) {
-    marked.delete(prKey)
-  } else {
-    marked.add(prKey)
+/**
+ * Migrate old markedPRs formats to current format: Record<prKey, letter>.
+ * - Old format 1: string[] (spec 015) → each PR gets letter "m"
+ * - Old format 2: Record<letter, prKey[]> (intermediate spec 028) → flip to prKey→letter
+ * - Current format: Record<prKey, letter> → pass through
+ */
+export function migrateMarkedPRs(raw: unknown): Record<string, string> {
+  if (!raw) return {}
+  if (Array.isArray(raw)) {
+    // Old format: string[] — migrate to letter "m"
+    const result: Record<string, string> = {}
+    for (const key of raw) {
+      if (typeof key === "string") result[key] = "m"
+    }
+    return result
   }
-  return { ...history, markedPRs: [...marked] }
+  if (typeof raw === "object") {
+    const obj = raw as Record<string, unknown>
+    // Detect old Record<letter, prKey[]> format: values are arrays
+    const firstValue = Object.values(obj)[0]
+    if (Array.isArray(firstValue)) {
+      // Flip: letter → prKey[] becomes prKey → letter
+      const result: Record<string, string> = {}
+      for (const [letter, keys] of Object.entries(obj)) {
+        for (const key of keys as string[]) {
+          result[key] = letter
+        }
+      }
+      return result
+    }
+    // Current format: Record<prKey, letter>
+    return obj as Record<string, string>
+  }
+  return {}
 }
 
-/** Check if a PR is marked */
-export function isPRMarked(history: History, prKey: string): boolean {
-  return history.markedPRs?.includes(prKey) ?? false
+/** Toggle a mark letter on a PR. If PR already has this letter, removes it. Otherwise sets it. */
+export function toggleMarkPR(history: History, prKey: string, letter: string): History {
+  const markedPRs = { ...history.markedPRs }
+  if (markedPRs[prKey] === letter) {
+    delete markedPRs[prKey]
+  } else {
+    markedPRs[prKey] = letter
+  }
+  return { ...history, markedPRs }
+}
+
+/** Check if a PR is marked. If letter is provided, checks that specific letter. */
+export function isPRMarked(history: History, prKey: string, letter?: string): boolean {
+  const mark = history.markedPRs?.[prKey]
+  if (!mark) return false
+  if (letter) return mark === letter
+  return true
+}
+
+/** Get the mark letter for a PR, or null if not marked */
+export function getPRMark(history: History, prKey: string): string | null {
+  return history.markedPRs?.[prKey] ?? null
+}
+
+/** Get all PR keys with a specific mark letter */
+export function getPRsWithMark(history: History, letter: string): string[] {
+  return Object.entries(history.markedPRs ?? {})
+    .filter(([, l]) => l === letter)
+    .map(([key]) => key)
+}
+
+/** Get all used mark letters, sorted alphabetically */
+export function getUsedMarkLetters(history: History): string[] {
+  const letters = new Set(Object.values(history.markedPRs ?? {}))
+  return [...letters].sort()
+}
+
+/** Get count of all marked PRs */
+export function getMarkedPRCount(history: History): number {
+  return Object.keys(history.markedPRs ?? {}).length
+}
+
+/** Get all marked PR keys */
+export function getAllMarkedPRKeys(history: History): string[] {
+  return Object.keys(history.markedPRs ?? {})
 }
 
 /** Check if a PR is in recent history */
@@ -208,7 +280,7 @@ export function getPRRecencyLevel(history: History, prKey: string): RecencyLevel
 
 /** Clear all marks */
 export function clearAllMarks(history: History): History {
-  return { ...history, markedPRs: [] }
+  return { ...history, markedPRs: {} }
 }
 
 /** Clear recent history */

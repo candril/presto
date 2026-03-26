@@ -168,9 +168,9 @@ export function updateAllSnapshots(
 ): History {
   let updated = history
 
-  // Build set of tracked PR keys
+  // Build set of tracked PR keys (marked PRs + recently viewed)
   const trackedKeys = new Set([
-    ...(history.markedPRs ?? []),
+    ...Object.keys(history.markedPRs ?? {}),
     ...(history.recentlyViewed ?? []).map((r) => `${r.repo}#${r.number}`),
   ])
 

@@ -8,12 +8,12 @@
 import { useRef, useEffect } from "react"
 import { useTerminalDimensions } from "@opentui/react"
 import type { ScrollBoxRenderable } from "@opentui/core"
-import { theme } from "../theme"
+import { theme, getMarkColor } from "../theme"
 import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
 import { getRepoName, getShortRepoName, computeCheckState } from "../types"
 import { formatRelativeTime } from "../utils/time"
 import { truncate } from "../utils/string"
-import { getPRKey, isPRMarked, getPRRecencyLevel, type History } from "../history"
+import { getPRKey, isPRMarked, getPRMark, getPRRecencyLevel, type History } from "../history"
 import { prHasChanges } from "../notifications"
 
 /** Column widths for table-like layout */
@@ -31,6 +31,7 @@ const COL = {
 /** Calculate total fixed width (everything except title) */
 function getFixedColumnsWidth(v: ColumnVisibility): number {
   let width = 2 // padding left + right
+  width += 2 // mark letters column (2 chars)
   width += 2 // change indicator dot + space
   if (v.state) width += COL.state // icon + space
   if (v.checks) width += COL.checks // icon + space
@@ -144,6 +145,7 @@ function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: Colum
       paddingRight={1}
     >
       <text fg={theme.textDim}>
+        {"  "}{/* space for mark letters column (2 chars) */}
         {"  "}{/* space for dot column (2 chars: dot + space) */}
         {v.state && "S "}
         {v.checks && "C "}
@@ -184,6 +186,7 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
   // Check marked/recent/changed status
   const prKey = getPRKey(getRepoName(pr), pr.number)
   const isMarked = isPRMarked(history, prKey)
+  const markLetter = getPRMark(history, prKey)
   const recencyLevel = getPRRecencyLevel(history, prKey)
   const hasChanges = prHasChanges(history, prKey)
   
@@ -227,6 +230,12 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
       paddingRight={1}
     >
       <text>
+        {/* Mark letter column (2 chars: letter + space) */}
+        {markLetter ? (
+          <><span fg={getMarkColor(markLetter)}>{markLetter}</span><span>{" "}</span></>
+        ) : (
+          <span>{"  "}</span>
+        )}
         {/* Change indicator dot */}
         <span fg={hasChanges ? theme.primary : undefined}>{hasChanges ? "• " : "  "}</span>
         {v.state && <span fg={stateIndicator.color}>{stateIndicator.icon}</span>}

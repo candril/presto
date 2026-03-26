@@ -35,3 +35,25 @@ export const theme = {
   prClosed: "#f7768e",
   prDraft: "#565f89",
 }
+
+/**
+ * Fixed color palette for mark letters (spec 028).
+ * Each letter always maps to the same color. Catppuccin Mocha palette.
+ * Letters beyond the palette cycle back through it.
+ */
+const MARK_PALETTE = [
+  "#f38ba8",  // red
+  "#fab387",  // peach
+  "#f9e2af",  // yellow
+  "#a6e3a1",  // green
+  "#94e2d5",  // teal
+  "#89dceb",  // sky
+  "#89b4fa",  // blue
+  "#cba6f7",  // mauve
+]
+
+/** Get the color for a mark letter (a-z). Deterministic — same letter always same color. */
+export function getMarkColor(letter: string): string {
+  const index = letter.charCodeAt(0) - "a".charCodeAt(0)
+  return MARK_PALETTE[index % MARK_PALETTE.length]
+}
