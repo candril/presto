@@ -1,10 +1,13 @@
 /**
- * External tools - open PRs in browser, riff, or copy URL
+ * External tools - open PRs in browser, riff, diff viewer, or copy URL
  */
 
 import { $ } from "bun"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
+
+/** Cached diff command (resolved once from "auto") */
+let resolvedDiffCommand: string | null = null
 
 /**
  * Open PR in default browser using gh CLI
@@ -69,4 +72,50 @@ export async function copyPRUrl(pr: PR): Promise<void> {
  */
 export async function copyPRNumber(pr: PR): Promise<void> {
   await copyToClipboard(`#${pr.number}`)
+}
+
+/**
+ * Resolve the diff viewer command.
+ * "auto" → detect delta, then bat, then less.
+ * Any other string is used as-is.
+ */
+async function resolveDiffCommand(configured: string): Promise<string> {
+  if (configured !== "auto") return configured
+  if (resolvedDiffCommand) return resolvedDiffCommand
+
+  // Try delta
+  try {
+    await $`command -v delta`.quiet()
+    resolvedDiffCommand = "delta --paging=always"
+    return resolvedDiffCommand
+  } catch { /* not found */ }
+
+  // Try bat
+  try {
+    await $`command -v bat`.quiet()
+    resolvedDiffCommand = "bat -l diff --paging=always"
+    return resolvedDiffCommand
+  } catch { /* not found */ }
+
+  // Fallback to less
+  resolvedDiffCommand = "less -R"
+  return resolvedDiffCommand
+}
+
+/**
+ * View PR diff in an external viewer.
+ * Pipes `gh pr diff` through the configured diff tool (delta, bat, less, etc.).
+ * The caller is responsible for suspending/resuming the TUI.
+ */
+export async function openDiff(pr: PR, diffCommand: string): Promise<void> {
+  const repo = getRepoName(pr)
+  const cmd = await resolveDiffCommand(diffCommand)
+
+  const proc = Bun.spawn(["sh", "-c", `gh pr diff ${pr.number} -R ${repo} --color=always | ${cmd}`], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+
+  await proc.exited
 }

@@ -21,6 +21,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "action.checkout": "space",
   "action.copyNumber": "y",
   "action.copyUrl": "Y",
+  "action.diff": "D",
   "action.star": "s",
   "action.mark": "m",
   "action.refresh": "r",

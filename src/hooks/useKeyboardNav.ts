@@ -4,7 +4,7 @@
  */
 
 import { useKeyboard, useRenderer } from "@opentui/react"
-import { openInBrowser, openRepoInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions"
+import { openInBrowser, openRepoInBrowser, openInRiff, openDiff, copyPRUrl, copyPRNumber } from "../actions"
 import { checkoutPR } from "../actions/checkout"
 import {
   toggleStarAuthor,
@@ -355,6 +355,15 @@ export function useKeyboardNav({
       openInRiff(selectedPR).finally(() => {
         renderer.resume()
         fetchPRs(true)
+      })
+      return
+    }
+
+    // View diff in external viewer
+    if (keys.matches(key, "action.diff")) {
+      renderer.suspend()
+      openDiff(selectedPR, config.tools.diff).finally(() => {
+        renderer.resume()
       })
       return
     }

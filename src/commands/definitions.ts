@@ -4,7 +4,7 @@
 
 import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
-import { openInBrowser, openRepoInBrowser, openInRiff, copyPRUrl, copyPRNumber } from "../actions/tools"
+import { openInBrowser, openRepoInBrowser, openInRiff, openDiff, copyPRUrl, copyPRNumber } from "../actions/tools"
 import { checkoutPR } from "../actions/checkout"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { prHasChanges, togglePRUnread } from "../notifications"
@@ -289,6 +289,22 @@ export const commands: Command[] = [
       } finally {
         ctx.renderer.resume()
         ctx.fetchPRs(true)
+      }
+      return { type: "success" }
+    },
+  },
+  {
+    id: "action.diff",
+    label: "View diff",
+    category: "action",
+    shortcut: "D",
+    requiresPR: true,
+    execute: async (ctx) => {
+      ctx.renderer.suspend()
+      try {
+        await openDiff(ctx.selectedPR!, ctx.config.tools.diff)
+      } finally {
+        ctx.renderer.resume()
       }
       return { type: "success" }
     },

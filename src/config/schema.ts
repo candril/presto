@@ -62,6 +62,8 @@ export interface Config {
     browser: string
     /** Riff command */
     riff: string
+    /** Diff viewer command (receives unified diff on stdin). "auto" = detect delta/bat/less */
+    diff: string
     /** Default tool on Enter: "browser" | "riff" | custom tool name */
     default: string
     /** Custom tools */
@@ -118,6 +120,7 @@ export const defaultConfig: Config = {
   tools: {
     browser: process.platform === "darwin" ? "open" : "xdg-open",
     riff: "riff",
+    diff: "auto",
     default: "browser",
     custom: {},
   },

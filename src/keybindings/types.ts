@@ -18,6 +18,7 @@ export type KeyAction =
   | "action.checkout"
   | "action.copyNumber"
   | "action.copyUrl"
+  | "action.diff"
   | "action.star"
   | "action.mark"
   | "action.refresh"

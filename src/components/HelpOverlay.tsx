@@ -41,6 +41,7 @@ function getHelpSections(keys: KeybindingsContext) {
     {
       title: "Actions",
       items: [
+        [keys.getKeyDisplay("action.diff"), "View diff"],
         [keys.getKeyDisplay("action.checkout"), "Checkout PR locally"],
         [keys.getKeyDisplay("action.copyNumber"), "Copy PR number"],
         [keys.getKeyDisplay("action.copyUrl"), "Copy PR URL"],
