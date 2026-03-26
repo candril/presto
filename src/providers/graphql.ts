@@ -41,6 +41,7 @@ const PR_FRAGMENT = `
   author { login }
   reviewDecision
   headRefOid
+  headRefName
   comments(first: 100) {
     nodes { author { login } }
   }
@@ -115,6 +116,7 @@ function transformGraphQLPR(raw: any): PR {
     statusCheckRollup,
     commentCount: humanCommentCount,
     headRefOid: raw.headRefOid ?? null,
+    headRefName: raw.headRefName ?? null,
   }
 }
 

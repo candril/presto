@@ -21,6 +21,7 @@ export interface ParsedFilter {
   text: string              // Remaining text for title search
   showAll: boolean          // * modifier - bypass starred-only filter
   prRef: { repo?: string; number: number } | null  // Direct PR reference (URL, #123, etc.)
+  branchRef: string | null  // Branch name lookup (e.g. feature/my-thing)
   // Special filters (spec 015)
   marked: boolean        // marked: - show only marked PRs
   recent: boolean        // recent: - show only recent PRs
@@ -37,6 +38,7 @@ export const emptyFilter: ParsedFilter = {
   text: "",
   showAll: false,
   prRef: null,
+  branchRef: null,
   marked: false,
   recent: false,
   starred: false,
@@ -54,6 +56,7 @@ export function isFilterActive(filter: ParsedFilter): boolean {
     filter.text.length > 0 ||
     filter.showAll ||
     filter.prRef !== null ||
+    filter.branchRef !== null ||
     filter.marked ||
     filter.recent ||
     filter.starred
@@ -72,6 +75,7 @@ export function parseFilter(query: string): ParsedFilter {
     text: "",
     showAll: false,
     prRef: null,
+    branchRef: null,
     marked: false,
     recent: false,
     starred: false,
@@ -81,6 +85,13 @@ export function parseFilter(query: string): ParsedFilter {
   const prRef = parsePRReference(query)
   if (prRef) {
     result.prRef = prRef
+    return result
+  }
+
+  // Check if query is a branch name reference (e.g. feature/my-thing)
+  const branchRef = parseBranchReference(query)
+  if (branchRef) {
+    result.branchRef = branchRef
     return result
   }
 
@@ -134,6 +145,12 @@ export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
       }
       return true
     })
+  }
+
+  // Branch reference - filter to PRs with matching head branch
+  if (filter.branchRef) {
+    const branch = filter.branchRef.toLowerCase()
+    return prs.filter((pr) => pr.headRefName?.toLowerCase() === branch)
   }
 
   return prs.filter((pr) => {
@@ -231,4 +248,44 @@ export function parsePRReference(
   return null
 }
 
+/**
+ * Detect if a query looks like a branch name.
+ *
+ * A branch ref is a single token that contains at least one `/`
+ * and only branch-safe characters (alphanumeric, `-`, `_`, `.`, `/`).
+ * It must NOT look like a GitHub URL (which parsePRReference handles)
+ * or a filter prefix like `repo:`, `state:`, `@`, `>`, `-@`, `-repo:`.
+ */
+export function parseBranchReference(query: string): string | null {
+  const trimmed = query.trim()
+
+  // Must be a single token (no spaces)
+  if (!trimmed || trimmed.includes(" ")) return null
+
+  // Must contain a `/` to distinguish from plain text search
+  if (!trimmed.includes("/")) return null
+
+  // Skip anything that looks like a filter prefix
+  if (trimmed.startsWith("@") || trimmed.startsWith(">") ||
+      trimmed.startsWith("repo:") || trimmed.startsWith("state:") ||
+      trimmed.startsWith("-@") || trimmed.startsWith("-repo:") ||
+      trimmed.startsWith("-state:")) {
+    return null
+  }
+
+  // Skip URLs
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return null
+
+  // Must look like a branch: only branch-safe characters
+  // Git branch names can contain: a-z, A-Z, 0-9, -, _, ., /
+  if (!/^[a-zA-Z0-9/_.\-]+$/.test(trimmed)) return null
+
+  // Must not start or end with `/` or `.`
+  if (/^[/.]|[/.]$/.test(trimmed)) return null
+
+  // Must not contain consecutive slashes
+  if (trimmed.includes("//")) return null
+
+  return trimmed
+}
 

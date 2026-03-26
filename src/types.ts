@@ -42,6 +42,8 @@ export interface PR {
   commentCount: number
   /** HEAD commit SHA (for detecting new pushes) */
   headRefOid: string | null
+  /** Head branch name (for branch search) */
+  headRefName: string | null
 }
 
 /** Helper to get full repo name from PR URL */

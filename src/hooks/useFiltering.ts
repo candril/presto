@@ -6,7 +6,7 @@
 import { useMemo, useEffect, useRef, useState, useCallback } from "react"
 import { parseFilter, applyFilter, applyStarredOnlyFilter } from "../discovery"
 import { saveFilterQuery } from "../cache"
-import { getPR } from "../providers/github"
+import { getPR, getPRsByBranch } from "../providers/github"
 import type { Config } from "../config"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
@@ -186,10 +186,68 @@ export function useFiltering({
     }
   }, [filter.prRef, allPRs, fetchPRByNumber])
 
+  // Fetch PRs by branch name from configured repos when branchRef filter matches nothing locally
+  const fetchPRByBranch = useCallback(async (branch: string) => {
+    const dedupKey = `branch:${branch}`
+    if (fetchingRef.current.has(dedupKey)) return
+    fetchingRef.current.add(dedupKey)
+
+    const repos = config.repositories
+      .filter((r) => !r.disabled)
+      .map((r) => r.name)
+
+    if (repos.length === 0) {
+      fetchingRef.current.delete(dedupKey)
+      return
+    }
+
+    dispatch({ type: "SHOW_MESSAGE", message: `Searching for branch ${branch}...` })
+
+    try {
+      const foundPRs = await getPRsByBranch(repos, branch)
+      const newFetched = new Map(fetchedPRs)
+      for (const pr of foundPRs) {
+        const key = getPRKey(getRepoName(pr), pr.number)
+        if (!newFetched.has(key) && !prs.some(p => getPRKey(getRepoName(p), p.number) === key)) {
+          newFetched.set(key, pr)
+        }
+      }
+      setFetchedPRs(newFetched)
+
+      if (foundPRs.length > 0) {
+        dispatch({ type: "SHOW_MESSAGE", message: `Found ${foundPRs.length} PR${foundPRs.length === 1 ? "" : "s"} for ${branch}` })
+      } else {
+        dispatch({ type: "SHOW_MESSAGE", message: `No PRs found for branch ${branch}` })
+      }
+    } catch {
+      dispatch({ type: "SHOW_MESSAGE", message: `Failed to search for branch ${branch}` })
+    } finally {
+      fetchingRef.current.delete(dedupKey)
+    }
+  }, [config.repositories, prs, fetchedPRs, dispatch])
+
+  // Trigger remote fetch when branchRef filter matches nothing locally
+  useEffect(() => {
+    if (!filter.branchRef) return
+
+    const branch = filter.branchRef.toLowerCase()
+    const hasLocal = allPRs.some((pr) => pr.headRefName?.toLowerCase() === branch)
+
+    if (!hasLocal) {
+      fetchPRByBranch(filter.branchRef)
+    }
+  }, [filter.branchRef, allPRs, fetchPRByBranch])
+
   // Apply filters: special tokens (>marked, >recent, >starred) and prRef bypass repo settings
   const { filteredPRs, hiddenCount } = useMemo(() => {
     // PR reference (#123, repo#123, etc.) - search allPRs (includes remotely fetched)
     if (filter.prRef) {
+      const result = applyFilter(allPRs, filter)
+      return { filteredPRs: result, hiddenCount: 0 }
+    }
+
+    // Branch reference (e.g. feature/my-thing) - search allPRs (includes remotely fetched)
+    if (filter.branchRef) {
       const result = applyFilter(allPRs, filter)
       return { filteredPRs: result, hiddenCount: 0 }
     }

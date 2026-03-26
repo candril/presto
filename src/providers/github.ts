@@ -24,6 +24,7 @@ const PR_FIELDS = [
   "comments",
   "reviews",
   "headRefOid",
+  "headRefName",
 ].join(",")
 
 /** Raw PR from GitHub API (comments and reviews are arrays) */
@@ -270,6 +271,45 @@ export async function listRecentPRsFromRepos(repos: string[], days: number): Pro
 
   // Sort by updatedAt (most recent first)
   return allPRs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+}
+
+/**
+ * Find PRs by head branch name across repos.
+ * Searches each repo for a PR with the given head branch.
+ */
+export async function getPRsByBranch(repos: string[], branch: string): Promise<PR[]> {
+  if (repos.length === 0) return []
+
+  const results = await Promise.allSettled(
+    repos.map(async (repo) => {
+      const args = [
+        "pr", "list",
+        "-R", repo,
+        "--json", PR_FIELDS,
+        "--head", branch,
+        "--state", "all",
+        "--limit", "5",
+      ]
+      const log = logRequest("gh", `pr list ${repo} --head ${branch}`)
+      try {
+        const result = await $`gh ${args}`.json()
+        const prs = transformPRs(result as RawPR[])
+        log.finish(`${prs.length} PRs`)
+        return prs
+      } catch (error) {
+        log.fail(error)
+        return []
+      }
+    })
+  )
+
+  const allPRs: PR[] = []
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      allPRs.push(...result.value)
+    }
+  }
+  return allPRs
 }
 
 /**
