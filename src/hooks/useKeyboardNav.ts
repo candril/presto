@@ -17,7 +17,7 @@ import {
   recordRepoVisit,
   type History,
 } from "../history"
-import { markPRSeen } from "../notifications"
+import { markPRSeen, togglePRUnread, prHasChanges } from "../notifications"
 import { isFilterActive, type ParsedFilter } from "../discovery"
 import type { Config } from "../config"
 import type { PR, PreviewPosition, Tab } from "../types"
@@ -303,6 +303,23 @@ export function useKeyboardNav({
       if (filteredPRs[selectedIndex]) {
         dispatch({ type: "SET_MARK_PENDING", pending: true })
         dispatch({ type: "SHOW_MESSAGE", message: "Mark: _" })
+      }
+      return
+    }
+
+    // Toggle seen/unseen (spec 029): v key
+    if (keys.matches(key, "action.toggleSeen")) {
+      const pr = filteredPRs[selectedIndex]
+      if (pr) {
+        const prKey = getPRKey(getRepoName(pr), pr.number)
+        const wasUnread = prHasChanges(history, prKey)
+        const newHistory = togglePRUnread(history, prKey)
+        setHistory(newHistory)
+        saveHistory(newHistory)
+        dispatch({
+          type: "SHOW_MESSAGE",
+          message: wasUnread ? "Marked as read" : "Marked as unread",
+        })
       }
       return
     }

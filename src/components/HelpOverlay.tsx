@@ -47,6 +47,7 @@ function getHelpSections(keys: KeybindingsContext) {
         [keys.getKeyDisplay("action.copyNumber"), "Copy PR number"],
         [keys.getKeyDisplay("action.copyUrl"), "Copy PR URL"],
         [keys.getKeyDisplay("action.star"), "Star/unstar author"],
+        [keys.getKeyDisplay("action.toggleSeen"), "Toggle seen/unseen"],
         [keys.getKeyDisplay("action.mark") + " + a-z", "Mark PR with letter"],
         ["' + a-z", "Filter to mark letter"],
         [keys.getKeyDisplay("action.refresh"), "Refresh"],

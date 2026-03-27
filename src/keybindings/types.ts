@@ -21,6 +21,7 @@ export type KeyAction =
   | "action.diff"
   | "action.star"
   | "action.mark"
+  | "action.toggleSeen"
   | "action.refresh"
   | "action.forceRefresh"
   // Filters

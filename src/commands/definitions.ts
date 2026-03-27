@@ -389,6 +389,7 @@ export const commands: Command[] = [
   {
     id: "action.toggle_unread",
     label: "Mark as unread",
+    shortcut: "v",
     category: "action",
     requiresPR: true,
     // Dynamic label based on current state

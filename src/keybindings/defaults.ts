@@ -24,6 +24,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "action.diff": "D",
   "action.star": "s",
   "action.mark": "m",
+  "action.toggleSeen": "v",
   "action.refresh": "r",
   "action.forceRefresh": "R",
 

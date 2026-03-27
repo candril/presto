@@ -9,6 +9,7 @@ import {
   defaultHistory,
   HISTORY_LIMITS,
   type History,
+  type PRSnapshot,
   type RecentAuthor,
   type VisitedRepo,
 } from "./schema"
@@ -35,6 +36,49 @@ export function loadHistory(): History {
   }
 }
 
+/**
+ * Prune old snapshots to prevent history from growing unboundedly (spec 029).
+ *
+ * Removes snapshots for PRs that are:
+ * - In a terminal state (merged or closed)
+ * - AND have been seen (hasChanges = false)
+ * - AND seenAt is older than 7 days
+ * - AND not marked with a letter
+ *
+ * After rule-based pruning, enforces a hard cap of 500 snapshots,
+ * evicting oldest-seen-first.
+ */
+export function pruneSnapshots(history: History): Record<string, PRSnapshot> {
+  const now = Date.now()
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000
+  const MAX_SNAPSHOTS = 500
+
+  const pruned: Record<string, PRSnapshot> = {}
+  for (const [prKey, snapshot] of Object.entries(history.prSnapshots ?? {})) {
+    const isTerminal = snapshot.prState === "merged" || snapshot.prState === "closed"
+    const isSeen = !snapshot.hasChanges
+    const seenAge = now - new Date(snapshot.seenAt).getTime()
+    const isOld = seenAge > SEVEN_DAYS
+    const isMarked = prKey in (history.markedPRs ?? {})
+
+    if (isTerminal && isSeen && isOld && !isMarked) {
+      continue // prune this snapshot
+    }
+    pruned[prKey] = snapshot
+  }
+
+  // Hard cap — evict oldest-seen-first
+  const keys = Object.keys(pruned)
+  if (keys.length > MAX_SNAPSHOTS) {
+    const sorted = Object.entries(pruned)
+      .sort(([, a], [, b]) => new Date(a.seenAt).getTime() - new Date(b.seenAt).getTime())
+    const keep = sorted.slice(-MAX_SNAPSHOTS)
+    return Object.fromEntries(keep)
+  }
+
+  return pruned
+}
+
 /** Save history to disk */
 export function saveHistory(history: History): void {
   // Trim to limits before saving
@@ -47,6 +91,8 @@ export function saveHistory(history: History): void {
     ),
     recentFilters: history.recentFilters.slice(0, HISTORY_LIMITS.recentFilters),
     visitedRepos: (history.visitedRepos ?? []).slice(0, HISTORY_LIMITS.visitedRepos),
+    // Prune old snapshots (spec 029)
+    prSnapshots: pruneSnapshots(history),
   }
 
   writeFileSync(HISTORY_FILE, JSON.stringify(trimmed, null, 2))

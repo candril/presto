@@ -13,7 +13,7 @@ import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
 import { getRepoName, getShortRepoName, computeCheckState } from "../types"
 import { formatRelativeTime } from "../utils/time"
 import { truncate } from "../utils/string"
-import { getPRKey, isPRMarked, getPRMark, getPRRecencyLevel, type History } from "../history"
+import { getPRKey, isPRMarked, getPRMark, type History } from "../history"
 import { prHasChanges } from "../notifications"
 
 /** Column widths for table-like layout */
@@ -187,34 +187,11 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
   const prKey = getPRKey(getRepoName(pr), pr.number)
   const isMarked = isPRMarked(history, prKey)
   const markLetter = getPRMark(history, prKey)
-  const recencyLevel = getPRRecencyLevel(history, prKey)
   const hasChanges = prHasChanges(history, prKey)
   
-  // Title color based on user interaction:
-  // - Marked: bright gold (always takes priority)
-  // - Just opened (< 2h): brightest
-  // - Today (< 24h): bright
-  // - This week: semi-bright
-  // - Older/never opened: dim
-  let titleColor = theme.textOlder
-  if (isMarked) {
-    titleColor = theme.warning       // bright gold for marked
-  } else {
-    switch (recencyLevel) {
-      case "justNow":
-        titleColor = theme.textJustNow
-        break
-      case "today":
-        titleColor = theme.textToday
-        break
-      case "thisWeek":
-        titleColor = theme.textThisWeek
-        break
-      case "older":
-        titleColor = theme.textOlder
-        break
-    }
-  }
+  // Title color: marked PRs get gold, everything else gets base text color.
+  // The unread dot and mark letters handle visual differentiation (spec 029).
+  const titleColor = isMarked ? theme.warning : theme.text
   
   // Title with PR number suffix: "Fix the bug (#123)"
   const prSuffix = ` (${prId})`

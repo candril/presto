@@ -18,11 +18,9 @@ export {
   getAllMarkedPRKeys,
   migrateMarkedPRs,
   isPRRecent,
-  getPRRecencyLevel,
   clearAllMarks,
   clearRecentPRs,
   removePRFromRecent,
-  type RecencyLevel,
   // Visited repos (spec 018)
   recordRepoVisit,
   forgetRepo,
