@@ -32,15 +32,36 @@ export async function openRepoInBrowser(pr: PR): Promise<void> {
 export async function openInRiff(pr: PR): Promise<void> {
   const repo = getRepoName(pr)
   const target = `gh:${repo}#${pr.number}`
-  
+
   // Use Bun.spawn with inherit for proper terminal handling
   const proc = Bun.spawn(["riff", target], {
     stdin: "inherit",
-    stdout: "inherit", 
+    stdout: "inherit",
     stderr: "inherit",
   })
-  
+
   await proc.exited
+}
+
+/**
+ * Open PR in riff inside a new tmux window.
+ * Tmux switches focus to the new window so the user lands in riff;
+ * presto continues running in the background window.
+ *
+ * Returns false if not running inside tmux ($TMUX unset).
+ */
+export async function openInRiffTmuxWindow(pr: PR): Promise<boolean> {
+  if (!process.env.TMUX) return false
+
+  const repo = getRepoName(pr)
+  const target = `gh:${repo}#${pr.number}`
+  const shortRepo = repo.split("/")[1] ?? repo
+  // Format: "presto#123 Add dark mode toggle" — identifier first so tmux
+  // truncation in the status bar never hides #number.
+  const windowName = `${shortRepo}#${pr.number} ${pr.title}`
+
+  await $`tmux new-window -n ${windowName} riff ${target}`.quiet()
+  return true
 }
 
 /**

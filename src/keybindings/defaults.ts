@@ -16,8 +16,10 @@ export const defaultBindings: Record<KeyAction, string> = {
 
   // Actions
   "action.open": "return",
+  "action.openTmux": "O",
   "action.browser": "o",
-  "action.repoBrowser": "O",
+  // No default binding — accessible via command palette
+  "action.repoBrowser": "",
   "action.checkout": "space",
   "action.copyNumber": "y",
   "action.copyUrl": "Y",

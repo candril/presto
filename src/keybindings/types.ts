@@ -13,6 +13,7 @@ export type KeyAction =
   | "nav.pageUp"
   // Actions
   | "action.open"
+  | "action.openTmux"
   | "action.browser"
   | "action.repoBrowser"
   | "action.checkout"

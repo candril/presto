@@ -4,7 +4,7 @@
 
 import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
-import { openInBrowser, openRepoInBrowser, openInRiff, openDiff, copyPRUrl, copyPRNumber } from "../actions/tools"
+import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber } from "../actions/tools"
 import { checkoutPR } from "../actions/checkout"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { prHasChanges, togglePRUnread } from "../notifications"
@@ -279,7 +279,6 @@ export const commands: Command[] = [
     id: "action.repo_browser",
     label: "Open repository in GitHub",
     category: "action",
-    shortcut: "O",
     requiresPR: true,
     execute: async (ctx) => {
       await openRepoInBrowser(ctx.selectedPR!)
@@ -301,6 +300,19 @@ export const commands: Command[] = [
         ctx.fetchPRs(true)
       }
       return { type: "success" }
+    },
+  },
+  {
+    id: "action.riff_tmux",
+    label: "Open in riff (tmux window)",
+    category: "action",
+    shortcut: "O",
+    requiresPR: true,
+    execute: async (ctx) => {
+      const ok = await openInRiffTmuxWindow(ctx.selectedPR!)
+      return ok
+        ? { type: "success", message: `Opened #${ctx.selectedPR!.number} in tmux window` }
+        : { type: "error", message: "Not running inside tmux" }
     },
   },
   {

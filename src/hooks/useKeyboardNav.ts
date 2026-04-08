@@ -4,7 +4,7 @@
  */
 
 import { useKeyboard, useRenderer } from "@opentui/react"
-import { openInBrowser, openRepoInBrowser, openInRiff, openDiff, copyPRUrl, copyPRNumber } from "../actions"
+import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber } from "../actions"
 import { checkoutPR } from "../actions/checkout"
 import {
   toggleStarAuthor,
@@ -425,6 +425,24 @@ export function useKeyboardNav({
         renderer.resume()
         fetchPRs(true)
       })
+      return
+    }
+
+    // Open in riff in a new tmux window (presto stays running in background window)
+    if (keys.matches(key, "action.openTmux")) {
+      recordPRInteraction()
+      openInRiffTmuxWindow(selectedPR)
+        .then((ok) => {
+          dispatch({
+            type: "SHOW_MESSAGE",
+            message: ok
+              ? `Opened #${selectedPR.number} in tmux window`
+              : "Not running inside tmux",
+          })
+        })
+        .catch(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: "Failed to open tmux window" })
+        })
       return
     }
 

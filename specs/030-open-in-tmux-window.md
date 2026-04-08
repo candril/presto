@@ -54,7 +54,8 @@ export async function openInRiffTmuxWindow(pr: PR): Promise<boolean> {
 
   const repo = getRepoName(pr)
   const target = `gh:${repo}#${pr.number}`
-  const windowName = `${repo.split("/")[1] ?? repo}#${pr.number}`
+  const shortRepo = repo.split("/")[1] ?? repo
+  const windowName = `${shortRepo}#${pr.number} ${pr.title}`
 
   // No -d: tmux switches focus to the new window so the user lands in riff.
   await $`tmux new-window -n ${windowName} riff ${target}`.quiet()
@@ -64,8 +65,9 @@ export async function openInRiffTmuxWindow(pr: PR): Promise<boolean> {
 
 Notes:
 - Tmux's default behavior (without `-d`) is to switch focus to the new window — that's what we want.
-- Window name uses just the repo's short name (`presto#123`) to keep it short in the tmux status line.
-- Use `$` template (Bun shell) for proper argument escaping — `tmux new-window` takes the command as separate args after `-n <name>`, so `riff` and `target` go through Bun's escaping cleanly.
+- Window name format: `<short-repo>#<number> <title>` (e.g. `presto#123 Add dark mode toggle`). Identifier is first so that tmux status-bar truncation never hides the `#number`.
+- No length cap: tmux already truncates in the status line. The full name remains available via `tmux list-windows` and `prefix + w`.
+- Use `$` template (Bun shell) for proper argument escaping — `tmux new-window` takes the command as separate args after `-n <name>`, so `riff`, `target`, and the window name (which may contain spaces, brackets, colons) go through Bun's escaping cleanly.
 
 ### Wiring in `useKeyboardNav.ts`
 
