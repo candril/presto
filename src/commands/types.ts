@@ -18,6 +18,7 @@ export type CommandResult =
   | { type: "refresh" } // Trigger PR list refresh after state change
   | { type: "merge_dialog" } // Open merge method selection dialog
   | { type: "rename_tab" } // Open tab rename dialog
+  | { type: "review_dialog" } // Open submit-review dialog
 
 /** Context passed to command execute function */
 export interface CommandContext {

@@ -497,6 +497,17 @@ export const commands: Command[] = [
     },
   },
   {
+    id: "action.review",
+    label: "Submit review",
+    category: "action",
+    requiresPR: true,
+    available: (ctx) => ctx.selectedPR?.state === "OPEN",
+    execute: async (_ctx) => {
+      // Handled by CommandPalette — opens the review dialog
+      return { type: "review_dialog" } as any
+    },
+  },
+  {
     id: "action.refresh",
     label: "Refresh PRs",
     category: "action",

@@ -8,7 +8,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { useKeyboard } from "@opentui/react"
 import { theme } from "../theme"
-import { truncate } from "../utils/string"
 import {
   getAvailableCommands,
   groupCommands,
@@ -25,6 +24,7 @@ import {
 } from "../commands"
 import { fuzzyFilter } from "../utils/fuzzy"
 import { getRepoName, getShortRepoName } from "../types"
+import { submitPRReview, type ReviewEvent } from "../actions/review"
 
 interface CommandPaletteProps {
   visible: boolean
@@ -54,6 +54,14 @@ interface RenameDialogState {
   newName: string
 }
 
+/** Submit-review dialog state */
+interface ReviewDialogState {
+  event: ReviewEvent
+  body: string
+  submitting: boolean
+  error: string | null
+}
+
 export function CommandPalette({
   visible,
   context,
@@ -69,6 +77,8 @@ export function CommandPalette({
   const [loadingMergeOptions, setLoadingMergeOptions] = useState(false)
   // Rename tab dialog state
   const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null)
+  // Review dialog state (spec 031)
+  const [reviewDialog, setReviewDialog] = useState<ReviewDialogState | null>(null)
 
   // Reset state when opened
   useEffect(() => {
@@ -80,6 +90,7 @@ export function CommandPalette({
       setMergeDialog(null)
       setLoadingMergeOptions(false)
       setRenameDialog(null)
+      setReviewDialog(null)
     }
   }, [visible])
 
@@ -164,6 +175,18 @@ export function CommandPalette({
         return
       }
       
+      // Handle review dialog (spec 031)
+      if (result.type === "review_dialog") {
+        setExecuting(false)
+        setReviewDialog({
+          event: "APPROVE",
+          body: "",
+          submitting: false,
+          error: null,
+        })
+        return
+      }
+
       // Handle rename tab dialog
       if (result.type === "rename_tab") {
         setExecuting(false)
@@ -185,6 +208,36 @@ export function CommandPalette({
     }
   }
   
+  const handleSubmitReview = async (state: ReviewDialogState) => {
+    const pr = context.selectedPR!
+    setReviewDialog({ ...state, submitting: true, error: null })
+
+    const result = await submitPRReview(pr, state.event, state.body)
+
+    if (result.success) {
+      // Optimistic update of reviewDecision so the row reflects the new state
+      if (state.event === "APPROVE") {
+        context.dispatch({
+          type: "UPDATE_PR",
+          url: pr.url,
+          updates: { reviewDecision: "APPROVED" },
+        })
+      } else if (state.event === "REQUEST_CHANGES") {
+        context.dispatch({
+          type: "UPDATE_PR",
+          url: pr.url,
+          updates: { reviewDecision: "CHANGES_REQUESTED" },
+        })
+      }
+      setReviewDialog(null)
+      onClose()
+      onResult({ type: "success", message: result.message })
+    } else {
+      // Keep dialog open so the user can retry / tweak the body
+      setReviewDialog({ ...state, submitting: false, error: result.message })
+    }
+  }
+
   const handleMerge = async (method: MergeMethod) => {
     const pr = context.selectedPR!
     const repo = getRepoName(pr)
@@ -228,6 +281,81 @@ export function CommandPalette({
         !key.meta
       ) {
         setRenameDialog({ ...renameDialog, newName: renameDialog.newName + key.sequence })
+      }
+      return
+    }
+
+    // Review dialog mode (spec 031)
+    if (reviewDialog) {
+      if (reviewDialog.submitting) return
+
+      if (key.name === "escape") {
+        setReviewDialog(null)
+        onClose()
+        return
+      }
+
+      // 1/2/3 select event type
+      if (key.name === "1") {
+        setReviewDialog({ ...reviewDialog, event: "COMMENT", error: null })
+        return
+      }
+      if (key.name === "2") {
+        setReviewDialog({ ...reviewDialog, event: "APPROVE", error: null })
+        return
+      }
+      if (key.name === "3") {
+        setReviewDialog({ ...reviewDialog, event: "REQUEST_CHANGES", error: null })
+        return
+      }
+
+      if (key.name === "return") {
+        // Validate: non-APPROVE events require a body
+        const needsBody = reviewDialog.event !== "APPROVE"
+        if (needsBody && reviewDialog.body.trim() === "") {
+          setReviewDialog({
+            ...reviewDialog,
+            error:
+              reviewDialog.event === "REQUEST_CHANGES"
+                ? "Request changes requires a comment body"
+                : "Comment requires a body",
+          })
+          return
+        }
+        handleSubmitReview(reviewDialog)
+        return
+      }
+
+      // Ctrl+J inserts a literal newline
+      if (key.ctrl && key.name === "j") {
+        setReviewDialog({
+          ...reviewDialog,
+          body: reviewDialog.body + "\n",
+          error: null,
+        })
+        return
+      }
+
+      if (key.name === "backspace") {
+        setReviewDialog({
+          ...reviewDialog,
+          body: reviewDialog.body.slice(0, -1),
+          error: null,
+        })
+        return
+      }
+
+      if (
+        key.sequence &&
+        key.sequence.length === 1 &&
+        !key.ctrl &&
+        !key.meta
+      ) {
+        setReviewDialog({
+          ...reviewDialog,
+          body: reviewDialog.body + key.sequence,
+          error: null,
+        })
       }
       return
     }
@@ -432,6 +560,173 @@ export function CommandPalette({
               <span fg={theme.success}>Enter</span>
               <span fg={theme.textMuted}> to save</span>
             </text>
+          </box>
+        </box>
+      </box>
+    )
+  }
+
+  // Review dialog view (spec 031) — styled to match riff's ReviewPreview
+  if (reviewDialog) {
+    const types: { key: "1" | "2" | "3"; event: ReviewEvent; label: string; color: string }[] = [
+      { key: "1", event: "COMMENT", label: "Comment", color: theme.primary },
+      { key: "2", event: "APPROVE", label: "Approve", color: theme.success },
+      { key: "3", event: "REQUEST_CHANGES", label: "Request Changes", color: theme.warning },
+    ]
+    const selectedColor =
+      types.find((t) => t.event === reviewDialog.event)?.color ?? theme.primary
+    const bodyLines = reviewDialog.body.length > 0 ? reviewDialog.body.split("\n") : [""]
+    const needsBody = reviewDialog.event !== "APPROVE"
+    const submitAllowed =
+      !reviewDialog.submitting && !(needsBody && reviewDialog.body.trim() === "")
+
+    // Footer hint (left side)
+    const hint = reviewDialog.error
+      ? reviewDialog.error
+      : reviewDialog.submitting
+        ? "Submitting..."
+        : !submitAllowed
+          ? "Add a comment or summary"
+          : "Ctrl+J: newline"
+    const hintColor = reviewDialog.error
+      ? theme.error
+      : reviewDialog.submitting
+        ? theme.warning
+        : !submitAllowed
+          ? theme.warning
+          : theme.textMuted
+
+    return (
+      <box
+        id="command-palette-overlay"
+        width="100%"
+        height="100%"
+        position="absolute"
+        top={0}
+        left={0}
+      >
+        {/* Dim background */}
+        <box
+          width="100%"
+          height="100%"
+          position="absolute"
+          top={0}
+          left={0}
+          backgroundColor={theme.overlayBg}
+        />
+        {/* Review dialog */}
+        <box
+          position="absolute"
+          top={2}
+          left="25%"
+          width="50%"
+          flexDirection="column"
+          backgroundColor={theme.modalBg}
+        >
+          {/* Header */}
+          <box
+            flexDirection="row"
+            justifyContent="space-between"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+            backgroundColor={theme.headerBg}
+          >
+            <text fg={theme.text}>Submit Review</text>
+            <text fg={theme.textDim}>Esc to close</text>
+          </box>
+
+          {/* Type selector */}
+          <box
+            flexDirection="row"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+            gap={3}
+          >
+            {types.map((t) => {
+              const isSelected = reviewDialog.event === t.event
+              return (
+                <box
+                  key={t.event}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={isSelected ? t.color : undefined}
+                >
+                  <text fg={isSelected ? theme.bg : theme.textDim}>
+                    {t.key}: {t.label}
+                  </text>
+                </box>
+              )
+            })}
+          </box>
+
+          {/* Summary input */}
+          <box
+            flexDirection="column"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+          >
+            <box height={1}>
+              <text fg={theme.text}>Summary (editing)</text>
+            </box>
+            <box
+              marginTop={1}
+              paddingLeft={1}
+              paddingRight={1}
+              paddingTop={1}
+              paddingBottom={1}
+              border={["top", "bottom", "left", "right"]}
+              borderStyle="single"
+              borderColor={theme.textDim}
+              flexDirection="column"
+              minHeight={4}
+            >
+              {reviewDialog.body.length === 0 ? (
+                <box height={1}>
+                  <text>
+                    <span fg={theme.text} bg={theme.textDim}> </span>
+                  </text>
+                </box>
+              ) : (
+                bodyLines.map((line, i) => {
+                  const isLast = i === bodyLines.length - 1
+                  return (
+                    <box key={i} height={1}>
+                      <text>
+                        <span fg={theme.text}>{line}</span>
+                        {isLast && <span fg={theme.text} bg={theme.textDim}> </span>}
+                      </text>
+                    </box>
+                  )
+                })
+              )}
+            </box>
+          </box>
+
+          {/* Footer */}
+          <box
+            flexDirection="row"
+            justifyContent="space-between"
+            alignItems="center"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+            backgroundColor={theme.headerBg}
+          >
+            <text fg={hintColor}>{hint}</text>
+            <box
+              paddingLeft={2}
+              paddingRight={2}
+              backgroundColor={submitAllowed ? selectedColor : theme.textMuted}
+            >
+              <text fg={submitAllowed ? theme.bg : theme.textDim}>Enter</text>
+            </box>
           </box>
         </box>
       </box>
