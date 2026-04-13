@@ -481,7 +481,8 @@ export function CommandPalette({
             <box height={1}>
               <text fg={theme.textDim}>{pr?.title}</text>
             </box>
-            <box height={1} marginTop={1}>
+            <box height={1} />
+            <box height={1}>
               <text>
                 <span fg={theme.primary}>@{pr?.author.login}</span>
                 <span fg={theme.textMuted}> · {pr ? getShortRepoName(pr) : ""}</span>
