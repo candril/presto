@@ -19,6 +19,7 @@ export type CommandResult =
   | { type: "merge_dialog" } // Open merge method selection dialog
   | { type: "rename_tab" } // Open tab rename dialog
   | { type: "review_dialog" } // Open submit-review dialog
+  | { type: "workflow_dialog" } // Open trigger-workflow dialog (spec 033)
 
 /** Context passed to command execute function */
 export interface CommandContext {

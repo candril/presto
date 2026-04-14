@@ -1,6 +1,6 @@
 # Trigger GitHub workflow for PR
 
-**Status**: Ready
+**Status**: Done
 
 ## Description
 

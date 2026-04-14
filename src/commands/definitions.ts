@@ -530,6 +530,16 @@ export const commands: Command[] = [
       return { type: "success", message: "Refreshing..." }
     },
   },
+  {
+    id: "action.trigger_workflow",
+    label: "Trigger workflow…",
+    category: "action",
+    requiresPR: true,
+    available: (ctx) => !!ctx.selectedPR?.headRefName,
+    execute: async (_ctx) => {
+      return { type: "workflow_dialog" }
+    },
+  },
 
   // ============================================================================
   // STATE CHANGES
