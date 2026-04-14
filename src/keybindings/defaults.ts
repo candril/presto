@@ -23,6 +23,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "action.checkout": "space",
   "action.copyNumber": "y",
   "action.copyUrl": "Y",
+  "action.copyBranch": "b",
   "action.diff": "D",
   "action.star": "s",
   "action.mark": "m",

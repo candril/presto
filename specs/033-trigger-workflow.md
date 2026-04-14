@@ -1,6 +1,6 @@
 # Trigger GitHub workflow for PR
 
-**Status**: Draft
+**Status**: Ready
 
 ## Description
 
@@ -22,13 +22,14 @@ Add a command-palette action that lets the user pick a GitHub Actions workflow f
 - **Workflow list dialog**: Fetches `gh workflow list -R <repo> --json name,id,state,path` for the PR's repo and shows active workflows only (`state === "active"`). Same overlay-modal styling as the merge / review dialogs. `Ctrl+n/p` or arrows to navigate, `Enter` to select, `Esc` to cancel.
 - **Only dispatchable workflows**: Filter to workflows whose YAML contains `on.workflow_dispatch`. The command is available whenever a PR is selected; unfilterable workflows simply don't appear in the list. If the list is empty, show `No dispatchable workflows in <repo>` and close on `Esc`.
 - **Input prompt**: After the user picks a workflow, fetch the YAML (`gh api repos/<repo>/contents/<path> --jq .content | base64 -d`) and parse `on.workflow_dispatch.inputs`. For each input, prompt according to `type`:
-  - `choice` → select from `options[]`
-  - `boolean` → toggle (`true` / `false`)
+  - `choice` → cycle through `options[]` with left/right arrows
+  - `boolean` → toggle (`true` / `false`) with space
   - `string` / `number` / unset → single-line text input, prefilled with `default` if present
-  - `environment` → treat as string (GitHub doesn't expose env lists via the workflow YAML; the user types the env name). Mention this limitation in the footer.
+  - `environment` → cycle through the repo's actual GitHub Environments (see "Env selection" below)
   Required inputs (`required: true` and no `default`) block `Enter` until filled, matching the review dialog's `submitAllowed` pattern.
 - **Dispatch**: On confirm, run `gh workflow run <id> -R <repo> --ref <headRefName> -f key=value …`. Show a success message `Triggered <workflow-name> on <branch>` or an error toast with the `gh` stderr on failure.
 - **Branch validation**: If `pr.headRefName` is `null` (fork deleted / unknown), abort with `No head branch available` before opening the dialog.
+- **Fork PR guard**: If the PR's head repo differs from the base repo (fork PR), block the action with `Cross-repo PRs can't dispatch workflows on the base repo` *before* opening the dialog. The head branch isn't on the base repo, so `gh workflow run --ref` would 422. Cheap check: `pr.headRepository?.nameWithOwner !== pr.baseRepository?.nameWithOwner`. **Action item: verify these fields exist on the PR type; if not, add them to the GraphQL fetch in `src/providers/github.ts`.**
 
 ### P2 - Should Have
 
@@ -160,17 +161,40 @@ Styling: reuse `theme.modalBg`, `theme.overlayBg`, `theme.headerBg`, same box st
 
 ### Env selection
 
-The resolved approach:
+Env selection is first-class — the dialog must let the user pick an actual GitHub Environment, not type its name.
 
-- **`environment` input type** (a native Actions input type) is treated as a plain string input — GitHub does not expose per-repo environment names over the REST API in a way that's usable via `gh` without extra scopes, and surfacing them here isn't worth the added complexity for P1. The user types the environment name.
-- **`choice` inputs** (the far more common pattern — workflows declare a dropdown of e.g. `["staging", "production"]`) are rendered as a proper left/right cycling selector.
-- If we later want a richer env picker: fetch `gh api repos/<repo>/environments` (requires `repo` scope; already implicit in `gh auth login` for most users) and convert `environment` inputs into a choice list. Track as P3.
+- **`environment` input type** (native Actions type): fetch `gh api repos/<repo>/environments --jq '.environments[].name'` lazily (when the input is first focused), cache the result in-memory keyed by repo, and render as a left/right cycling picker over the returned names.
+  - If the API returns 0 environments or 404s (no environments configured on the repo), fall back to a free-text input with footer hint `No environments configured on <repo> — type a value`.
+  - If the API errors for another reason (auth, network), show the error in the input footer but still allow free-text entry so the user isn't blocked.
+  - The default GitHub token from `gh auth login` has `repo` scope, which is sufficient to read environments on repos the user can access.
+- **`choice` inputs** (e.g. `options: [staging, production]` declared inline in the workflow YAML): render as a left/right cycling selector. No API call needed.
+- **Env-named inputs without `type: environment`** (heuristic — input key `env` / `environment` typed as `string`): treat as a plain string. We don't auto-promote to env picker; if the workflow author wanted a real env picker they would have set `type: environment`. Avoids surprising behavior on workflows that genuinely want a free-form string.
+
+```typescript
+// In actions/workflows.ts
+const envCache = new Map<string, string[]>()
+
+export async function getRepoEnvironments(repo: string): Promise<string[]> {
+  const cached = envCache.get(repo)
+  if (cached) return cached
+  const names = await $`gh api repos/${repo}/environments --jq '[.environments[].name]'`.json() as string[]
+  envCache.set(repo, names)
+  return names
+}
+```
+
+Cache survives only for the app session (matches workflow-list cache); cleared by `R` refresh.
+
+## Resolved Decisions
+
+1. **Fork PRs**: blocked upfront (option a). See "Fork PR guard" capability above.
+2. **YAML dep**: add `yaml` (Eemeli Aro). Smaller and better-typed than `js-yaml`. Size irrelevant for a TUI.
+3. **Env selection**: real GitHub Environments are first-class via `gh api repos/<repo>/environments`. See "Env selection" above.
+4. **Multiple workflows on same branch**: not deduped — `gh workflow run` fires a new run each time. Acceptable.
 
 ## Open Questions
 
-1. **Head-branch ref for forks**: `pr.headRefName` is the branch name on the *head* repo. `gh workflow run --ref` on a base repo can only dispatch refs that exist on the base. If the PR is from a fork, the branch is not on the base, and dispatch will 422. Do we: (a) detect fork PRs and block the command with `Cross-repo PRs can't dispatch workflows on base`, or (b) let `gh` fail and show its stderr? Recommendation: **(a)** — cheap check via `pr.headRepository?.nameWithOwner !== pr.baseRepository?.nameWithOwner`. Needs verification that those fields exist on the PR type.
-2. **YAML dep**: confirm `yaml` isn't already transitive. If adding, prefer `yaml` (the Eemeli Aro one) over `js-yaml` — smaller and better types.
-3. **Multiple workflows on same branch**: nothing to resolve, but worth noting — `gh workflow run` fires a new run each time; no dedup.
+1. **PR type fields**: confirm `headRepository.nameWithOwner` and `baseRepository.nameWithOwner` are present on the PR type / GraphQL fetch. If not, add them — cheap.
 
 ## File Structure
 

@@ -96,6 +96,16 @@ export async function copyPRNumber(pr: PR): Promise<void> {
 }
 
 /**
+ * Copy PR head branch name to clipboard.
+ * Returns false when the PR has no recorded head ref (e.g. fork deleted).
+ */
+export async function copyPRBranch(pr: PR): Promise<boolean> {
+  if (!pr.headRefName) return false
+  await copyToClipboard(pr.headRefName)
+  return true
+}
+
+/**
  * Resolve the diff viewer command.
  * "auto" → detect delta, then bat, then less.
  * Any other string is used as-is.

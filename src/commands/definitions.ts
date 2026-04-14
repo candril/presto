@@ -4,7 +4,7 @@
 
 import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
-import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber } from "../actions/tools"
+import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch } from "../actions/tools"
 import { checkoutPR } from "../actions/checkout"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { prHasChanges, togglePRUnread } from "../notifications"
@@ -365,6 +365,19 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       await copyPRNumber(ctx.selectedPR!)
       return { type: "success", message: `Copied #${ctx.selectedPR!.number}` }
+    },
+  },
+  {
+    id: "action.copy_branch",
+    label: "Copy branch name",
+    category: "action",
+    shortcut: "b",
+    requiresPR: true,
+    execute: async (ctx) => {
+      const ok = await copyPRBranch(ctx.selectedPR!)
+      return ok
+        ? { type: "success", message: `Copied ${ctx.selectedPR!.headRefName}` }
+        : { type: "error", message: "No branch name available" }
     },
   },
   {

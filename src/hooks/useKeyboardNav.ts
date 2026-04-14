@@ -4,7 +4,7 @@
  */
 
 import { useKeyboard, useRenderer } from "@opentui/react"
-import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber } from "../actions"
+import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch } from "../actions"
 import { checkoutPR } from "../actions/checkout"
 import {
   toggleStarAuthor,
@@ -475,6 +475,23 @@ export function useKeyboardNav({
         })
         .catch(() => {
           dispatch({ type: "SHOW_MESSAGE", message: "Failed to copy URL" })
+        })
+      return
+    }
+
+    // Copy branch name
+    if (keys.matches(key, "action.copyBranch")) {
+      copyPRBranch(selectedPR)
+        .then((ok) => {
+          dispatch({
+            type: "SHOW_MESSAGE",
+            message: ok
+              ? `Copied ${selectedPR.headRefName}`
+              : "No branch name available",
+          })
+        })
+        .catch(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: "Failed to copy branch" })
         })
       return
     }
