@@ -1,3 +1,7 @@
+# Author Display Name Search
+
+**Status**: Done
+
 ## Description
 
 Allow searching PRs by the author's GitHub display name (e.g. "Stefan Lüdin") in addition to their login (`candril`). The login remains the canonical identifier used by `@` filters; the display name is only matched via the free-text fuzzy search.

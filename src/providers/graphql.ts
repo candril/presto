@@ -38,7 +38,7 @@ const PR_FRAGMENT = `
   isDraft
   createdAt
   updatedAt
-  author { login }
+  author { login ... on User { name } }
   reviewDecision
   headRefOid
   headRefName
@@ -111,7 +111,7 @@ function transformGraphQLPR(raw: any): PR {
     isDraft: raw.isDraft,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
-    author: { login: raw.author?.login ?? "unknown" },
+    author: { login: raw.author?.login ?? "unknown", name: raw.author?.name ?? null },
     reviewDecision: raw.reviewDecision,
     statusCheckRollup,
     commentCount: humanCommentCount,

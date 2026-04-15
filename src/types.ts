@@ -29,6 +29,7 @@ export interface PR {
   title: string
   author: {
     login: string
+    name?: string | null
   }
   /** Full URL of the PR */
   url: string
