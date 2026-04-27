@@ -24,15 +24,16 @@ const repoMergeSettingsCache = new Map<string, RepoMergeSettings>()
 export interface PRMergeState {
   mergeable: boolean
   mergeableState: string // "clean", "dirty", "blocked", "behind", "unknown"
+  baseRef: string
 }
 
 /** Fetch PR merge state */
 export async function getPRMergeState(repo: string, number: number): Promise<PRMergeState> {
   try {
-    const result = await $`gh api repos/${repo}/pulls/${number} --jq '{mergeable: .mergeable, mergeableState: .mergeable_state}'`.json()
+    const result = await $`gh api repos/${repo}/pulls/${number} --jq '{mergeable: .mergeable, mergeableState: .mergeable_state, baseRef: .base.ref}'`.json()
     return result as PRMergeState
   } catch {
-    return { mergeable: true, mergeableState: "unknown" }
+    return { mergeable: true, mergeableState: "unknown", baseRef: "" }
   }
 }
 

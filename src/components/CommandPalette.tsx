@@ -55,6 +55,7 @@ interface MergeDialogState {
   selectedMethod: MergeMethod | null // null = no selection yet
   mergeable: boolean
   mergeableState: string
+  baseRef: string
 }
 
 /** Rename tab dialog state */
@@ -210,6 +211,7 @@ export function CommandPalette({
           selectedMethod: null, // No default selection
           mergeable: mergeState.mergeable,
           mergeableState: mergeState.mergeableState,
+          baseRef: mergeState.baseRef,
         })
         return
       }
@@ -864,14 +866,7 @@ export function CommandPalette({
           backgroundColor={theme.modalBg}
         >
           {/* Header */}
-          <box
-            flexDirection="row"
-            justifyContent="space-between"
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
-            paddingBottom={1}
-          >
+          <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
             <text fg={theme.warning}>Confirm Action</text>
           </box>
           {/* Message */}
@@ -897,9 +892,9 @@ export function CommandPalette({
           <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
             <text>
               <span fg={theme.success}>Y</span>
-              <span fg={theme.textMuted}>es / </span>
-              <span fg={theme.error}>n</span>
-              <span fg={theme.textMuted}>o</span>
+              <span fg={theme.textMuted}> to confirm · </span>
+              <span fg={theme.error}>N</span>
+              <span fg={theme.textMuted}> or Esc to cancel</span>
             </text>
           </box>
         </box>
@@ -1428,8 +1423,15 @@ export function CommandPalette({
             </box>
             <box height={1}>
               <text>
+                <span fg={theme.textMuted}>{pr ? getShortRepoName(pr) : ""}</span>
+                <span fg={theme.textMuted}> · </span>
                 <span fg={theme.primary}>@{pr?.author.login}</span>
-                <span fg={theme.textMuted}> · {pr ? getShortRepoName(pr) : ""}</span>
+                {mergeDialog?.baseRef && (
+                  <>
+                    <span fg={theme.textMuted}> · into </span>
+                    <span fg={theme.text}>{mergeDialog.baseRef}</span>
+                  </>
+                )}
               </text>
             </box>
           </box>
