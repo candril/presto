@@ -148,11 +148,7 @@ export function parseFilter(query: string): ParsedFilter {
 
 /** Apply filter to a list of PRs */
 export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
-  if (!isFilterActive(filter)) {
-    return prs
-  }
-
-  // Direct PR reference - filter to exact match
+  // Direct PR reference - filter to exact match (state-agnostic lookup)
   if (filter.prRef) {
     return prs.filter((pr) => {
       if (pr.number !== filter.prRef!.number) return false
@@ -164,7 +160,7 @@ export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
     })
   }
 
-  // Branch reference - filter to PRs with matching head branch
+  // Branch reference - filter to PRs with matching head branch (state-agnostic lookup)
   if (filter.branchRef) {
     const branch = filter.branchRef.toLowerCase()
     return prs.filter((pr) => pr.headRefName?.toLowerCase() === branch)
@@ -195,9 +191,13 @@ export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
     }
 
     // State inclusion filter
+    // Default (no explicit state:) hides MERGED/CLOSED so merged/closed PRs
+    // fetched for one tab don't leak into other tabs sharing the global PR list.
     if (filter.states.length > 0) {
       const matches = filter.states.some((state) => matchesState(pr, state))
       if (!matches) return false
+    } else if (pr.state === "MERGED" || pr.state === "CLOSED") {
+      return false
     }
 
     // State exclusion filter
