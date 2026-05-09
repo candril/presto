@@ -215,43 +215,48 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
           || Object.keys(history.markedPRs ?? {}).length > 0
         if (hasBackgroundWork) {
           (async () => {
-            let backgroundPRs = [...priorityPRs]
-            
-            // Fetch rest of configured repos
-            if (rest.length > 0) {
-              const restPRs = await listPRsFromRepos(rest)
-              const existingKeys = new Set(backgroundPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
-              const newPRs = restPRs.filter(
-                (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
-              )
-              backgroundPRs = [...backgroundPRs, ...newPRs]
+            try {
+              let backgroundPRs = [...priorityPRs]
+
+              // Fetch rest of configured repos
+              if (rest.length > 0) {
+                const restPRs = await listPRsFromRepos(rest)
+                const existingKeys = new Set(backgroundPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+                const newPRs = restPRs.filter(
+                  (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
+                )
+                backgroundPRs = [...backgroundPRs, ...newPRs]
+              }
+
+              // Fetch tracked PRs for notification detection
+              const trackedFromOtherRepos = getTrackedPRsFromNonConfiguredRepos()
+              if (trackedFromOtherRepos.length > 0) {
+                const trackedPRs = await getPRsBulk(trackedFromOtherRepos)
+                const existingKeys = new Set(backgroundPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+                const newTracked = trackedPRs.filter(
+                  (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
+                )
+                backgroundPRs = [...backgroundPRs, ...newTracked]
+              }
+
+              // Fetch marked PRs that are missing (e.g. closed/merged PRs from configured repos)
+              const missingMarked = getMissingMarkedPRs(backgroundPRs, history)
+              if (missingMarked.length > 0) {
+                const markedPRs = await getPRsBulk(missingMarked)
+                backgroundPRs = [...backgroundPRs, ...markedPRs]
+              }
+
+              // Update with full data, then bump epoch to re-trigger background effects
+              dispatch({ type: "SET_PRS", prs: backgroundPRs })
+              setRefreshEpoch(e => e + 1)
+              saveCache(backgroundPRs.filter(pr => {
+                const repoName = getRepoName(pr).toLowerCase()
+                return allEnabledRepos.some(r => r.toLowerCase() === repoName)
+              }), allEnabledRepos)
+            } catch (err) {
+              // Background fetch failed — keep already-shown priority PRs, don't overwrite cache
+              dispatch({ type: "SHOW_MESSAGE", message: "Background refresh failed (offline?)" })
             }
-            
-            // Fetch tracked PRs for notification detection
-            const trackedFromOtherRepos = getTrackedPRsFromNonConfiguredRepos()
-            if (trackedFromOtherRepos.length > 0) {
-              const trackedPRs = await getPRsBulk(trackedFromOtherRepos)
-              const existingKeys = new Set(backgroundPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
-              const newTracked = trackedPRs.filter(
-                (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
-              )
-              backgroundPRs = [...backgroundPRs, ...newTracked]
-            }
-            
-            // Fetch marked PRs that are missing (e.g. closed/merged PRs from configured repos)
-            const missingMarked = getMissingMarkedPRs(backgroundPRs, history)
-            if (missingMarked.length > 0) {
-              const markedPRs = await getPRsBulk(missingMarked)
-              backgroundPRs = [...backgroundPRs, ...markedPRs]
-            }
-            
-            // Update with full data, then bump epoch to re-trigger background effects
-            dispatch({ type: "SET_PRS", prs: backgroundPRs })
-            setRefreshEpoch(e => e + 1)
-            saveCache(backgroundPRs.filter(pr => {
-              const repoName = getRepoName(pr).toLowerCase()
-              return allEnabledRepos.some(r => r.toLowerCase() === repoName)
-            }), allEnabledRepos)
           })()
         } else {
           // No background work needed, cache priority repos
@@ -301,6 +306,10 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
           type: "SET_ERROR",
           error: err instanceof Error ? err.message : "Failed to fetch PRs",
         })
+      } else {
+        // Refresh failed but we still have cached PRs visible — let the user know
+        // the list they're seeing is stale rather than silently doing nothing.
+        dispatch({ type: "SHOW_MESSAGE", message: "Refresh failed (offline?) — showing cached PRs" })
       }
     }
   }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos])

@@ -238,6 +238,14 @@ async function listPRsFromReposREST(repos: string[]): Promise<PR[]> {
   // Fetch from all repos in parallel
   const results = await Promise.allSettled(repos.map((repo) => listPRs(repo)))
 
+  // If every repo failed (e.g. offline), throw so caller can preserve cache
+  // rather than replacing PRs with an empty list.
+  const allFailed = results.every((r) => r.status === "rejected")
+  if (allFailed) {
+    const reason = (results[0] as PromiseRejectedResult | undefined)?.reason
+    throw reason instanceof Error ? reason : new Error("All repos failed to fetch")
+  }
+
   // Aggregate successful results
   const allPRs: PR[] = []
   for (const result of results) {

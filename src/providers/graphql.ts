@@ -137,8 +137,9 @@ async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
   }`
 
   const log = logRequest("graphql", `fetchRepoPRs ${repo}`)
+  let response: Response
   try {
-    const response = await fetch("https://api.github.com/graphql", {
+    response = await fetch("https://api.github.com/graphql", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -146,7 +147,14 @@ async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
       },
       body: JSON.stringify({ query }),
     })
+  } catch (error) {
+    // Network error (e.g. offline) — re-throw so caller can detect total failure
+    // and preserve cached state instead of replacing PRs with empty results.
+    log.fail(error)
+    throw error
+  }
 
+  try {
     if (!response.ok) {
       log.fail(`HTTP ${response.status}`)
       return []
@@ -182,6 +190,14 @@ export async function listPRsGraphQL(repos: string[]): Promise<PR[]> {
   const results = await Promise.allSettled(
     repos.map(repo => fetchRepoPRs(repo, token))
   )
+
+  // If every repo failed (e.g. offline), throw so caller can preserve cache
+  // rather than replacing PRs with an empty list.
+  const allFailed = results.every(r => r.status === "rejected")
+  if (allFailed) {
+    const reason = (results[0] as PromiseRejectedResult | undefined)?.reason
+    throw reason instanceof Error ? reason : new Error("All repos failed to fetch")
+  }
 
   // Aggregate results
   const allPRs: PR[] = []
