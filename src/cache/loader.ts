@@ -2,7 +2,7 @@
  * Cache persistence - load and save PR cache for instant startup
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { getConfigDir } from "../config"
 import type { PR, ColumnVisibility } from "../types"
@@ -25,29 +25,41 @@ export function loadCache(): PRCache {
   }
 }
 
-/** Save PRs and filter to cache */
+/**
+ * Write the cache atomically — a process killed mid-write would otherwise leave
+ * truncated JSON behind, which loadCache can only recover from by discarding
+ * everything.
+ */
+function writeCache(cache: PRCache): void {
+  const tmpFile = `${CACHE_FILE}.tmp`
+  writeFileSync(tmpFile, JSON.stringify(cache))
+  renameSync(tmpFile, CACHE_FILE)
+}
+
+/** Save PRs and filter to cache, leaving unrelated cached settings intact */
 export function saveCache(prs: PR[], repos: string[], filterQuery?: string): void {
-  const cache: PRCache = {
+  const existing = loadCache()
+  writeCache({
+    ...existing,
     prs,
     updatedAt: new Date().toISOString(),
     repos: [...repos].sort(),
-    filterQuery: filterQuery || "",
-  }
-  writeFileSync(CACHE_FILE, JSON.stringify(cache))
+    filterQuery: filterQuery ?? existing.filterQuery ?? "",
+  })
 }
 
 /** Save just the filter query (without updating PRs) */
 export function saveFilterQuery(filterQuery: string): void {
   const cache = loadCache()
   cache.filterQuery = filterQuery
-  writeFileSync(CACHE_FILE, JSON.stringify(cache))
+  writeCache(cache)
 }
 
 /** Save column visibility settings */
 export function saveColumnVisibility(columnVisibility: ColumnVisibility): void {
   const cache = loadCache()
   cache.columnVisibility = columnVisibility
-  writeFileSync(CACHE_FILE, JSON.stringify(cache))
+  writeCache(cache)
 }
 
 /** Get column visibility from cache (with defaults) */

@@ -28,6 +28,30 @@ interface UsePRDataOptions {
  * This catches marked PRs from configured repos that have been closed/merged
  * (and thus aren't in the initial open-only fetch).
  */
+/**
+ * Keep the PRs we already have for repos whose refresh failed, so a transient
+ * GitHub error neither blanks the list nor lets the follow-up cache write
+ * persist that blank.
+ */
+function retainPRsFromFailedRepos(current: PR[], fetched: PR[], failedRepos: string[]): PR[] {
+  if (failedRepos.length === 0) return fetched
+
+  const failed = new Set(failedRepos.map((r) => r.toLowerCase()))
+  const fetchedKeys = new Set(fetched.map((pr) => `${getRepoName(pr)}#${pr.number}`))
+  const retained = current.filter(
+    (pr) =>
+      failed.has(getRepoName(pr).toLowerCase()) &&
+      !fetchedKeys.has(`${getRepoName(pr)}#${pr.number}`)
+  )
+  return [...fetched, ...retained]
+}
+
+function describeFailedRepos(failedRepos: string[]): string {
+  const names = failedRepos.slice(0, 3).join(", ")
+  const more = failedRepos.length > 3 ? ` +${failedRepos.length - 3} more` : ""
+  return `Could not refresh ${names}${more} — showing cached PRs`
+}
+
 function getMissingMarkedPRs(
   loadedPRs: PR[],
   history: History
@@ -154,6 +178,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   // (refs are cleared but effects need a dep change to re-run)
   const [refreshEpoch, setRefreshEpoch] = useState(0)
 
+  // fetchPRs is memoized without `prs`; a ref keeps the retain-on-failure logic
+  // working against the currently displayed list rather than a stale closure.
+  const prsRef = useRef(prs)
+  prsRef.current = prs
+
   // Fetch PRs from GitHub
   // When repo filter is active: fetch filtered repos first, then background load the rest
   const fetchPRs = useCallback(async (showAsRefresh = false) => {
@@ -180,10 +209,23 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       
       // If we have priority repos (matching current filter), fetch those first
       if (priority.length > 0) {
-        const priorityPRs = await listPRsFromRepos(priority)
+        const priorityResult = await listPRsFromRepos(priority)
+        if (priorityResult.failedRepos.length === priority.length) {
+          throw new Error(`Failed to fetch ${priority.join(", ")}`)
+        }
+        const priorityPRs = retainPRsFromFailedRepos(
+          prsRef.current,
+          priorityResult.prs,
+          priorityResult.failedRepos
+        )
+        if (priorityResult.failedRepos.length > 0) {
+          dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(priorityResult.failedRepos) })
+        }
 
         // Mark priority repos as fully fetched so the repo: filter effect doesn't re-fetch
+        // (failed ones stay unmarked so the repo: filter effect can retry them)
         for (const repo of priority) {
+          if (priorityResult.failedRepos.includes(repo)) continue
           fullyFetchedRepos.current.add(repo.toLowerCase())
         }
 
@@ -220,7 +262,18 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
               // Fetch rest of configured repos
               if (rest.length > 0) {
-                const restPRs = await listPRsFromRepos(rest)
+                const restResult = await listPRsFromRepos(rest)
+                if (restResult.failedRepos.length === rest.length) {
+                  throw new Error(`Failed to fetch ${rest.join(", ")}`)
+                }
+                const restPRs = retainPRsFromFailedRepos(
+                  prsRef.current,
+                  restResult.prs,
+                  restResult.failedRepos
+                )
+                if (restResult.failedRepos.length > 0) {
+                  dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(restResult.failedRepos) })
+                }
                 const existingKeys = new Set(backgroundPRs.map((pr) => `${getRepoName(pr)}#${pr.number}`))
                 const newPRs = restPRs.filter(
                   (pr) => !existingKeys.has(`${getRepoName(pr)}#${pr.number}`)
@@ -269,7 +322,18 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         }
       } else {
         // No priority repos, fetch all at once
-        let allFetchedPRs = await listPRsFromRepos(allEnabledRepos)
+        const allResult = await listPRsFromRepos(allEnabledRepos)
+        if (allEnabledRepos.length > 0 && allResult.failedRepos.length === allEnabledRepos.length) {
+          throw new Error(`Failed to fetch ${allEnabledRepos.join(", ")}`)
+        }
+        let allFetchedPRs = retainPRsFromFailedRepos(
+          prsRef.current,
+          allResult.prs,
+          allResult.failedRepos
+        )
+        if (allResult.failedRepos.length > 0) {
+          dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(allResult.failedRepos) })
+        }
 
         // Fetch tracked PRs for notification detection
         const trackedFromOtherRepos = getTrackedPRsFromNonConfiguredRepos()
@@ -437,9 +501,15 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     if (reposToFetch.length === 0) return
 
     dispatch({ type: "SHOW_MESSAGE", message: `Loading ${reposToFetch.join(", ")}...` })
-    listPRsFromRepos(reposToFetch).then((fetchedPRs) => {
-      // Mark repos as fully fetched
+    listPRsFromRepos(reposToFetch).then(({ prs: fetchedPRs, failedRepos }) => {
+      if (failedRepos.length === reposToFetch.length) {
+        dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(failedRepos) })
+        return
+      }
+
+      // Mark repos as fully fetched (failed ones stay unmarked so they can be retried)
       for (const repo of reposToFetch) {
+        if (failedRepos.includes(repo)) continue
         fullyFetchedRepos.current.add(repo.toLowerCase())
       }
 

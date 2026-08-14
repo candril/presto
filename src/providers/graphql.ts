@@ -120,12 +120,29 @@ function transformGraphQLPR(raw: any): PR {
   }
 }
 
+/** A repo fetch that failed — distinct from a repo that genuinely has no open PRs */
+export class RepoFetchError extends Error {
+  constructor(message: string, readonly retryable: boolean) {
+    super(message)
+    this.name = "RepoFetchError"
+  }
+}
+
+/** Statuses worth a second attempt: rate limiting and transient GitHub outages */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
+const MAX_ATTEMPTS = 3
+const RETRY_BASE_DELAY_MS = 400
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 /**
- * Fetch PRs from a single repository using direct fetch
+ * Single GraphQL round-trip for one repo.
+ * Throws on every failure mode — GitHub reports rate limits and outages as
+ * HTTP 200 with an `errors` body, and returning [] for those is indistinguishable
+ * from "no open PRs", which then overwrites good cached data with nothing.
  */
-async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
+async function fetchRepoPRsOnce(repo: string, token: string): Promise<PR[]> {
   const [owner, name] = repo.split("/")
-  if (!owner || !name) return []
 
   const query = `query {
     repository(owner: "${owner}", name: "${name}") {
@@ -136,52 +153,83 @@ async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
     }
   }`
 
+  const response = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query }),
+  }).catch((error) => {
+    throw new RepoFetchError(`network error: ${error instanceof Error ? error.message : error}`, true)
+  })
+
+  if (!response.ok) {
+    throw new RepoFetchError(`HTTP ${response.status}`, RETRYABLE_STATUS.has(response.status))
+  }
+
+  const result = await response.json().catch(() => {
+    throw new RepoFetchError("malformed response body", true)
+  }) as {
+    data?: { repository?: { pullRequests?: { nodes?: any[] } } | null }
+    errors?: Array<{ type?: string; message?: string }>
+  }
+
+  const nodes = result.data?.repository?.pullRequests?.nodes
+  if (!nodes) {
+    const error = result.errors?.[0]
+    const detail = error ? `${error.type ?? "ERROR"}: ${error.message ?? ""}`.trim() : "no data returned"
+    throw new RepoFetchError(detail, isRetryableGraphQLError(error?.type))
+  }
+
+  return nodes.filter(Boolean).map(transformGraphQLPR)
+}
+
+/**
+ * RATE_LIMITED and permission/lookup errors won't resolve by retrying immediately;
+ * unclassified errors are GitHub's generic "something went wrong", which usually does.
+ */
+function isRetryableGraphQLError(type?: string): boolean {
+  if (!type) return true
+  return type !== "RATE_LIMITED" && type !== "NOT_FOUND" && type !== "FORBIDDEN"
+}
+
+/**
+ * Fetch PRs from a single repository, retrying transient failures
+ */
+async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
+  const [owner, name] = repo.split("/")
+  if (!owner || !name) throw new RepoFetchError(`invalid repo name "${repo}"`, false)
+
   const log = logRequest("graphql", `fetchRepoPRs ${repo}`)
-  let response: Response
-  try {
-    response = await fetch("https://api.github.com/graphql", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query }),
-    })
-  } catch (error) {
-    // Network error (e.g. offline) — re-throw so caller can detect total failure
-    // and preserve cached state instead of replacing PRs with empty results.
-    log.fail(error)
-    throw error
-  }
-
-  try {
-    if (!response.ok) {
-      log.fail(`HTTP ${response.status}`)
-      return []
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const prs = await fetchRepoPRsOnce(repo, token)
+      log.finish(`${prs.length} PRs`)
+      return prs
+    } catch (error) {
+      const retryable = error instanceof RepoFetchError ? error.retryable : true
+      if (!retryable || attempt >= MAX_ATTEMPTS) {
+        log.fail(error)
+        throw error
+      }
+      await sleep(RETRY_BASE_DELAY_MS * attempt)
     }
-
-    const result = await response.json() as { data?: { repository?: { pullRequests?: { nodes?: any[] } } } }
-    const nodes = result.data?.repository?.pullRequests?.nodes
-    if (!nodes) {
-      log.finish("0 PRs (no data)")
-      return []
-    }
-
-    const prs = nodes.filter(Boolean).map(transformGraphQLPR)
-    log.finish(`${prs.length} PRs`)
-    return prs
-  } catch (error) {
-    log.fail(error)
-    return []
   }
+}
+
+/** PRs fetched plus the repos that could not be fetched at all */
+export interface RepoFetchResult {
+  prs: PR[]
+  failedRepos: string[]
 }
 
 /**
  * Fetch PRs from multiple repositories using GraphQL
  * Fetches all repos in parallel for maximum speed (~3s for 4 large repos)
  */
-export async function listPRsGraphQL(repos: string[]): Promise<PR[]> {
-  if (repos.length === 0) return []
+export async function listPRsGraphQL(repos: string[]): Promise<RepoFetchResult> {
+  if (repos.length === 0) return { prs: [], failedRepos: [] }
 
   const token = await getToken()
 
@@ -191,26 +239,19 @@ export async function listPRsGraphQL(repos: string[]): Promise<PR[]> {
     repos.map(repo => fetchRepoPRs(repo, token))
   )
 
-  // If every repo failed (e.g. offline), throw so caller can preserve cache
-  // rather than replacing PRs with an empty list.
-  const allFailed = results.every(r => r.status === "rejected")
-  if (allFailed) {
-    const reason = (results[0] as PromiseRejectedResult | undefined)?.reason
-    throw reason instanceof Error ? reason : new Error("All repos failed to fetch")
-  }
-
-  // Aggregate results
   const allPRs: PR[] = []
-  for (const result of results) {
+  const failedRepos: string[] = []
+  results.forEach((result, index) => {
     if (result.status === "fulfilled") {
       allPRs.push(...result.value)
+    } else {
+      failedRepos.push(repos[index])
     }
-  }
+  })
 
   // Sort by updatedAt (most recent first)
-  return allPRs.sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  )
+  allPRs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  return { prs: allPRs, failedRepos }
 }
 
 /**

@@ -5,9 +5,11 @@
 
 import { $ } from "bun"
 import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck, PreviewComment } from "../types"
-import { listPRsGraphQL, getPRsGraphQL } from "./graphql"
+import { listPRsGraphQL, getPRsGraphQL, type RepoFetchResult } from "./graphql"
 import { isBot } from "../utils/bots"
 import { logRequest } from "../utils/logger"
+
+export type { RepoFetchResult } from "./graphql"
 
 /** Fields to fetch from GitHub */
 const PR_FIELDS = [
@@ -206,56 +208,48 @@ export async function listRecentPRs(repo: string, days: number): Promise<PR[]> {
 }
 
 /**
- * List PRs from multiple repositories using GraphQL (with REST fallback)
+ * List PRs from multiple repositories using GraphQL, with a per-repo REST retry.
+ *
+ * Reports which repos could not be fetched so callers can keep showing (and
+ * caching) whatever they already had for those repos — an empty result must
+ * only ever mean "no open PRs", never "the request failed".
  */
-export async function listPRsFromRepos(repos: string[]): Promise<PR[]> {
+export async function listPRsFromRepos(repos: string[]): Promise<RepoFetchResult> {
   if (repos.length === 0) {
     // Default to current repo
-    return listPRs()
+    return { prs: await listPRs(), failedRepos: [] }
   }
 
   const log = logRequest("graphql", `listPRsFromRepos (${repos.length} repos)`)
-  try {
-    // Use GraphQL for bulk fetching (single API call)
-    const prs = await listPRsGraphQL(repos)
-    log.finish(`${prs.length} PRs`)
-    return prs
-  } catch (error) {
-    // Fallback to REST API (parallel calls per repo)
+  const graphQL = await listPRsGraphQL(repos).catch((error) => {
+    // Token lookup or a comparable up-front failure: nothing was fetched
     log.fail(error)
-    console.error("GraphQL bulk fetch failed, falling back to REST:", error)
-    const log2 = logRequest("gh", `listPRsFromReposREST (${repos.length} repos)`)
-    const prs = await listPRsFromReposREST(repos)
-    log2.finish(`${prs.length} PRs`)
-    return prs
-  }
-}
+    return { prs: [] as PR[], failedRepos: repos }
+  })
 
-/**
- * List PRs from multiple repositories using REST API (fallback)
- */
-async function listPRsFromReposREST(repos: string[]): Promise<PR[]> {
-  // Fetch from all repos in parallel
-  const results = await Promise.allSettled(repos.map((repo) => listPRs(repo)))
-
-  // If every repo failed (e.g. offline), throw so caller can preserve cache
-  // rather than replacing PRs with an empty list.
-  const allFailed = results.every((r) => r.status === "rejected")
-  if (allFailed) {
-    const reason = (results[0] as PromiseRejectedResult | undefined)?.reason
-    throw reason instanceof Error ? reason : new Error("All repos failed to fetch")
+  if (graphQL.failedRepos.length === 0) {
+    log.finish(`${graphQL.prs.length} PRs`)
+    return graphQL
   }
 
-  // Aggregate successful results
-  const allPRs: PR[] = []
-  for (const result of results) {
+  log.fail(`${graphQL.failedRepos.length}/${repos.length} repos failed, retrying via REST`)
+  const log2 = logRequest("gh", `listPRsFromReposREST (${graphQL.failedRepos.length} repos)`)
+  const results = await Promise.allSettled(graphQL.failedRepos.map((repo) => listPRs(repo)))
+
+  const prs = [...graphQL.prs]
+  const failedRepos: string[] = []
+  results.forEach((result, index) => {
     if (result.status === "fulfilled") {
-      allPRs.push(...result.value)
+      prs.push(...result.value)
+    } else {
+      failedRepos.push(graphQL.failedRepos[index])
     }
-  }
+  })
+  log2.finish(`${prs.length - graphQL.prs.length} PRs recovered, ${failedRepos.length} repos still failing`)
 
   // Sort by updatedAt (most recent first)
-  return allPRs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  prs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  return { prs, failedRepos }
 }
 
 /**
