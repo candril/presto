@@ -5,6 +5,7 @@
 
 import { $ } from "bun"
 import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck, PreviewComment } from "../types"
+import { toMergeMethod } from "../types"
 import { listPRsGraphQL, getPRsGraphQL, type RepoFetchResult } from "./graphql"
 import { isBot } from "../utils/bots"
 import { logRequest } from "../utils/logger"
@@ -27,22 +28,27 @@ const PR_FIELDS = [
   "reviews",
   "headRefOid",
   "headRefName",
+  "mergeStateStatus",
+  "autoMergeRequest",
 ].join(",")
 
 /** Raw PR from GitHub API (comments and reviews are arrays) */
-interface RawPR extends Omit<PR, "commentCount"> {
+interface RawPR extends Omit<PR, "commentCount" | "autoMergeMethod"> {
   comments: unknown[]
   reviews: unknown[]
+  autoMergeRequest: { mergeMethod?: string } | null
 }
 
 /** Transform raw GitHub PR to our PR type */
 function transformPR(raw: RawPR): PR {
-  const { comments, reviews, ...rest } = raw
+  const { comments, reviews, autoMergeRequest, mergeStateStatus, ...rest } = raw
   // Count both PR-level comments and review comments
   const commentCount = (comments?.length ?? 0) + (reviews?.length ?? 0)
   return {
     ...rest,
     commentCount,
+    mergeStateStatus: mergeStateStatus ?? null,
+    autoMergeMethod: toMergeMethod(autoMergeRequest?.mergeMethod),
   }
 }
 

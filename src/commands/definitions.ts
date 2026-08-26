@@ -6,10 +6,12 @@ import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
 import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch } from "../actions/tools"
 import { checkoutPR } from "../actions/checkout"
+import { updateBranchFromBase } from "../actions/branch"
+import { disableAutoMerge } from "../actions/automerge"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { prHasChanges, togglePRUnread } from "../notifications"
 import { saveColumnVisibility } from "../cache"
-import { getRepoName, type ColumnId } from "../types"
+import { getRepoName, type ColumnId, type MergeMethod } from "../types"
 import type { AppAction } from "../state"
 
 /** Repo merge settings cache */
@@ -17,6 +19,7 @@ export interface RepoMergeSettings {
   allowMergeCommit: boolean
   allowSquashMerge: boolean
   allowRebaseMerge: boolean
+  allowAutoMerge: boolean
 }
 const repoMergeSettingsCache = new Map<string, RepoMergeSettings>()
 
@@ -43,17 +46,17 @@ export async function getRepoMergeSettings(repo: string): Promise<RepoMergeSetti
   if (cached) return cached
 
   try {
-    const result = await $`gh api repos/${repo} --jq '{allowMergeCommit: .allow_merge_commit, allowSquashMerge: .allow_squash_merge, allowRebaseMerge: .allow_rebase_merge}'`.json()
+    const result = await $`gh api repos/${repo} --jq '{allowMergeCommit: .allow_merge_commit, allowSquashMerge: .allow_squash_merge, allowRebaseMerge: .allow_rebase_merge, allowAutoMerge: .allow_auto_merge}'`.json()
     const settings = result as RepoMergeSettings
     repoMergeSettingsCache.set(repo, settings)
     return settings
   } catch {
     // Default to all allowed if we can't fetch
-    return { allowMergeCommit: true, allowSquashMerge: true, allowRebaseMerge: true }
+    return { allowMergeCommit: true, allowSquashMerge: true, allowRebaseMerge: true, allowAutoMerge: false }
   }
 }
 
-export type MergeMethod = "merge" | "squash" | "rebase"
+export type { MergeMethod } from "../types"
 
 /** Execute the actual merge with selected method */
 export async function executeMerge(
@@ -83,6 +86,7 @@ const COLUMN_NAMES: Record<ColumnId, string> = {
   state: "State",
   checks: "Checks",
   review: "Review",
+  sync: "Base sync",
   comments: "Comments",
   time: "Time",
   repo: "Repository",
@@ -91,7 +95,7 @@ const COLUMN_NAMES: Record<ColumnId, string> = {
 
 /** Get column commands with current visibility state in labels */
 export function getColumnCommands(ctx: CommandContext): Command[] {
-  const columns: ColumnId[] = ["state", "checks", "review", "comments", "time", "repo", "author"]
+  const columns: ColumnId[] = ["state", "checks", "review", "sync", "comments", "time", "repo", "author"]
   return columns.map((columnId) => ({
     id: `column.${columnId}`,
     label: `${ctx.columnVisibility[columnId] ? "Hide" : "Show"} ${COLUMN_NAMES[columnId]} column`,
@@ -625,6 +629,65 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       // This will be handled by the merge dialog - return a special result
       return { type: "merge_dialog" } as any
+    },
+  },
+  {
+    id: "state.update_branch",
+    label: "Update branch from base",
+    category: "state",
+    requiresPR: true,
+    available: (ctx) => ctx.selectedPR?.state === "OPEN",
+    execute: async (ctx) => {
+      const pr = ctx.selectedPR!
+      const result = await updateBranchFromBase(pr, "merge")
+      if (result.success) {
+        // GitHub recomputes the merge state asynchronously; UNKNOWN renders as
+        // "nothing to show", which beats leaving a stale "behind" arrow up.
+        ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { mergeStateStatus: "UNKNOWN" } })
+      }
+      return { type: result.success ? "success" : "error", message: result.message }
+    },
+  },
+  {
+    id: "state.update_branch_rebase",
+    label: "Update branch from base (rebase)",
+    category: "state",
+    requiresPR: true,
+    available: (ctx) => ctx.selectedPR?.state === "OPEN",
+    execute: async (ctx) => {
+      const pr = ctx.selectedPR!
+      const result = await updateBranchFromBase(pr, "rebase")
+      if (result.success) {
+        ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { mergeStateStatus: "UNKNOWN" } })
+      }
+      return { type: result.success ? "success" : "error", message: result.message }
+    },
+  },
+  {
+    id: "state.auto_merge",
+    label: "Enable auto-merge",
+    category: "state",
+    requiresPR: true,
+    available: (ctx) =>
+      ctx.selectedPR?.state === "OPEN" && ctx.selectedPR?.autoMergeMethod == null,
+    execute: async (_ctx) => {
+      // Handled by CommandPalette — the merge dialog picks the method
+      return { type: "auto_merge_dialog" }
+    },
+  },
+  {
+    id: "state.disable_auto_merge",
+    label: "Disable auto-merge",
+    category: "state",
+    requiresPR: true,
+    available: (ctx) => ctx.selectedPR?.autoMergeMethod != null,
+    execute: async (ctx) => {
+      const pr = ctx.selectedPR!
+      const result = await disableAutoMerge(pr)
+      if (result.success) {
+        ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { autoMergeMethod: null } })
+      }
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
 

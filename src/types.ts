@@ -9,12 +9,13 @@ export type View = "list"
 export type PreviewPosition = "right" | "bottom" | null
 
 // Column visibility settings
-export type ColumnId = "state" | "checks" | "review" | "comments" | "time" | "repo" | "author"
+export type ColumnId = "state" | "checks" | "review" | "sync" | "comments" | "time" | "repo" | "author"
 
 export interface ColumnVisibility {
   state: boolean
   checks: boolean
   review: boolean
+  sync: boolean
   comments: boolean
   time: boolean
   repo: boolean
@@ -45,6 +46,48 @@ export interface PR {
   headRefOid: string | null
   /** Head branch name (for branch search) */
   headRefName: string | null
+  /** GitHub's computed merge state; UNKNOWN while GitHub is still computing it */
+  mergeStateStatus: MergeStateStatus | null
+  /** Merge method auto-merge is armed with, or null when auto-merge is off */
+  autoMergeMethod: MergeMethod | null
+}
+
+/** How a PR's head branch relates to its base branch (GitHub `mergeStateStatus`) */
+export type MergeStateStatus =
+  | "BEHIND"
+  | "BLOCKED"
+  | "CLEAN"
+  | "DIRTY"
+  | "DRAFT"
+  | "HAS_HOOKS"
+  | "UNKNOWN"
+  | "UNSTABLE"
+
+/** Merge strategies GitHub offers, shared by merge and auto-merge */
+export type MergeMethod = "merge" | "squash" | "rebase"
+
+/** GitHub reports the auto-merge method as an upper-case enum (MERGE/SQUASH/REBASE) */
+export function toMergeMethod(raw: unknown): MergeMethod | null {
+  switch (raw) {
+    case "MERGE":
+      return "merge"
+    case "SQUASH":
+      return "squash"
+    case "REBASE":
+      return "rebase"
+    default:
+      return null
+  }
+}
+
+/** The base branch has moved on and the PR needs it merged in */
+export function needsBaseUpdate(pr: PR): boolean {
+  return pr.mergeStateStatus === "BEHIND"
+}
+
+/** The PR cannot be merged until conflicts with the base branch are resolved */
+export function hasBaseConflicts(pr: PR): boolean {
+  return pr.mergeStateStatus === "DIRTY"
 }
 
 /** Helper to get full repo name from PR URL */

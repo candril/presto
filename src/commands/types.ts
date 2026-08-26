@@ -17,6 +17,7 @@ export type CommandResult =
   | { type: "error"; message: string }
   | { type: "refresh" } // Trigger PR list refresh after state change
   | { type: "merge_dialog" } // Open merge method selection dialog
+  | { type: "auto_merge_dialog" } // Open merge method selection dialog, armed as auto-merge
   | { type: "rename_tab" } // Open tab rename dialog
   | { type: "review_dialog" } // Open submit-review dialog
   | { type: "workflow_dialog" } // Open trigger-workflow dialog (spec 033)

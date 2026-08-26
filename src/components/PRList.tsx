@@ -1,7 +1,7 @@
 /**
  * PR List component - displays pull requests in a table-like layout
  * 
- * Column order: State | Checks | Review | Time | Title (flex) | Author | Repo
+ * Column order: State | Checks | Review | Base | Time | Title (flex) | Author | Repo
  * Title column format: #1234 PR title here...
  */
 
@@ -10,7 +10,7 @@ import { useTerminalDimensions } from "@opentui/react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { theme, getMarkColor } from "../theme"
 import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
-import { getRepoName, getShortRepoName, computeCheckState } from "../types"
+import { getRepoName, getShortRepoName, computeCheckState, needsBaseUpdate, hasBaseConflicts } from "../types"
 import { formatRelativeTime } from "../utils/time"
 import { truncate } from "../utils/string"
 import { getPRKey, isPRMarked, getPRMark, type History } from "../history"
@@ -21,6 +21,7 @@ const COL = {
   state: 2,      // icon + space
   checks: 2,     // icon + space
   review: 1,     // icon (no trailing space)
+  sync: 1,       // icon (no trailing space)
   comments: 3,   // comment count (e.g. "12" or "99+")
   time: 4,       // "1d" or "2mo" (without "ago")
   repo: 16,      // Short repo name
@@ -36,6 +37,7 @@ function getFixedColumnsWidth(v: ColumnVisibility): number {
   if (v.state) width += COL.state // icon + space
   if (v.checks) width += COL.checks // icon + space
   if (v.review) width += COL.review + 1 // icon + space
+  if (v.sync) width += COL.sync + 1 // icon + space
   if (v.comments) width += COL.comments + 1 // comments + space
   if (v.time) width += COL.time + 1 // time + space
   if (v.author) width += COL.author + 1 // space + author
@@ -60,6 +62,11 @@ const ICONS = {
   reviewChanges: "!",  // exclamation
   reviewRequired: "?", // question mark
   reviewNone: "-",     // dash
+  // Base branch sync icons
+  syncConflict: "✗",   // conflicts with base
+  syncBehind: "↓",     // base has moved on, needs updating
+  syncAutoMerge: "⇢",  // auto-merge armed, will merge itself when ready
+  syncNone: "-",       // dash
 }
 
 interface PRListProps {
@@ -150,6 +157,7 @@ function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: Colum
         {v.state && "S "}
         {v.checks && "C "}
         {v.review && "R "}
+        {v.sync && "B "}
         {v.comments && padRight("#", COL.comments)}
         {v.comments && " "}
         {v.time && padRight("", COL.time)}
@@ -177,6 +185,7 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(computeCheckState(pr.statusCheckRollup))
   const reviewIndicator = getReviewIndicator(pr.reviewDecision)
+  const syncIndicator = getSyncIndicator(pr)
   const commentCount = formatCommentCount(pr.commentCount)
   const timeAgo = formatRelativeTime(pr.updatedAt).replace(" ago", "")
   const repoName = getShortRepoName(pr)
@@ -221,6 +230,8 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
         {v.checks && " "}
         {v.review && <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>}
         {v.review && " "}
+        {v.sync && <span fg={syncIndicator.color}>{syncIndicator.icon}</span>}
+        {v.sync && " "}
         {v.comments && <span fg={pr.commentCount > 0 ? theme.textMuted : theme.textMuted}>{padRight(commentCount, COL.comments)}</span>}
         {v.comments && " "}
         {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
@@ -280,6 +291,25 @@ function getReviewIndicator(decision?: ReviewDecision | null): { icon: string; c
     default:
       return { icon: ICONS.reviewNone, color: theme.textMuted }
   }
+}
+
+/**
+ * Get base-branch sync indicator.
+ *
+ * A PR can be several of these at once — the most actionable one wins, so a PR
+ * that is both behind and auto-merging still shows the arrow the user can act on.
+ */
+function getSyncIndicator(pr: PR): { icon: string; color: string } {
+  if (hasBaseConflicts(pr)) {
+    return { icon: ICONS.syncConflict, color: theme.error }
+  }
+  if (needsBaseUpdate(pr)) {
+    return { icon: ICONS.syncBehind, color: theme.warning }
+  }
+  if (pr.autoMergeMethod) {
+    return { icon: ICONS.syncAutoMerge, color: theme.secondary }
+  }
+  return { icon: ICONS.syncNone, color: theme.textMuted }
 }
 
 /** Pad string to the right (left-align) */

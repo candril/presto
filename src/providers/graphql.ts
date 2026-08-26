@@ -5,6 +5,7 @@
 
 import { $ } from "bun"
 import type { PR } from "../types"
+import { toMergeMethod } from "../types"
 import { isBot } from "../utils/bots"
 import { logRequest } from "../utils/logger"
 
@@ -42,6 +43,8 @@ const PR_FRAGMENT = `
   reviewDecision
   headRefOid
   headRefName
+  mergeStateStatus
+  autoMergeRequest { mergeMethod }
   comments(first: 100) {
     nodes { author { login } }
   }
@@ -117,6 +120,8 @@ function transformGraphQLPR(raw: any): PR {
     commentCount: humanCommentCount,
     headRefOid: raw.headRefOid ?? null,
     headRefName: raw.headRefName ?? null,
+    mergeStateStatus: raw.mergeStateStatus ?? null,
+    autoMergeMethod: toMergeMethod(raw.autoMergeRequest?.mergeMethod),
   }
 }
 

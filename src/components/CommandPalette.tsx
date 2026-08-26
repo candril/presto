@@ -25,6 +25,7 @@ import {
 import { fuzzyFilter } from "../utils/fuzzy"
 import { getRepoName, getShortRepoName } from "../types"
 import { submitPRReview, type ReviewEvent } from "../actions/review"
+import { enableAutoMerge } from "../actions/automerge"
 import {
   listWorkflows,
   getWorkflowInputs,
@@ -49,13 +50,17 @@ interface MergeOption {
   number: number // 1, 2, or 3
 }
 
-/** Merge dialog state */
+/** Merge dialog state — shared by "Merge PR" and "Enable auto-merge" */
 interface MergeDialogState {
+  /** "auto" arms GitHub's merge-when-ready instead of merging now */
+  mode: "merge" | "auto"
   options: MergeOption[]
   selectedMethod: MergeMethod | null // null = no selection yet
   mergeable: boolean
   mergeableState: string
   baseRef: string
+  /** Set when the repo has auto-merge switched off, blocking an "auto" dialog */
+  blockedReason: string | null
 }
 
 /** Rename tab dialog state */
@@ -176,8 +181,9 @@ export function CommandPalette({
     try {
       const result = await cmd.execute(context)
       
-      // Handle merge dialog
-      if (result.type === "merge_dialog") {
+      // Handle merge / auto-merge dialog — same method picker, different verb
+      if (result.type === "merge_dialog" || result.type === "auto_merge_dialog") {
+        const mode = result.type === "auto_merge_dialog" ? "auto" : "merge"
         setExecuting(false)
         setLoadingMergeOptions(true)
         
@@ -207,11 +213,16 @@ export function CommandPalette({
         
         // Show dialog even if not mergeable (to show the reason)
         setMergeDialog({
+          mode,
           options,
           selectedMethod: null, // No default selection
           mergeable: mergeState.mergeable,
           mergeableState: mergeState.mergeableState,
           baseRef: mergeState.baseRef,
+          blockedReason:
+            mode === "auto" && !settings.allowAutoMerge
+              ? "Auto-merge is disabled for this repository"
+              : null,
         })
         return
       }
@@ -432,14 +443,20 @@ export function CommandPalette({
     }
   }
 
-  const handleMerge = async (method: MergeMethod) => {
+  const handleMerge = async (method: MergeMethod, mode: "merge" | "auto") => {
     const pr = context.selectedPR!
     const repo = getRepoName(pr)
     
     setMergeDialog(null)
     setExecuting(true)
     
-    const result = await executeMerge(pr, repo, method, context.dispatch)
+    const result =
+      mode === "auto"
+        ? await enableAutoMerge(pr, method)
+        : await executeMerge(pr, repo, method, context.dispatch)
+    if (mode === "auto" && result.success) {
+      context.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { autoMergeMethod: method } })
+    }
     onClose()
     onResult(result.success 
       ? { type: "success", message: result.message }
@@ -768,19 +785,19 @@ export function CommandPalette({
 
     // Merge dialog mode
     if (mergeDialog) {
+      const canSubmit = canSubmitMergeDialog(mergeDialog)
       if (key.name === "escape") {
         setMergeDialog(null)
         onClose()
       } else if (key.name === "return") {
-        // Only merge if a method is selected and PR is mergeable
-        if (mergeDialog.selectedMethod && mergeDialog.mergeable) {
-          handleMerge(mergeDialog.selectedMethod)
+        if (mergeDialog.selectedMethod && canSubmit) {
+          handleMerge(mergeDialog.selectedMethod, mergeDialog.mode)
         }
       } else if (key.name === "1" || key.name === "2" || key.name === "3") {
         // Number key selects method
         const num = parseInt(key.name)
         const option = mergeDialog.options.find(o => o.number === num)
-        if (option && mergeDialog.mergeable) {
+        if (option && canSubmit) {
           setMergeDialog({ ...mergeDialog, selectedMethod: option.method })
         }
       }
@@ -1376,10 +1393,9 @@ export function CommandPalette({
   // Merge method selection view
   if (mergeDialog || loadingMergeOptions) {
     const pr = context.selectedPR
-    const canMerge = mergeDialog?.mergeable ?? false
-    const mergeBlockedReason = mergeDialog && !mergeDialog.mergeable
-      ? getMergeBlockedReason(mergeDialog.mergeableState)
-      : null
+    const isAuto = mergeDialog?.mode === "auto"
+    const canMerge = mergeDialog ? canSubmitMergeDialog(mergeDialog) : false
+    const mergeBlockedReason = mergeDialog ? mergeDialogBlockedReason(mergeDialog) : null
     
     return (
       <box
@@ -1410,7 +1426,7 @@ export function CommandPalette({
         >
           {/* Header */}
           <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
-            <text fg={theme.primary}>Merge PR</text>
+            <text fg={theme.primary}>{isAuto ? "Enable auto-merge" : "Merge PR"}</text>
           </box>
           {/* PR info */}
           <box paddingLeft={2} paddingRight={2} paddingBottom={1} flexDirection="column">
@@ -1474,7 +1490,7 @@ export function CommandPalette({
                 <span fg={theme.warning}>1/2/3</span>
                 <span fg={theme.textMuted}> to select · </span>
                 <span fg={mergeDialog?.selectedMethod ? theme.success : theme.textMuted}>Enter</span>
-                <span fg={theme.textMuted}> to merge · Esc cancel</span>
+                <span fg={theme.textMuted}>{isAuto ? " to arm auto-merge · Esc cancel" : " to merge · Esc cancel"}</span>
               </text>
             ) : (
               <text fg={theme.textMuted}>Esc to close</text>
@@ -1805,6 +1821,19 @@ function renderInputRows(
 }
 
 /** Get human-readable reason why PR cannot be merged */
+/**
+ * Auto-merge is meant for PRs that *can't* merge yet, so the mergeable gate that
+ * applies to an immediate merge would defeat the purpose.
+ */
+function canSubmitMergeDialog(dialog: MergeDialogState): boolean {
+  return dialog.mode === "auto" ? dialog.blockedReason === null : dialog.mergeable
+}
+
+function mergeDialogBlockedReason(dialog: MergeDialogState): string | null {
+  if (dialog.mode === "auto") return dialog.blockedReason
+  return dialog.mergeable ? null : getMergeBlockedReason(dialog.mergeableState)
+}
+
 function getMergeBlockedReason(state: string): string {
   switch (state) {
     case "dirty":
