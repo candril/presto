@@ -4,7 +4,7 @@
  */
 
 import { useKeyboard, useRenderer } from "@opentui/react"
-import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch } from "../actions"
+import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch, openFailingChecks } from "../actions"
 import { checkoutPR } from "../actions/checkout"
 import {
   toggleStarAuthor,
@@ -258,6 +258,12 @@ export function useKeyboardNav({
       return
     }
 
+    // Expand / collapse the gate columns behind the merge verdict
+    if (keys.matches(key, "ui.gateDetail")) {
+      dispatch({ type: "TOGGLE_GATE_DETAIL" })
+      return
+    }
+
     // Quit
     if (keys.matches(key, "ui.quit")) {
       renderer.destroy()
@@ -447,6 +453,13 @@ export function useKeyboardNav({
     }
 
     // View diff in external viewer
+    if (keys.matches(key, "action.checks")) {
+      openFailingChecks(selectedPR).then((result) => {
+        dispatch({ type: "SHOW_MESSAGE", message: result.message })
+      })
+      return
+    }
+
     if (keys.matches(key, "action.diff")) {
       renderer.suspend()
       openDiff(selectedPR, config.tools.diff).finally(() => {

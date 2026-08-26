@@ -15,6 +15,8 @@ export interface PRCache {
   filterQuery?: string
   /** Column visibility settings */
   columnVisibility?: ColumnVisibility
+  /** Whether the gate columns are expanded (spec 037) */
+  gateDetail?: boolean
 }
 
 /** Default column visibility - all columns visible */
@@ -23,6 +25,7 @@ export const defaultColumnVisibility: ColumnVisibility = {
   checks: true,
   review: true,
   sync: true,
+  merge: true,
   comments: true,
   time: true,
   repo: true,
@@ -35,6 +38,7 @@ export const defaultCache: PRCache = {
   repos: [],
   filterQuery: "",
   columnVisibility: defaultColumnVisibility,
+  gateDetail: false,
 }
 
 /** Cache is considered stale after this many minutes */

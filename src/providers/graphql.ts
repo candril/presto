@@ -5,8 +5,9 @@
 
 import { $ } from "bun"
 import type { PR } from "../types"
-import { toMergeMethod } from "../types"
+import { getRepoName, toMergeMethod } from "../types"
 import { isBot } from "../utils/bots"
+import { stampBaseUpdateRequired } from "./branchRules"
 import { logRequest } from "../utils/logger"
 
 /** Cached GitHub token */
@@ -43,18 +44,32 @@ const PR_FRAGMENT = `
   reviewDecision
   headRefOid
   headRefName
+  baseRefName
   mergeStateStatus
+  isCrossRepository
+  viewerCanUpdateBranch
   autoMergeRequest { mergeMethod }
+  reviewThreads(first: 20) {
+    nodes {
+      isResolved
+      comments(first: 1) { nodes { author { login __typename } } }
+    }
+  }
   comments(first: 100) {
     nodes { author { login } }
   }
   reviews(first: 50) {
     nodes { author { login } }
   }
+  latestOpinionatedReviews(first: 10) {
+    nodes { state author { login } }
+  }
   commits(last: 1) {
     nodes {
       commit {
+        committedDate
         statusCheckRollup { state }
+        checkSuites(first: 20) { nodes { status } }
       }
     }
   }
@@ -119,9 +134,40 @@ function transformGraphQLPR(raw: any): PR {
     statusCheckRollup,
     commentCount: humanCommentCount,
     headRefOid: raw.headRefOid ?? null,
+    headCommittedAt: raw.commits?.nodes?.[0]?.commit?.committedDate ?? null,
+    // Only meaningful when nothing has started: these repos keep suites (renovate,
+    // terraform) parked in QUEUED indefinitely, so a queued suite alone proves nothing.
+    // Copilot's auto-review opens threads like a person would — 22% of open threads in
+    // these repos — but a bot suggestion is not the team blocking the PR, and presto
+    // already discounts bots elsewhere (spec 024). GraphQL's __typename settles it where
+    // the name patterns cannot: "copilot-pull-request-reviewer" looks human to isBot().
+    approvedBy: (raw.latestOpinionatedReviews?.nodes ?? [])
+      .filter((review: any) => review?.state === "APPROVED" && !isBot(review?.author?.login ?? ""))
+      .map((review: any) => review.author.login),
+    unresolvedThreads: (raw.reviewThreads?.nodes ?? []).filter((thread: any) => {
+      if (thread?.isResolved !== false) return false
+      const author = thread.comments?.nodes?.[0]?.author
+      return author?.__typename !== "Bot" && !isBot(author?.login ?? "")
+    }).length,
+    checksQueued:
+      !statusRollup?.state &&
+      (raw.commits?.nodes?.[0]?.commit?.checkSuites?.nodes ?? []).some(
+        (suite: any) =>
+          suite?.status === "QUEUED" || suite?.status === "REQUESTED" || suite?.status === "PENDING"
+      ),
     headRefName: raw.headRefName ?? null,
     mergeStateStatus: raw.mergeStateStatus ?? null,
     autoMergeMethod: toMergeMethod(raw.autoMergeRequest?.mergeMethod),
+    baseRefName: raw.baseRefName ?? null,
+    // A fork PR reports viewerCanUpdateBranch false because the viewer cannot push to
+    // the fork, which says nothing about whether it is behind
+    baseSync: raw.isCrossRepository === true
+      ? "unknown"
+      : raw.viewerCanUpdateBranch === true
+        ? "behind"
+        : "up-to-date",
+    // Filled in by stampBaseUpdateRequired once the branch rules are known
+    baseUpdateRequired: raw.mergeStateStatus === "BEHIND",
   }
 }
 
@@ -254,6 +300,8 @@ export async function listPRsGraphQL(repos: string[]): Promise<RepoFetchResult> 
     }
   })
 
+  await stampBaseUpdateRequired(allPRs, getRepoName)
+
   // Sort by updatedAt (most recent first)
   allPRs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
   return { prs: allPRs, failedRepos }
@@ -328,5 +376,6 @@ export async function getPRsGraphQL(
     }
   }
 
+  await stampBaseUpdateRequired(allPRs, getRepoName)
   return allPRs
 }

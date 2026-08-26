@@ -317,6 +317,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
               columnVisibility={state.columnVisibility} 
               previewPosition={state.previewPosition} 
               history={history}
+              pendingActions={state.pendingActions}
+              gateDetail={state.gateDetail}
               emptyMessage={
                 filter.starred && history.starredAuthors.length === 0
                   ? "No starred authors"
@@ -354,6 +356,12 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
         {state.previewPosition && (
           <PreviewPanel
             preview={preview}
+            pr={selectedPR}
+            hasPendingAction={
+              selectedPR
+                ? getPRKey(getRepoName(selectedPR), selectedPR.number) in state.pendingActions
+                : false
+            }
             loading={previewLoading}
             scrollOffset={state.previewScrollOffset}
             position={state.previewPosition}

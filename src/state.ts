@@ -2,8 +2,10 @@
  * Application state management
  */
 
-import type { AppState, PR, PreviewPosition, ColumnId, Tab } from "./types"
-import { loadCache, getColumnVisibility } from "./cache"
+import type { AppState, PendingAction, PendingActionKind, PR, PreviewPosition, ColumnId, Tab } from "./types"
+import { getRepoName, isPendingActionSettled, PENDING_ACTION_TTL_MS } from "./types"
+import { getPRKey } from "./history"
+import { loadCache, getColumnVisibility, getGateDetail, saveGateDetail } from "./cache"
 import { getInitialTabsState, duplicateTab, generateTabTitle } from "./tabs"
 
 /** Action types for the reducer */
@@ -35,8 +37,13 @@ export type AppAction =
   // Optimistic PR updates
   | { type: "UPDATE_PR"; url: string; updates: Partial<PR> }
   | { type: "REMOVE_PR"; url: string }
+  // In-flight action markers (spec 036)
+  | { type: "SET_PR_PENDING"; prKey: string; kind: PendingActionKind; firedAt: number }
+  | { type: "CLEAR_PR_PENDING"; prKey: string }
   // Column visibility
   | { type: "TOGGLE_COLUMN"; column: ColumnId }
+  // Gate detail (spec 037)
+  | { type: "TOGGLE_GATE_DETAIL" }
   // Tab actions (spec 011)
   | { type: "DUPLICATE_TAB" }
   | { type: "CLOSE_TAB"; tabId: string }
@@ -91,7 +98,42 @@ export function createInitialState(): AppState {
     // Mark categories (spec 028)
     markPending: false,
     jumpPending: false,
+    // In-flight action markers (spec 036)
+    pendingActions: {},
+    // Gate detail (spec 037)
+    gateDetail: getGateDetail(),
   }
+}
+
+/**
+ * Drop in-flight markers whose action GitHub has finished applying, plus any that have
+ * outlived the TTL — a failed or externally reverted action must not pin a marker.
+ */
+function settlePendingActions(
+  pending: Record<string, PendingAction>,
+  before: PR[],
+  after: PR[]
+): Record<string, PendingAction> {
+  const keys = Object.keys(pending)
+  if (keys.length === 0) return pending
+
+  const byKey = (prs: PR[]) => new Map(prs.map((pr) => [getPRKey(getRepoName(pr), pr.number), pr]))
+  const beforeByKey = byKey(before)
+  const afterByKey = byKey(after)
+  const now = Date.now()
+
+  const kept: Record<string, PendingAction> = {}
+  for (const key of keys) {
+    const action = pending[key]
+    if (now - action.firedAt > PENDING_ACTION_TTL_MS) continue
+    const prBefore = beforeByKey.get(key)
+    const prAfter = afterByKey.get(key)
+    // A PR that dropped out of the list entirely (merged, filtered away) is settled
+    if (!prBefore || !prAfter) continue
+    if (isPendingActionSettled(action, prBefore, prAfter)) continue
+    kept[key] = action
+  }
+  return kept
 }
 
 /** State reducer */
@@ -116,6 +158,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         prs: sorted,
+        pendingActions: settlePendingActions(state.pendingActions, state.prs, sorted),
         loading: false,
         refreshing: false,
         error: null,
@@ -262,6 +305,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         pr.url === action.url ? { ...pr, ...action.updates } : pr
       )
       return { ...state, prs }
+    }
+
+    case "TOGGLE_GATE_DETAIL": {
+      const gateDetail = !state.gateDetail
+      saveGateDetail(gateDetail)
+      return { ...state, gateDetail }
+    }
+
+    case "SET_PR_PENDING": {
+      return {
+        ...state,
+        pendingActions: {
+          ...state.pendingActions,
+          [action.prKey]: { kind: action.kind, firedAt: action.firedAt },
+        },
+      }
+    }
+
+    case "CLEAR_PR_PENDING": {
+      const { [action.prKey]: _removed, ...rest } = state.pendingActions
+      return { ...state, pendingActions: rest }
     }
 
     case "REMOVE_PR": {

@@ -8,10 +8,11 @@ import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, ope
 import { checkoutPR } from "../actions/checkout"
 import { updateBranchFromBase } from "../actions/branch"
 import { disableAutoMerge } from "../actions/automerge"
+import { openFailingChecks, rerunChecks } from "../actions/checks"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { prHasChanges, togglePRUnread } from "../notifications"
 import { saveColumnVisibility } from "../cache"
-import { getRepoName, type ColumnId, type MergeMethod } from "../types"
+import { getRepoName, type ColumnId, type MergeMethod, type MergeStateStatus, type PR } from "../types"
 import type { AppAction } from "../state"
 
 /** Repo merge settings cache */
@@ -25,8 +26,9 @@ const repoMergeSettingsCache = new Map<string, RepoMergeSettings>()
 
 /** PR merge state */
 export interface PRMergeState {
-  mergeable: boolean
-  mergeableState: string // "clean", "dirty", "blocked", "behind", "unknown"
+  /** null while GitHub is still computing the test merge */
+  mergeable: boolean | null
+  mergeableState: string // "clean", "unstable", "dirty", "blocked", "behind", "unknown"
   baseRef: string
 }
 
@@ -37,6 +39,44 @@ export async function getPRMergeState(repo: string, number: number): Promise<PRM
     return result as PRMergeState
   } catch {
     return { mergeable: true, mergeableState: "unknown", baseRef: "" }
+  }
+}
+
+/**
+ * Whether GitHub would actually take the merge right now.
+ *
+ * The `mergeable` boolean only answers "no conflicts" — a PR that is behind a
+ * strict base, or blocked by protection, reports `mergeable: true` and then has its
+ * merge rejected. `mergeable_state` is the field that gates the merge button.
+ */
+export function isMergeableState(state: string): boolean {
+  return state === "clean" || state === "unstable" || state === "has_hooks"
+}
+
+/**
+ * Map REST `mergeable_state` onto the GraphQL vocabulary the PR rows render, so a
+ * dialog that just fetched fresher truth can correct a stale row on the spot.
+ */
+export function mergeableStateToStatus(state: string): MergeStateStatus | null {
+  switch (state) {
+    case "clean":
+      return "CLEAN"
+    case "has_hooks":
+      return "HAS_HOOKS"
+    case "unstable":
+      return "UNSTABLE"
+    case "behind":
+      return "BEHIND"
+    case "dirty":
+      return "DIRTY"
+    case "blocked":
+      return "BLOCKED"
+    case "draft":
+      return "DRAFT"
+    case "unknown":
+      return "UNKNOWN"
+    default:
+      return null
   }
 }
 
@@ -81,12 +121,30 @@ export async function executeMerge(
   }
 }
 
+/**
+ * GitHub accepts the update and applies it asynchronously, so the row would otherwise
+ * sit unchanged for seconds. The marker clears itself once a refresh shows a new head
+ * commit, or when the TTL expires.
+ */
+function markBranchUpdatePending(ctx: CommandContext, pr: PR): void {
+  // Stop the base column telling the user to do the thing they just did. "unknown" rather
+  // than "up-to-date": the update has not landed yet, and a refresh settles it either way.
+  ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { baseSync: "unknown" } })
+  ctx.dispatch({
+    type: "SET_PR_PENDING",
+    prKey: getPRKey(getRepoName(pr), pr.number),
+    kind: "update-branch",
+    firedAt: Date.now(),
+  })
+}
+
 /** Column display names */
 const COLUMN_NAMES: Record<ColumnId, string> = {
   state: "State",
   checks: "Checks",
   review: "Review",
   sync: "Base sync",
+  merge: "Merge verdict",
   comments: "Comments",
   time: "Time",
   repo: "Repository",
@@ -95,7 +153,7 @@ const COLUMN_NAMES: Record<ColumnId, string> = {
 
 /** Get column commands with current visibility state in labels */
 export function getColumnCommands(ctx: CommandContext): Command[] {
-  const columns: ColumnId[] = ["state", "checks", "review", "sync", "comments", "time", "repo", "author"]
+  const columns: ColumnId[] = ["state", "checks", "review", "sync", "merge", "comments", "time", "repo", "author"]
   return columns.map((columnId) => ({
     id: `column.${columnId}`,
     label: `${ctx.columnVisibility[columnId] ? "Hide" : "Show"} ${COLUMN_NAMES[columnId]} column`,
@@ -505,6 +563,39 @@ export const commands: Command[] = [
     },
   },
   {
+    id: "action.checks",
+    label: "Open failing checks in browser",
+    category: "action",
+    shortcut: "x",
+    requiresPR: true,
+    execute: async (ctx) => {
+      const result = await openFailingChecks(ctx.selectedPR!)
+      return { type: result.success ? "success" : "error", message: result.message }
+    },
+  },
+  {
+    id: "action.rerun_checks",
+    label: "Re-run checks",
+    category: "action",
+    requiresPR: true,
+    // Confirmed: every invocation spends real CI on shared runners
+    dangerous: true,
+    execute: async (ctx) => {
+      const result = await rerunChecks(ctx.selectedPR!)
+      return { type: result.success ? "success" : "error", message: result.message }
+    },
+  },
+  {
+    id: "action.gate_detail",
+    label: "Expand/collapse status columns",
+    category: "action",
+    shortcut: "c",
+    execute: async (ctx) => {
+      ctx.dispatch({ type: "TOGGLE_GATE_DETAIL" })
+      return { type: "success" }
+    },
+  },
+  {
     id: "action.help",
     label: "Show help",
     category: "action",
@@ -640,11 +731,7 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const result = await updateBranchFromBase(pr, "merge")
-      if (result.success) {
-        // GitHub recomputes the merge state asynchronously; UNKNOWN renders as
-        // "nothing to show", which beats leaving a stale "behind" arrow up.
-        ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { mergeStateStatus: "UNKNOWN" } })
-      }
+      if (result.success) markBranchUpdatePending(ctx, pr)
       return { type: result.success ? "success" : "error", message: result.message }
     },
   },
@@ -657,9 +744,7 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
       const result = await updateBranchFromBase(pr, "rebase")
-      if (result.success) {
-        ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { mergeStateStatus: "UNKNOWN" } })
-      }
+      if (result.success) markBranchUpdatePending(ctx, pr)
       return { type: result.success ? "success" : "error", message: result.message }
     },
   },

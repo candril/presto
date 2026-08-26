@@ -25,6 +25,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "action.copyUrl": "Y",
   "action.copyBranch": "b",
   "action.diff": "D",
+  "action.checks": "x",
   "action.star": "s",
   "action.mark": "m",
   "action.toggleSeen": "v",
@@ -61,6 +62,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "ui.quit": "q",
   "ui.preview": "p",
   "ui.previewCycle": "P",
+  "ui.gateDetail": "c",
   "ui.commandPalette": "ctrl+p",
   "ui.console": "`",
 }

@@ -8,7 +8,8 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { SyntaxStyle, RGBA } from "@opentui/core"
 import { theme } from "../theme"
 import { Spinner } from "./Loading"
-import type { PRPreview, PRReview, PreviewCheckStatus, ChangedFile, PreviewPosition, PreviewComment } from "../types"
+import type { PR, PRPreview, PRReview, ChangedFile, PreviewPosition, PreviewComment } from "../types"
+import { buildStatusRows } from "../status"
 import type { DetectedChange } from "../notifications"
 import { truncate } from "../utils/string"
 import { formatCompactTime } from "../utils/time"
@@ -198,6 +199,13 @@ function getSyntaxStyle(): SyntaxStyle {
 
 interface PreviewPanelProps {
   preview: PRPreview | null
+  /**
+   * The list-row PR this preview belongs to. The status block derives from it — not from
+   * the preview fetch — so the header always matches the row glyphs exactly.
+   */
+  pr: PR | null
+  /** Whether an action the user fired on this PR is still in flight */
+  hasPendingAction: boolean
   loading: boolean
   scrollOffset: number
   position: PreviewPosition
@@ -207,7 +215,7 @@ interface PreviewPanelProps {
   seenAt?: string
 }
 
-export function PreviewPanel({ preview, loading, scrollOffset, position, changes, seenAt }: PreviewPanelProps) {
+export function PreviewPanel({ preview, pr, hasPendingAction, loading, scrollOffset, position, changes, seenAt }: PreviewPanelProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
   const isBottom = position === "bottom"
@@ -277,6 +285,8 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
 
   // Show preview content
   const statusInfo = getStatusInfo(preview.state, preview.isDraft)
+  // Same columns, same glyphs, same data as the list row — with the meaning spelled out
+  const statusRows = pr ? buildStatusRows(pr, hasPendingAction) : []
 
   return (
     <box {...containerProps}>
@@ -292,8 +302,28 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
             <text fg={theme.border}>{"─".repeat(Math.min(70, contentWidth))}</text>
           </box>
 
+          {/* Status block: the list's S C R B M columns, explained */}
+          {statusRows.length > 0 ? (
+            statusRows.map((row) => (
+              <box key={row.letter} height={1}>
+                <text>
+                  <span fg={theme.textDim}>{row.letter} </span>
+                  <span fg={row.color}>{row.icon}</span>
+                  <span fg={theme.text}>  {truncate(row.text, contentWidth - 5)}</span>
+                </text>
+              </box>
+            ))
+          ) : (
+            // No list row to mirror (should not happen while a preview is open)
+            <MetadataRow label="Status" value={statusInfo.label} valueColor={statusInfo.color} />
+          )}
+
+          {/* Separator */}
+          <box height={1}>
+            <text fg={theme.border}>{"─".repeat(Math.min(70, contentWidth))}</text>
+          </box>
+
           {/* Metadata rows (like riff) */}
-          <MetadataRow label="Status" value={statusInfo.label} valueColor={statusInfo.color} />
           <MetadataRow label="Author" value={`@${preview.author.login}`} valueColor={theme.primary} />
           <MetadataRow 
             label="Branch" 
@@ -309,13 +339,15 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
               <span fg={theme.textDim}> ({preview.files.length} files)</span>
             </text>
           </box>
-
-          {/* CI/Merge status */}
           <box height={1}>
             <text>
-              <span fg={theme.textDim}>{"Checks".padEnd(12)}</span>
-              <ChecksIndicator checks={preview.checks} />
-              <MergeableIndicator state={preview.mergeable} />
+              <span fg={theme.textDim}>{"Comments".padEnd(12)}</span>
+              <span fg={preview.commentCount > 0 ? theme.text : theme.textMuted}>{String(preview.commentCount)}</span>
+              {pr && pr.unresolvedThreads > 0 && (
+                <span fg={theme.warning}>
+                  {` · ${pr.unresolvedThreads} unresolved thread${pr.unresolvedThreads === 1 ? "" : "s"}`}
+                </span>
+              )}
             </text>
           </box>
 
@@ -417,42 +449,6 @@ export function PreviewPanel({ preview, loading, scrollOffset, position, changes
       </box>
     </box>
   )
-}
-
-function ChecksIndicator({ checks }: { checks: PreviewCheckStatus }) {
-  const icon =
-    checks.overall === "success" ? "✓" :
-    checks.overall === "failure" ? "✗" :
-    checks.overall === "pending" ? "○" :
-    "─"
-
-  const color =
-    checks.overall === "success" ? theme.success :
-    checks.overall === "failure" ? theme.error :
-    checks.overall === "pending" ? theme.warning :
-    theme.textDim
-
-  const failedCount = checks.checks.filter((c) => c.status === "failure").length
-
-  return (
-    <span>
-      <span fg={color}>{icon}</span>
-      <span fg={theme.textDim}> Checks</span>
-      {failedCount > 0 && (
-        <span fg={theme.error}> ({failedCount} failed)</span>
-      )}
-    </span>
-  )
-}
-
-function MergeableIndicator({ state }: { state: string }) {
-  if (state === "CONFLICTING") {
-    return <span fg={theme.error}>  Conflicts</span>
-  }
-  if (state === "MERGEABLE") {
-    return <span fg={theme.success}>  Mergeable</span>
-  }
-  return null
 }
 
 function FilesList({ files, maxWidth }: { files: ChangedFile[]; maxWidth: number }) {

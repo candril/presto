@@ -6,6 +6,8 @@ export {
   formatCategory,
   getRepoMergeSettings,
   getPRMergeState,
+  isMergeableState,
+  mergeableStateToStatus,
   executeMerge,
   type MergeMethod,
   type RepoMergeSettings,

@@ -14,6 +14,8 @@ import {
   formatCategory,
   getRepoMergeSettings,
   getPRMergeState,
+  isMergeableState,
+  mergeableStateToStatus,
   executeMerge,
   type Command,
   type CommandContext,
@@ -56,7 +58,7 @@ interface MergeDialogState {
   mode: "merge" | "auto"
   options: MergeOption[]
   selectedMethod: MergeMethod | null // null = no selection yet
-  mergeable: boolean
+  mergeable: boolean | null
   mergeableState: string
   baseRef: string
   /** Set when the repo has auto-merge switched off, blocking an "auto" dialog */
@@ -210,7 +212,21 @@ export function CommandPalette({
         }
         
         setLoadingMergeOptions(false)
-        
+
+        // The dialog just fetched fresher merge state than the list refresh that drew
+        // the row — push it into the row so the two never contradict on screen.
+        const freshStatus = mergeableStateToStatus(mergeState.mergeableState)
+        if (freshStatus && freshStatus !== pr.mergeStateStatus) {
+          context.dispatch({
+            type: "UPDATE_PR",
+            url: pr.url,
+            updates:
+              freshStatus === "BEHIND"
+                ? { mergeStateStatus: freshStatus, baseSync: "behind", baseUpdateRequired: true }
+                : { mergeStateStatus: freshStatus },
+          })
+        }
+
         // Show dialog even if not mergeable (to show the reason)
         setMergeDialog({
           mode,
@@ -1826,12 +1842,12 @@ function renderInputRows(
  * applies to an immediate merge would defeat the purpose.
  */
 function canSubmitMergeDialog(dialog: MergeDialogState): boolean {
-  return dialog.mode === "auto" ? dialog.blockedReason === null : dialog.mergeable
+  return dialog.mode === "auto" ? dialog.blockedReason === null : isMergeableState(dialog.mergeableState)
 }
 
 function mergeDialogBlockedReason(dialog: MergeDialogState): string | null {
   if (dialog.mode === "auto") return dialog.blockedReason
-  return dialog.mergeable ? null : getMergeBlockedReason(dialog.mergeableState)
+  return isMergeableState(dialog.mergeableState) ? null : getMergeBlockedReason(dialog.mergeableState)
 }
 
 function getMergeBlockedReason(state: string): string {
@@ -1841,11 +1857,11 @@ function getMergeBlockedReason(state: string): string {
     case "blocked":
       return "Merge blocked by branch protection rules"
     case "behind":
-      return "Branch is behind base branch"
-    case "unstable":
-      return "Required status checks have not passed"
+      return "Behind base branch — run \"Update branch from base\" first"
     case "draft":
       return "PR is still a draft"
+    case "unknown":
+      return "GitHub is still computing whether this can merge — close and retry in a moment"
     default:
       return "PR cannot be merged"
   }

@@ -30,25 +30,62 @@ const PR_FIELDS = [
   "headRefName",
   "mergeStateStatus",
   "autoMergeRequest",
+  "baseRefName",
 ].join(",")
 
 /** Raw PR from GitHub API (comments and reviews are arrays) */
-interface RawPR extends Omit<PR, "commentCount" | "autoMergeMethod"> {
-  comments: unknown[]
-  reviews: unknown[]
+interface RawPR extends Omit<PR, "commentCount" | "autoMergeMethod" | "baseSync" | "baseUpdateRequired" | "headCommittedAt" | "checksQueued" | "unresolvedThreads" | "approvedBy"> {
+  comments: Array<{ author?: { login?: string } }>
+  reviews: Array<{ author?: { login?: string }; state?: string }>
   autoMergeRequest: { mergeMethod?: string } | null
+}
+
+/**
+ * Humans whose latest opinionated (approve / request-changes) review is an approval —
+ * the REST equivalent of GraphQL's latestOpinionatedReviews. Reviews arrive oldest
+ * first, so the last opinionated state per author wins.
+ */
+function computeApprovedBy(reviews: Array<{ author?: { login?: string }; state?: string }> | undefined): string[] {
+  const latest = new Map<string, string>()
+  for (const review of reviews ?? []) {
+    const login = review?.author?.login
+    const state = review?.state
+    if (!login || isBot(login)) continue
+    if (state === "APPROVED" || state === "CHANGES_REQUESTED" || state === "DISMISSED") {
+      latest.set(login, state)
+    }
+  }
+  return [...latest.entries()].filter(([, state]) => state === "APPROVED").map(([login]) => login)
+}
+
+/** Count only human comments — the GraphQL path does the same, and the counts must agree */
+function countHuman(entries: Array<{ author?: { login?: string } }> | undefined): number {
+  return (entries ?? []).filter((entry) => !isBot(entry?.author?.login ?? "")).length
 }
 
 /** Transform raw GitHub PR to our PR type */
 function transformPR(raw: RawPR): PR {
   const { comments, reviews, autoMergeRequest, mergeStateStatus, ...rest } = raw
   // Count both PR-level comments and review comments
-  const commentCount = (comments?.length ?? 0) + (reviews?.length ?? 0)
+  const commentCount = countHuman(comments) + countHuman(reviews)
   return {
     ...rest,
     commentCount,
     mergeStateStatus: mergeStateStatus ?? null,
     autoMergeMethod: toMergeMethod(autoMergeRequest?.mergeMethod),
+    baseRefName: raw.baseRefName ?? null,
+    // `gh pr list --json` exposes no viewerCanUpdateBranch, so anything short of an
+    // explicit BEHIND is genuinely unknown here. The next GraphQL refresh resolves it.
+    baseSync: mergeStateStatus === "BEHIND" ? "behind" : "unknown",
+    // Not worth pulling the whole commit list from `gh pr list` for one timestamp; without
+    // it a stalled-check PR simply stays "machine" until the next GraphQL refresh.
+    headCommittedAt: null,
+    // `gh pr list --json` exposes no check suites either
+    checksQueued: false,
+    // nor review threads, so the comment-blocks-the-PR rule does not apply on this path
+    unresolvedThreads: 0,
+    approvedBy: computeApprovedBy(reviews),
+    baseUpdateRequired: mergeStateStatus === "BEHIND",
   }
 }
 
@@ -446,7 +483,7 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
     baseRef: result.baseRefName ?? "",
     headRef: result.headRefName ?? "",
     mergeable: result.mergeable ?? "UNKNOWN",
-    commentCount: result.comments?.length ?? 0,
+    commentCount: countHuman(result.comments),
     reviewCommentCount: 0, // Not available via gh CLI
     recentComments: parseRecentComments(result.comments ?? [], result.reviews ?? []),
   }

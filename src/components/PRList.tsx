@@ -1,7 +1,10 @@
 /**
  * PR List component - displays pull requests in a table-like layout
  * 
- * Column order: State | Checks | Review | Base | Time | Title (flex) | Author | Repo
+ * Column order: State | Checks | Review | Base | Merge | Time | Title (flex) | Author | Repo
+ *
+ * The four status columns collapse to State + Merge when the list is too narrow to
+ * afford them — the merge verdict is the summary, the rest is the detail (spec 036).
  * Title column format: #1234 PR title here...
  */
 
@@ -9,8 +12,9 @@ import { useRef, useEffect } from "react"
 import { useTerminalDimensions } from "@opentui/react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { theme, getMarkColor } from "../theme"
-import type { PR, CheckState, ReviewDecision, ColumnVisibility } from "../types"
-import { getRepoName, getShortRepoName, computeCheckState, needsBaseUpdate, hasBaseConflicts } from "../types"
+import type { PR, ColumnVisibility, PendingAction } from "../types"
+import { getRepoName, getShortRepoName, getPRCheckState, computeMergeVerdict } from "../types"
+import { getStateIndicator, getCheckIndicator, getReviewIndicator, getSyncIndicator, getMergeIndicator } from "../status"
 import { formatRelativeTime } from "../utils/time"
 import { truncate } from "../utils/string"
 import { getPRKey, isPRMarked, getPRMark, type History } from "../history"
@@ -22,6 +26,7 @@ const COL = {
   checks: 2,     // icon + space
   review: 1,     // icon (no trailing space)
   sync: 1,       // icon (no trailing space)
+  merge: 1,      // icon (no trailing space)
   comments: 3,   // comment count (e.g. "12" or "99+")
   time: 4,       // "1d" or "2mo" (without "ago")
   repo: 16,      // Short repo name
@@ -29,44 +34,38 @@ const COL = {
   // title: remaining space (includes PR number prefix)
 }
 
+/**
+ * Which status columns are actually drawn. "compact" keeps only the state icon and the
+ * merge verdict; the gates that explain the verdict are dropped.
+ */
+export type GateMode = "full" | "compact"
+
+/** Below this the title stops being readable, so the gate detail goes instead */
+const MIN_TITLE_WIDTH = 32
+
+/**
+ * Column visibility is a mask, never an override: collapsing hides gate columns but
+ * cannot bring back one the user turned off.
+ */
+function isGateVisible(v: ColumnVisibility, mode: GateMode, column: "checks" | "review" | "sync"): boolean {
+  return v[column] && mode === "full"
+}
+
 /** Calculate total fixed width (everything except title) */
-function getFixedColumnsWidth(v: ColumnVisibility): number {
+function getFixedColumnsWidth(v: ColumnVisibility, mode: GateMode): number {
   let width = 2 // padding left + right
   width += 2 // mark letters column (2 chars)
   width += 2 // change indicator dot + space
   if (v.state) width += COL.state // icon + space
-  if (v.checks) width += COL.checks // icon + space
-  if (v.review) width += COL.review + 1 // icon + space
-  if (v.sync) width += COL.sync + 1 // icon + space
+  if (isGateVisible(v, mode, "checks")) width += COL.checks // icon + space
+  if (isGateVisible(v, mode, "review")) width += COL.review + 1 // icon + space
+  if (isGateVisible(v, mode, "sync")) width += COL.sync + 1 // icon + space
+  if (v.merge) width += COL.merge + 1 // icon + space
   if (v.comments) width += COL.comments + 1 // comments + space
   if (v.time) width += COL.time + 1 // time + space
   if (v.author) width += COL.author + 1 // space + author
   if (v.repo) width += COL.repo + 1 // space + repo
   return width
-}
-
-/** Unicode icons */
-const ICONS = {
-  // PR state icons
-  prOpen: "○",      // open circle
-  prDraft: "◌",     // dotted circle
-  prMerged: "●",    // filled circle
-  prClosed: "✗",    // x mark
-  // CI check icons
-  checkSuccess: "✓", // check mark
-  checkFailure: "✗", // x mark
-  checkPending: "*", // asterisk for pending
-  checkNone: "-",    // dash
-  // Review icons
-  reviewApproved: "✓", // check mark
-  reviewChanges: "!",  // exclamation
-  reviewRequired: "?", // question mark
-  reviewNone: "-",     // dash
-  // Base branch sync icons
-  syncConflict: "✗",   // conflicts with base
-  syncBehind: "↓",     // base has moved on, needs updating
-  syncAutoMerge: "⇢",  // auto-merge armed, will merge itself when ready
-  syncNone: "-",       // dash
 }
 
 interface PRListProps {
@@ -75,6 +74,10 @@ interface PRListProps {
   columnVisibility: ColumnVisibility
   previewPosition: "right" | "bottom" | null
   history: History
+  /** In-flight actions keyed by PR key (spec 036) */
+  pendingActions: Record<string, PendingAction>
+  /** User's expand/collapse preference for the gate columns (spec 037) */
+  gateDetail: boolean
   /** Custom message when list is empty */
   emptyMessage?: string
   /** Secondary hint when list is empty */
@@ -84,7 +87,7 @@ interface PRListProps {
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, emptyMessage, emptyHint }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, pendingActions, gateDetail, emptyMessage, emptyHint }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
 
@@ -118,12 +121,16 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
 
   // Calculate available title width (account for preview panel taking 50% when on right)
   const listWidth = previewPosition === "right" ? Math.floor(terminalWidth / 2) : terminalWidth
-  const fixedWidth = getFixedColumnsWidth(columnVisibility)
+  // The toggle is the preference; width only overrides it when expanding would leave the
+  // title unreadable, so `c` never silently produces a useless list.
+  const fitsFullGates = listWidth - getFixedColumnsWidth(columnVisibility, "full") >= MIN_TITLE_WIDTH
+  const gateMode: GateMode = gateDetail && fitsFullGates ? "full" : "compact"
+  const fixedWidth = getFixedColumnsWidth(columnVisibility, gateMode)
   const titleWidth = Math.max(10, listWidth - fixedWidth)
 
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
-      <PRHeaderRow columnVisibility={columnVisibility} titleWidth={titleWidth} />
+      <PRHeaderRow columnVisibility={columnVisibility} gateMode={gateMode} titleWidth={titleWidth} />
       <scrollbox ref={scrollRef} flexGrow={1}>
         {prs.map((pr, index) => (
           <PRRow
@@ -131,8 +138,10 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
             pr={pr}
             selected={index === selectedIndex}
             columnVisibility={columnVisibility}
+            gateMode={gateMode}
             titleWidth={titleWidth}
             history={history}
+            pendingActions={pendingActions}
           />
         ))}
       </scrollbox>
@@ -141,7 +150,7 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
 }
 
 /** Header row with column labels */
-function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: ColumnVisibility; titleWidth: number }) {
+function PRHeaderRow({ columnVisibility, gateMode, titleWidth }: { columnVisibility: ColumnVisibility; gateMode: GateMode; titleWidth: number }) {
   const v = columnVisibility
   
   return (
@@ -155,9 +164,10 @@ function PRHeaderRow({ columnVisibility, titleWidth }: { columnVisibility: Colum
         {"  "}{/* space for mark letters column (2 chars) */}
         {"  "}{/* space for dot column (2 chars: dot + space) */}
         {v.state && "S "}
-        {v.checks && "C "}
-        {v.review && "R "}
-        {v.sync && "B "}
+        {isGateVisible(v, gateMode, "checks") && "C "}
+        {isGateVisible(v, gateMode, "review") && "R "}
+        {isGateVisible(v, gateMode, "sync") && "B "}
+        {v.merge && "M "}
         {v.comments && padRight("#", COL.comments)}
         {v.comments && " "}
         {v.time && padRight("", COL.time)}
@@ -176,15 +186,17 @@ interface PRRowProps {
   pr: PR
   selected: boolean
   columnVisibility: ColumnVisibility
+  gateMode: GateMode
   titleWidth: number
   history: History
+  pendingActions: Record<string, PendingAction>
 }
 
-function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, pendingActions }: PRRowProps) {
   const v = columnVisibility
   const stateIndicator = getStateIndicator(pr)
-  const checkIndicator = getCheckIndicator(computeCheckState(pr.statusCheckRollup))
-  const reviewIndicator = getReviewIndicator(pr.reviewDecision)
+  const checkIndicator = getCheckIndicator(getPRCheckState(pr))
+  const reviewIndicator = getReviewIndicator(pr)
   const syncIndicator = getSyncIndicator(pr)
   const commentCount = formatCommentCount(pr.commentCount)
   const timeAgo = formatRelativeTime(pr.updatedAt).replace(" ago", "")
@@ -197,6 +209,7 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
   const isMarked = isPRMarked(history, prKey)
   const markLetter = getPRMark(history, prKey)
   const hasChanges = prHasChanges(history, prKey)
+  const mergeIndicator = getMergeIndicator(computeMergeVerdict(pr, prKey in pendingActions))
   
   // Title color: marked PRs get gold, everything else gets base text color.
   // The unread dot and mark letters handle visual differentiation (spec 029).
@@ -226,12 +239,14 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
         <span fg={hasChanges ? theme.primary : undefined}>{hasChanges ? "• " : "  "}</span>
         {v.state && <span fg={stateIndicator.color}>{stateIndicator.icon}</span>}
         {v.state && " "}
-        {v.checks && <span fg={checkIndicator.color}>{checkIndicator.icon}</span>}
-        {v.checks && " "}
-        {v.review && <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>}
-        {v.review && " "}
-        {v.sync && <span fg={syncIndicator.color}>{syncIndicator.icon}</span>}
-        {v.sync && " "}
+        {isGateVisible(v, gateMode, "checks") && <span fg={checkIndicator.color}>{checkIndicator.icon}</span>}
+        {isGateVisible(v, gateMode, "checks") && " "}
+        {isGateVisible(v, gateMode, "review") && <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>}
+        {isGateVisible(v, gateMode, "review") && " "}
+        {isGateVisible(v, gateMode, "sync") && <span fg={syncIndicator.color}>{syncIndicator.icon}</span>}
+        {isGateVisible(v, gateMode, "sync") && " "}
+        {v.merge && <span fg={mergeIndicator.color}>{mergeIndicator.icon}</span>}
+        {v.merge && " "}
         {v.comments && <span fg={pr.commentCount > 0 ? theme.textMuted : theme.textMuted}>{padRight(commentCount, COL.comments)}</span>}
         {v.comments && " "}
         {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
@@ -246,70 +261,6 @@ function PRRow({ pr, selected, columnVisibility, titleWidth, history }: PRRowPro
       </text>
     </box>
   )
-}
-
-/** Get state indicator for PR (Open/Draft/Merged/Closed) */
-function getStateIndicator(pr: PR): { icon: string; color: string } {
-  switch (pr.state) {
-    case "MERGED":
-      return { icon: ICONS.prMerged, color: theme.prMerged }
-    case "CLOSED":
-      return { icon: ICONS.prClosed, color: theme.prClosed }
-    case "OPEN":
-    default:
-      if (pr.isDraft) {
-        return { icon: ICONS.prDraft, color: theme.prDraft }
-      }
-      return { icon: ICONS.prOpen, color: theme.prOpen }
-  }
-}
-
-/** Get CI check status indicator */
-function getCheckIndicator(state: CheckState): { icon: string; color: string } {
-  switch (state) {
-    case "SUCCESS":
-      return { icon: ICONS.checkSuccess, color: theme.success }
-    case "FAILURE":
-      return { icon: ICONS.checkFailure, color: theme.error }
-    case "PENDING":
-      return { icon: ICONS.checkPending, color: theme.warning }
-    case "NONE":
-    default:
-      return { icon: ICONS.checkNone, color: theme.textMuted }
-  }
-}
-
-/** Get review status indicator */
-function getReviewIndicator(decision?: ReviewDecision | null): { icon: string; color: string } {
-  switch (decision) {
-    case "APPROVED":
-      return { icon: ICONS.reviewApproved, color: theme.success }
-    case "CHANGES_REQUESTED":
-      return { icon: ICONS.reviewChanges, color: theme.error }
-    case "REVIEW_REQUIRED":
-      return { icon: ICONS.reviewRequired, color: theme.warning }
-    default:
-      return { icon: ICONS.reviewNone, color: theme.textMuted }
-  }
-}
-
-/**
- * Get base-branch sync indicator.
- *
- * A PR can be several of these at once — the most actionable one wins, so a PR
- * that is both behind and auto-merging still shows the arrow the user can act on.
- */
-function getSyncIndicator(pr: PR): { icon: string; color: string } {
-  if (hasBaseConflicts(pr)) {
-    return { icon: ICONS.syncConflict, color: theme.error }
-  }
-  if (needsBaseUpdate(pr)) {
-    return { icon: ICONS.syncBehind, color: theme.warning }
-  }
-  if (pr.autoMergeMethod) {
-    return { icon: ICONS.syncAutoMerge, color: theme.secondary }
-  }
-  return { icon: ICONS.syncNone, color: theme.textMuted }
 }
 
 /** Pad string to the right (left-align) */

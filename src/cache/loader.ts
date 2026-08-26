@@ -6,6 +6,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { getConfigDir } from "../config"
 import type { PR, ColumnVisibility } from "../types"
+import { normalizePR } from "../types"
 import { defaultCache, defaultColumnVisibility, CACHE_STALE_MINUTES, type PRCache } from "./schema"
 
 /** Cache file path */
@@ -19,7 +20,10 @@ export function loadCache(): PRCache {
 
   try {
     const content = readFileSync(CACHE_FILE, "utf-8")
-    return { ...defaultCache, ...JSON.parse(content) }
+    const cache = { ...defaultCache, ...JSON.parse(content) } as PRCache
+    // Cached PRs may predate fields added to the PR interface since they were written
+    cache.prs = (cache.prs ?? []).map(normalizePR)
+    return cache
   } catch {
     return { ...defaultCache }
   }
@@ -60,6 +64,18 @@ export function saveColumnVisibility(columnVisibility: ColumnVisibility): void {
   const cache = loadCache()
   cache.columnVisibility = columnVisibility
   writeCache(cache)
+}
+
+/** Save the gate detail expand/collapse preference */
+export function saveGateDetail(gateDetail: boolean): void {
+  const cache = loadCache()
+  cache.gateDetail = gateDetail
+  writeCache(cache)
+}
+
+/** Get the gate detail preference — collapsed to the merge verdict alone by default */
+export function getGateDetail(): boolean {
+  return loadCache().gateDetail ?? false
 }
 
 /** Get column visibility from cache (with defaults) */

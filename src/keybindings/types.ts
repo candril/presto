@@ -21,6 +21,7 @@ export type KeyAction =
   | "action.copyUrl"
   | "action.copyBranch"
   | "action.diff"
+  | "action.checks"
   | "action.star"
   | "action.mark"
   | "action.toggleSeen"
@@ -54,6 +55,7 @@ export type KeyAction =
   | "ui.quit"
   | "ui.preview"
   | "ui.previewCycle"
+  | "ui.gateDetail"
   | "ui.commandPalette"
   | "ui.console"
 
