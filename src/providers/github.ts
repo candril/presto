@@ -34,7 +34,7 @@ const PR_FIELDS = [
 ].join(",")
 
 /** Raw PR from GitHub API (comments and reviews are arrays) */
-interface RawPR extends Omit<PR, "commentCount" | "autoMergeMethod" | "baseSync" | "baseUpdateRequired" | "headCommittedAt" | "checksQueued" | "unresolvedThreads" | "approvedBy"> {
+interface RawPR extends Omit<PR, "commentCount" | "openCommentCount" | "autoMergeMethod" | "baseSync" | "baseUpdateRequired" | "headCommittedAt" | "checksQueued" | "unresolvedThreads" | "approvedBy"> {
   comments: Array<{ author?: { login?: string } }>
   reviews: Array<{ author?: { login?: string }; state?: string }>
   autoMergeRequest: { mergeMethod?: string } | null
@@ -71,6 +71,9 @@ function transformPR(raw: RawPR): PR {
   return {
     ...rest,
     commentCount,
+    // Open comments live in unresolved review threads, and `gh pr list --json` exposes no
+    // threads at all — the same blind spot as unresolvedThreads below
+    openCommentCount: 0,
     mergeStateStatus: mergeStateStatus ?? null,
     autoMergeMethod: toMergeMethod(autoMergeRequest?.mergeMethod),
     baseRefName: raw.baseRefName ?? null,

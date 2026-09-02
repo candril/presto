@@ -49,10 +49,10 @@ const PR_FRAGMENT = `
   isCrossRepository
   viewerCanUpdateBranch
   autoMergeRequest { mergeMethod }
-  reviewThreads(first: 20) {
+  reviewThreads(first: 50) {
     nodes {
       isResolved
-      comments(first: 1) { nodes { author { login __typename } } }
+      comments(first: 1) { totalCount nodes { author { login __typename } } }
     }
   }
   comments(first: 100) {
@@ -74,6 +74,45 @@ const PR_FRAGMENT = `
     }
   }
 `
+
+/** Comment tallies derived from one PR's conversation, reviews and review threads */
+export interface CommentCounts {
+  /** Every human comment: PR-level, review bodies, and review-thread comments */
+  total: number
+  /**
+   * Comments still waiting on someone: those inside an unresolved review thread. A
+   * conversation comment or a review body cannot be resolved and needs no answer once
+   * read, so counting those as open would just reproduce the total.
+   */
+  open: number
+  unresolvedThreads: number
+}
+
+/**
+ * Copilot's auto-review opens threads like a person would — 22% of open threads in these
+ * repos — but a bot suggestion is not the team blocking the PR, and presto already
+ * discounts bots elsewhere (spec 024). GraphQL's __typename settles it where the name
+ * patterns cannot: "copilot-pull-request-reviewer" looks human to isBot().
+ */
+export function countComments(raw: any): CommentCounts {
+  const humanAuthored = (entry: any) => !isBot(entry?.author?.login ?? "")
+  const humanThreads = (raw?.reviewThreads?.nodes ?? []).filter((thread: any) => {
+    const author = thread?.comments?.nodes?.[0]?.author
+    return author?.__typename !== "Bot" && !isBot(author?.login ?? "")
+  })
+  const threadComments = (threads: any[]) =>
+    threads.reduce((sum: number, thread: any) => sum + (thread?.comments?.totalCount ?? 0), 0)
+  const unresolved = humanThreads.filter((thread: any) => thread?.isResolved === false)
+
+  return {
+    total:
+      (raw?.comments?.nodes ?? []).filter(humanAuthored).length +
+      (raw?.reviews?.nodes ?? []).filter(humanAuthored).length +
+      threadComments(humanThreads),
+    open: threadComments(unresolved),
+    unresolvedThreads: unresolved.length,
+  }
+}
 
 /**
  * Transform GraphQL PR response to our PR type
@@ -113,13 +152,7 @@ function transformGraphQLPR(raw: any): PR {
     }]
   }
 
-  // Count non-bot comments
-  const prComments = raw.comments?.nodes ?? []
-  const reviewComments = raw.reviews?.nodes ?? []
-  
-  const humanCommentCount = 
-    prComments.filter((c: any) => !isBot(c?.author?.login ?? "")).length +
-    reviewComments.filter((r: any) => !isBot(r?.author?.login ?? "")).length
+  const counts = countComments(raw)
 
   return {
     number: raw.number,
@@ -132,23 +165,16 @@ function transformGraphQLPR(raw: any): PR {
     author: { login: raw.author?.login ?? "unknown", name: raw.author?.name ?? null },
     reviewDecision: raw.reviewDecision,
     statusCheckRollup,
-    commentCount: humanCommentCount,
+    commentCount: counts.total,
+    openCommentCount: counts.open,
     headRefOid: raw.headRefOid ?? null,
     headCommittedAt: raw.commits?.nodes?.[0]?.commit?.committedDate ?? null,
-    // Only meaningful when nothing has started: these repos keep suites (renovate,
-    // terraform) parked in QUEUED indefinitely, so a queued suite alone proves nothing.
-    // Copilot's auto-review opens threads like a person would — 22% of open threads in
-    // these repos — but a bot suggestion is not the team blocking the PR, and presto
-    // already discounts bots elsewhere (spec 024). GraphQL's __typename settles it where
-    // the name patterns cannot: "copilot-pull-request-reviewer" looks human to isBot().
     approvedBy: (raw.latestOpinionatedReviews?.nodes ?? [])
       .filter((review: any) => review?.state === "APPROVED" && !isBot(review?.author?.login ?? ""))
       .map((review: any) => review.author.login),
-    unresolvedThreads: (raw.reviewThreads?.nodes ?? []).filter((thread: any) => {
-      if (thread?.isResolved !== false) return false
-      const author = thread.comments?.nodes?.[0]?.author
-      return author?.__typename !== "Bot" && !isBot(author?.login ?? "")
-    }).length,
+    unresolvedThreads: counts.unresolvedThreads,
+    // Only meaningful when nothing has started: these repos keep suites (renovate,
+    // terraform) parked in QUEUED indefinitely, so a queued suite alone proves nothing.
     checksQueued:
       !statusRollup?.state &&
       (raw.commits?.nodes?.[0]?.commit?.checkSuites?.nodes ?? []).some(

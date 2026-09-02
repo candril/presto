@@ -287,6 +287,11 @@ export function PreviewPanel({ preview, pr, hasPendingAction, loading, scrollOff
   const statusInfo = getStatusInfo(preview.state, preview.isDraft)
   // Same columns, same glyphs, same data as the list row — with the meaning spelled out
   const statusRows = pr ? buildStatusRows(pr, hasPendingAction) : []
+  // Counts come from the list row, the only side that sees review threads; `gh pr view`
+  // reports the conversation alone, so it can stand in for the total only.
+  const totalComments = pr ? pr.commentCount : preview.commentCount
+  const openComments = pr ? pr.openCommentCount : 0
+  const settledComments = totalComments - openComments
 
   return (
     <box {...containerProps}>
@@ -342,7 +347,8 @@ export function PreviewPanel({ preview, pr, hasPendingAction, loading, scrollOff
           <box height={1}>
             <text>
               <span fg={theme.textDim}>{"Comments".padEnd(12)}</span>
-              <span fg={preview.commentCount > 0 ? theme.text : theme.textMuted}>{String(preview.commentCount)}</span>
+              <span fg={totalComments > 0 ? theme.text : theme.textMuted}>{String(settledComments)}</span>
+              <span fg={theme.textMuted}>{`/${totalComments}`}</span>
               {pr && pr.unresolvedThreads > 0 && (
                 <span fg={theme.warning}>
                   {` · ${pr.unresolvedThreads} unresolved thread${pr.unresolvedThreads === 1 ? "" : "s"}`}

@@ -27,7 +27,7 @@ const COL = {
   review: 1,     // icon (no trailing space)
   sync: 1,       // icon (no trailing space)
   merge: 1,      // icon (no trailing space)
-  comments: 3,   // comment count (e.g. "12" or "99+")
+  comments: 3,   // open comment count (e.g. "12" or "99+")
   time: 4,       // "1d" or "2mo" (without "ago")
   repo: 16,      // Short repo name
   author: 16,    // @username
@@ -198,7 +198,7 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
   const checkIndicator = getCheckIndicator(getPRCheckState(pr))
   const reviewIndicator = getReviewIndicator(pr)
   const syncIndicator = getSyncIndicator(pr)
-  const commentCount = formatCommentCount(pr.commentCount)
+  const commentCount = formatCommentCount(pr.openCommentCount)
   const timeAgo = formatRelativeTime(pr.updatedAt).replace(" ago", "")
   const repoName = getShortRepoName(pr)
   const prId = `#${pr.number}`
@@ -247,7 +247,7 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
         {isGateVisible(v, gateMode, "sync") && " "}
         {v.merge && <span fg={mergeIndicator.color}>{mergeIndicator.icon}</span>}
         {v.merge && " "}
-        {v.comments && <span fg={pr.commentCount > 0 ? theme.textMuted : theme.textMuted}>{padRight(commentCount, COL.comments)}</span>}
+        {v.comments && <span fg={theme.textMuted}>{padRight(commentCount, COL.comments)}</span>}
         {v.comments && " "}
         {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
         {v.time && " "}
@@ -269,7 +269,7 @@ function padRight(text: string, width: number): string {
   return text + " ".repeat(width - text.length)
 }
 
-/** Format comment count for display */
+/** Format the open comment count for display — resolved threads are already excluded */
 function formatCommentCount(count: number): string {
   if (count === 0) return "-"
   if (count > 99) return "99+"

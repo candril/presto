@@ -18,6 +18,7 @@ const basePR: PR = {
   reviewDecision: null,
   statusCheckRollup: [],
   commentCount: 1,
+  openCommentCount: 0,
   headRefOid: "sha",
   headRefName: "b",
   mergeStateStatus: "BLOCKED",

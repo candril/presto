@@ -20,6 +20,7 @@ const basePR: PR = {
   reviewDecision: null,
   statusCheckRollup: [],
   commentCount: 0,
+  openCommentCount: 0,
   headRefOid: "sha",
   headRefName: "b",
   mergeStateStatus: null,

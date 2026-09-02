@@ -41,8 +41,14 @@ export interface PR {
   updatedAt: string
   reviewDecision: ReviewDecision | null
   statusCheckRollup: StatusCheckRollup | null
-  /** Number of comments on the PR */
+  /** Total human comments: PR-level, review bodies, and review-thread comments */
   commentCount: number
+  /**
+   * Comments inside unresolved review threads — what is still waiting on someone. The
+   * rest of `commentCount` is conversation and review bodies, which GitHub gives no way
+   * to resolve, so counting those as open would just restate the total.
+   */
+  openCommentCount: number
   /** HEAD commit SHA (for detecting new pushes) */
   headRefOid: string | null
   /** When the head commit landed — used to tell a slow CI start from one that never came */
@@ -121,6 +127,7 @@ export function normalizePR(raw: Partial<PR> & Pick<PR, "number" | "title" | "ur
     reviewDecision: null,
     statusCheckRollup: null,
     commentCount: 0,
+    openCommentCount: 0,
     headRefOid: null,
     headRefName: null,
     mergeStateStatus: null,
