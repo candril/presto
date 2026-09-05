@@ -6,30 +6,38 @@ import { $ } from "bun"
 import type { PR } from "../types"
 import { getRepoName } from "../types"
 
+export interface ToolResult {
+  success: boolean
+  /** Empty when the tool took over the terminal and nothing needs saying afterwards */
+  message: string
+}
+
 /** Cached diff command (resolved once from "auto") */
 let resolvedDiffCommand: string | null = null
 
 /**
  * Open PR in default browser using gh CLI
  */
-export async function openInBrowser(pr: PR): Promise<void> {
+export async function openInBrowser(pr: PR): Promise<ToolResult> {
   const repo = getRepoName(pr)
   await $`gh pr view ${pr.number} -R ${repo} --web`.quiet()
+  return { success: true, message: "Opened in browser" }
 }
 
 /**
  * Open a repository's GitHub page in the browser
  */
-export async function openRepoInBrowser(pr: PR): Promise<void> {
+export async function openRepoInBrowser(pr: PR): Promise<ToolResult> {
   const repo = getRepoName(pr)
   await $`gh repo view ${repo} --web`.quiet()
+  return { success: true, message: "Opened repository in browser" }
 }
 
 /**
  * Open PR in riff for code review
  * Spawns riff with full terminal inheritance
  */
-export async function openInRiff(pr: PR): Promise<void> {
+export async function openInRiff(pr: PR): Promise<ToolResult> {
   const repo = getRepoName(pr)
   const target = `gh:${repo}#${pr.number}`
 
@@ -41,6 +49,7 @@ export async function openInRiff(pr: PR): Promise<void> {
   })
 
   await proc.exited
+  return { success: true, message: "" }
 }
 
 /**
@@ -48,10 +57,10 @@ export async function openInRiff(pr: PR): Promise<void> {
  * Tmux switches focus to the new window so the user lands in riff;
  * presto continues running in the background window.
  *
- * Returns false if not running inside tmux ($TMUX unset).
+ * Fails if not running inside tmux ($TMUX unset).
  */
-export async function openInRiffTmuxWindow(pr: PR): Promise<boolean> {
-  if (!process.env.TMUX) return false
+export async function openInRiffTmuxWindow(pr: PR): Promise<ToolResult> {
+  if (!process.env.TMUX) return { success: false, message: "Not running inside tmux" }
 
   const repo = getRepoName(pr)
   const target = `gh:${repo}#${pr.number}`
@@ -61,7 +70,7 @@ export async function openInRiffTmuxWindow(pr: PR): Promise<boolean> {
   const windowName = `${shortRepo}#${pr.number} ${pr.title}`
 
   await $`tmux new-window -n ${windowName} riff ${target}`.quiet()
-  return true
+  return { success: true, message: `Opened #${pr.number} in tmux window` }
 }
 
 /**
@@ -138,7 +147,7 @@ async function resolveDiffCommand(configured: string): Promise<string> {
  * Pipes `gh pr diff` through the configured diff tool (delta, bat, less, etc.).
  * The caller is responsible for suspending/resuming the TUI.
  */
-export async function openDiff(pr: PR, diffCommand: string): Promise<void> {
+export async function openDiff(pr: PR, diffCommand: string): Promise<ToolResult> {
   const repo = getRepoName(pr)
   const cmd = await resolveDiffCommand(diffCommand)
 
@@ -149,4 +158,5 @@ export async function openDiff(pr: PR, diffCommand: string): Promise<void> {
   })
 
   await proc.exited
+  return { success: true, message: "" }
 }

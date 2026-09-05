@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { isMergeableState, mergeableStateToStatus } from "./definitions"
+import { isMergeableState, mergeableStateToStatus } from "../actions/merge"
 
 describe("isMergeableState", () => {
   test("only states GitHub would actually take", () => {

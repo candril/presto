@@ -1,8 +1,6 @@
 /**
- * Actions module - external tool integration
+ * Actions that never leave the machine. Everything that touches GitHub or hands a PR to
+ * another tool goes through `src/providers` instead, so the demo can answer it.
  */
 
-export { updateBranchFromBase, type UpdateStrategy } from "./branch"
-export { enableAutoMerge, disableAutoMerge } from "./automerge"
-export { openFailingChecks, rerunChecks } from "./checks"
-export { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch } from "./tools"
+export { copyPRUrl, copyPRNumber, copyPRBranch } from "./tools"

@@ -14,17 +14,17 @@ import {
   type VisitedRepo,
 } from "./schema"
 
-/** History file path */
-const HISTORY_FILE = join(getConfigDir(), "history.json")
+const historyFile = () => join(getConfigDir(), "history.json")
 
 /** Load history from disk */
 export function loadHistory(): History {
-  if (!existsSync(HISTORY_FILE)) {
+  const file = historyFile()
+  if (!existsSync(file)) {
     return { ...defaultHistory }
   }
 
   try {
-    const content = readFileSync(HISTORY_FILE, "utf-8")
+    const content = readFileSync(file, "utf-8")
     const raw = JSON.parse(content)
     // Migrate markedPRs from old formats to Record<prKey, letter>
     if (raw.markedPRs) {
@@ -95,7 +95,7 @@ export function saveHistory(history: History): void {
     prSnapshots: pruneSnapshots(history),
   }
 
-  writeFileSync(HISTORY_FILE, JSON.stringify(trimmed, null, 2))
+  writeFileSync(historyFile(), JSON.stringify(trimmed, null, 2))
 }
 
 /** Debounced save history - coalesces rapid writes (e.g. during fast j/k navigation) */

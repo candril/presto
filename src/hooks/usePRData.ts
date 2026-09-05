@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useCallback, useRef, useState } from "react"
-import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs } from "../providers/github"
+import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs } from "../providers"
 import { saveCache } from "../cache"
 import { recordPRView, recordRepoVisit, saveHistory, type History } from "../history"
 import type { Config } from "../config"

@@ -6,7 +6,7 @@
 import { useMemo, useEffect, useRef, useState, useCallback } from "react"
 import { parseFilter, applyFilter, applyStarredOnlyFilter } from "../discovery"
 import { saveFilterQuery } from "../cache"
-import { getPR, getPRsByBranch } from "../providers/github"
+import { getPR, getPRsByBranch } from "../providers"
 import type { Config } from "../config"
 import type { PR } from "../types"
 import { getRepoName } from "../types"

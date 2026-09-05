@@ -1,0 +1,85 @@
+---
+title: presto
+description: Pull requests in the terminal. Every repo you watch, one list, and whose move it is.
+template: splash
+head:
+  - tag: title
+    content: presto — pull requests in the terminal
+hero:
+  image:
+    file: ../../assets/logo.png
+    alt: presto logo
+  tagline: Every open PR across the repos you watch, in one list — and, for each one, whose move it is.
+  actions:
+    - text: Get Started
+      link: /presto/guide/installation/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/candril/presto
+      icon: external
+      variant: minimal
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+<Aside type="caution">
+presto is young and built spec-first — every feature traces to a numbered spec in
+[`specs/`](https://github.com/candril/presto/tree/main/specs). It talks to GitHub through the
+[`gh`](https://cli.github.com) CLI and it *writes*: reviews, merges, auto-merge, branch updates,
+workflow runs. Try it on repos you don't mind poking at.
+</Aside>
+
+```sh
+nix run github:candril/presto -- --demo    # the built-in demo — no GitHub, no config
+```
+
+![The README demo](../../assets/presto-demo.gif)
+
+## One list, whose move it is
+
+A PR row carries five glyphs: **S**tate, **C**hecks, **R**eview, **B**ase and **M**erge. The
+first four are the gates; the last one is the verdict — `✓` merge it, `!` the author's move,
+`?` someone else's, `·` a machine's, `⇢` auto-merge will land it. Not *blocked / pending /
+ready*: measured across real repos that put 86 % of PRs in "blocked" and told you nothing.
+
+![The list with all five status columns](../../assets/screenshots/list.png)
+
+## The preview spells it out
+
+`p` opens the same five columns with their meaning written out — *Author's move — 2 open
+comment threads to resolve* — then comments, reviews, the description as Markdown, files and
+commits. `P` moves it to the bottom.
+
+![The preview panel](../../assets/screenshots/preview-author.png)
+
+## Act from the list
+
+`^P` lists every action for the selected PR with its shortcut: review, merge, arm auto-merge,
+update the branch from base, re-run checks, trigger a workflow, checkout, open in riff or the
+browser. A branch update shows `↻` until the next refresh proves it landed.
+
+![The command palette](../../assets/screenshots/palette.png)
+
+![The merge dialog](../../assets/screenshots/merge.png)
+
+## Filter as you type
+
+`/` narrows the list live: `@me`, `@theo`, `repo:api`, `state:draft`, `>unread`, `>marked`,
+free text against the title, or paste a PR URL. Every filter can become a tab (`t`), and tabs
+survive a restart.
+
+![The filter prompt with suggestions](../../assets/screenshots/filter.png)
+
+## Know what changed
+
+Every refresh diffs against the last snapshot: a new push, a new comment, an approval, a merge.
+Changed PRs get a dot and a toast; `>unread` lists them, `v` clears one.
+
+![The change toast](../../assets/screenshots/toast.png)
+
+## Try it
+
+The demo ships in the binary: `presto --demo` opens a fictional org with three repos and enough
+PRs to show every verdict. Everything works — approve, merge, update a branch — and is forgotten
+on exit. It is also where every picture on this site comes from.

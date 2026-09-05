@@ -9,17 +9,17 @@ import type { PR, ColumnVisibility } from "../types"
 import { normalizePR } from "../types"
 import { defaultCache, defaultColumnVisibility, CACHE_STALE_MINUTES, type PRCache } from "./schema"
 
-/** Cache file path */
-const CACHE_FILE = join(getConfigDir(), "cache.json")
+const cacheFile = () => join(getConfigDir(), "cache.json")
 
 /** Load cached PRs from disk */
 export function loadCache(): PRCache {
-  if (!existsSync(CACHE_FILE)) {
+  const file = cacheFile()
+  if (!existsSync(file)) {
     return { ...defaultCache }
   }
 
   try {
-    const content = readFileSync(CACHE_FILE, "utf-8")
+    const content = readFileSync(file, "utf-8")
     const cache = { ...defaultCache, ...JSON.parse(content) } as PRCache
     // Cached PRs may predate fields added to the PR interface since they were written
     cache.prs = (cache.prs ?? []).map(normalizePR)
@@ -35,9 +35,10 @@ export function loadCache(): PRCache {
  * everything.
  */
 function writeCache(cache: PRCache): void {
-  const tmpFile = `${CACHE_FILE}.tmp`
+  const file = cacheFile()
+  const tmpFile = `${file}.tmp`
   writeFileSync(tmpFile, JSON.stringify(cache))
-  renameSync(tmpFile, CACHE_FILE)
+  renameSync(tmpFile, file)
 }
 
 /** Save PRs and filter to cache, leaving unrelated cached settings intact */

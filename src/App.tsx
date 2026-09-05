@@ -47,6 +47,7 @@ import {
   useTabNotifications,
 } from "./hooks"
 import { debouncedSaveTabs } from "./tabs"
+import { isDemoMode } from "./providers"
 import type { FocusCallback } from "./utils/focus-reporting"
 
 interface AppProps {
@@ -276,6 +277,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     <Shell>
       <Header
         title="PResto"
+        badge={isDemoMode() ? "demo" : undefined}
         loading={state.refreshing}
         right={headerRight}
         lastRefresh={state.lastRefresh}

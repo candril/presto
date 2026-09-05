@@ -8,8 +8,7 @@ import { getConfigDir } from "../config"
 import type { Tab } from "./types"
 import { createDefaultTab } from "./types"
 
-/** Tabs file path */
-const TABS_FILE = join(getConfigDir(), "tabs.json")
+const tabsFile = () => join(getConfigDir(), "tabs.json")
 
 /** Persisted tabs structure */
 interface PersistedTabs {
@@ -22,12 +21,12 @@ interface PersistedTabs {
  * Returns null if no tabs file exists or it's invalid
  */
 export function loadTabs(): PersistedTabs | null {
-  if (!existsSync(TABS_FILE)) {
+  if (!existsSync(tabsFile())) {
     return null
   }
 
   try {
-    const content = readFileSync(TABS_FILE, "utf-8")
+    const content = readFileSync(tabsFile(), "utf-8")
     const data = JSON.parse(content) as PersistedTabs
     
     // Validate structure
@@ -50,7 +49,7 @@ export function loadTabs(): PersistedTabs | null {
  */
 export function saveTabs(tabs: Tab[], activeTabId: string): void {
   const data: PersistedTabs = { tabs, activeTabId }
-  writeFileSync(TABS_FILE, JSON.stringify(data, null, 2))
+  writeFileSync(tabsFile(), JSON.stringify(data, null, 2))
 }
 
 /** Debounce timer */

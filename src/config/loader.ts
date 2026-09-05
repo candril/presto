@@ -9,20 +9,18 @@ import { join } from "node:path"
 import { parse } from "smol-toml"
 import { defaultConfig, type Config, type CustomTool, type Repository } from "./schema"
 
-/** Config directory path */
-const CONFIG_DIR = join(homedir(), ".config", "presto")
-
-/** Config file path */
-const CONFIG_FILE = join(CONFIG_DIR, "config.toml")
+/**
+ * Resolved on every call rather than at import: `--demo` points this at a scratch
+ * directory after the modules are loaded, and the cache, history and tabs files all
+ * hang off it.
+ */
+export function getConfigDir(): string {
+  return process.env.PRESTO_CONFIG_DIR || join(homedir(), ".config", "presto")
+}
 
 /** Get the config file path */
 export function getConfigPath(): string {
-  return CONFIG_FILE
-}
-
-/** Get the config directory path */
-export function getConfigDir(): string {
-  return CONFIG_DIR
+  return join(getConfigDir(), "config.toml")
 }
 
 /**
@@ -30,20 +28,23 @@ export function getConfigDir(): string {
  * Creates default config if none exists
  */
 export function loadConfig(): Config {
+  const configDir = getConfigDir()
+  const configFile = getConfigPath()
+
   // Ensure config directory exists
-  if (!existsSync(CONFIG_DIR)) {
-    mkdirSync(CONFIG_DIR, { recursive: true })
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true })
   }
 
   // Create default config if none exists
-  if (!existsSync(CONFIG_FILE)) {
-    writeDefaultConfig()
+  if (!existsSync(configFile)) {
+    writeDefaultConfig(configFile)
     return { ...defaultConfig }
   }
 
   // Load and parse config
   try {
-    const content = readFileSync(CONFIG_FILE, "utf-8")
+    const content = readFileSync(configFile, "utf-8")
     const parsed = parse(content)
     return mergeConfig(defaultConfig, parsed)
   } catch (err) {
@@ -54,59 +55,49 @@ export function loadConfig(): Config {
 }
 
 /** Write the default configuration file */
-function writeDefaultConfig(): void {
+function writeDefaultConfig(configFile: string): void {
   const content = `# presto configuration
-# See: https://github.com/your/presto#configuration
+# See: https://candril.github.io/presto/reference/configuration/
 
-# Repositories to watch (leave empty for current repo only)
+# Repositories to watch (leave empty for the current repo only)
 # [[repositories]]
 # name = "owner/repo"
-# alias = "short-name"  # optional
+# alias = "short-name"    # optional, used in tab titles
+# starred_only = false    # only PRs from authors you have starred
+# disabled = false        # fetch only when filtered with repo:name
+# local_path = "~/code/repo"  # for checkout (space)
 
-# GitHub settings (usually not needed, uses gh CLI)
-# [github]
-# host = "github.example.com"  # For GitHub Enterprise
+# Where repos are cloned, for checkout: base_path/<repo short name>
+# [paths]
+# base_path = "~/code"
 
-# Tool configuration
+# The pager the diff (D) is piped into: "auto" picks delta, then bat, then less
 [tools]
-default = "browser"  # What opens on Enter: "browser", "riff", or custom tool name
-# browser = "open"   # macOS default
-# riff = "riff"
-
-# Custom tools (optional)
-# [tools.custom.vscode]
-# command = "code --goto {file}"
-# key = "c"
-# description = "Open in VS Code"
-
-# Display settings
-[display]
-theme = "dark"         # dark, light, auto
-compact = false        # Compact list view
-relative_time = true   # "2h ago" vs "2024-01-15"
+diff = "auto"
 
 # Refresh settings
 [refresh]
 interval = 300   # Seconds between auto-refresh (0 to disable)
 on_focus = true  # Refresh when terminal gains focus
 
-# Bot patterns - filter out bots from comment counts (optional)
-# These are regex patterns matched against commenter usernames
+# Desktop notifications when a refresh finds changes
+[notifications]
+desktop = false
+
+# Bot patterns - exclude accounts from comment counts, threads and approvals (optional)
+# These are regex patterns matched against logins
 # Default patterns already cover: [bot], dependabot, renovate, codecov, etc.
 # [bot_patterns]
 # patterns = ["-ci$", "^my-internal-bot$"]
 
-# Keybinding overrides (optional)
+# Keybinding overrides (optional) — action names from src/keybindings/defaults.ts
 # [keys]
-# quit = "q"
-# help = "?"
-# refresh = "R"
-# search = "/"
-# open_browser = "o"
-# open_riff = "r"
-# copy_url = "y"
+# "action.open" = "return"
+# "action.browser" = "o"
+# "ui.commandPalette" = "ctrl+p"
+# "action.forceRefresh" = "R"    # uppercase = shift
 `
-  writeFileSync(CONFIG_FILE, content)
+  writeFileSync(configFile, content)
 }
 
 /**

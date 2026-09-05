@@ -1,0 +1,31 @@
+# Screenshot recipes: name | keys, sent to a fresh `presto --demo` (see docs/screenshots.md).
+# Keys are tmux send-keys tokens: a letter, a string, Enter, Escape, Space, C-p …;
+# `wait` pauses for a background load; `5j` presses j five times.
+# The demo opens on the list with the gate columns collapsed (S and M only) and the
+# cursor on the most recently updated PR. `c` expands the columns. Rows are sorted by
+# activity, so `G` then `k`s is the stable way to reach the older PRs.
+
+# ── The list ──────────────────────────────────────────────────────────────────
+list             | c
+list-compact     |
+preview          | c 3j p
+preview-bottom   | c 3j p P
+preview-author   | c G 6k p
+help             | ?
+palette          | c 3j C-p
+
+# ── Filtering ─────────────────────────────────────────────────────────────────
+filter           | c / @mara Space repo:
+filter-applied   | c / @mara Space repo:api Enter
+tabs             | c t / @mara Enter
+marks            | c m a j m b 2j m a
+unread           | c v 2j v
+
+# ── Actions ───────────────────────────────────────────────────────────────────
+review           | c 3j C-p review Enter
+merge            | c 3j C-p merge Enter wait
+automerge        | c G 11k C-p auto Enter wait
+workflow         | c 3j C-p trigger Enter wait
+workflow-inputs  | c 3j C-p trigger Enter wait C-n Enter wait
+pending          | c G 5k C-p update Enter
+toast            | c 2j m a r wait C-p review Enter 2 Enter wait

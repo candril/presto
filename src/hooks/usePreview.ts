@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef } from "react"
-import { fetchPRPreview } from "../providers/github"
+import { fetchPRPreview } from "../providers"
 import type { PR, PRPreview, PreviewPosition } from "../types"
 import type { AppAction } from "../state"
 

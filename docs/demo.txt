@@ -1,0 +1,32 @@
+# The README demo: hold | keys | keycap | caption. `hold` is seconds, or `auto` to let the
+# caption's word count set the dwell. Rendered by `just demo-gif` (scripts/demo.sh). The
+# keycap and caption are drawn on a panel low over the frame, so every step says which
+# keys were pressed and what they did. Give every step a caption — a step without one
+# drops the panel, and it reads as a glitch.
+# A step whose keys are only j k g G (with counts: 3j) gets the selected row ringed and
+# an arrow from where the cursor came, so a move reads as a move rather than a cut.
+# Starts on the list, gate columns collapsed, cursor on the most recent PR.
+
+2.5 |                    |       | every open PR across your repos, one row each, newest activity first
+2.5 | c                  | c     | expands the status columns: state, checks, review, base, merge verdict
+2.5 | 3j                 | j k   | j k moves — the M column says whose move it is: ✓ ready, ! author, ? reviewer
+3.0 | p                  | p     | opens the preview: the same five columns, spelled out
+2.5 | C-d                | ^D    | …then comments, reviews, description, files, commits
+1.5 | p                  | p     | closes it again
+2.0 | /                  | /     | filters as you type — @author, repo:, state:, or free text
+2.5 | @mara              |       | …your own PRs
+2.0 | Escape             | esc   | closes the prompt; the filter stays
+1.5 | BSpace             | ⌫     | clears it
+2.5 | g 2j               | j k   | a renovate bump: checks still running, nobody has looked at it
+2.5 | m w                | m w   | marks it — a marked PR is tracked for changes, and 'w jumps back to it
+2.0 | r                  | r     | a refresh takes the snapshot later changes are measured against
+2.5 | C-p                | ^P    | every action for the selected PR, with its shortcut
+2.0 | review Enter       |       | reviewing happens here too
+3.0 | 2 Enter            |       | approve — the row updates at once, and the toast says what changed
+2.5 | r                  | r     | refresh pulls the truth back from GitHub
+2.5 | G 5k               | ⇧G k  | this one is approved and green — but behind its base
+2.5 | C-p update Enter   | ^P    | update the branch without leaving
+2.5 |                    |       | ↻ marks the update as still landing on GitHub
+3.0 | wait r             | r     | …the next refresh shows the new commit and the checks running
+2.5 | wait wait r        | r     | …and green
+3.5 | ?                  | ?     | the whole keymap, and the legend for every glyph. Nothing to memorise.

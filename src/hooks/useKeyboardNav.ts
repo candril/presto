@@ -4,8 +4,8 @@
  */
 
 import { useKeyboard, useRenderer } from "@opentui/react"
-import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch, openFailingChecks } from "../actions"
-import { checkoutPR } from "../actions/checkout"
+import { copyPRUrl, copyPRNumber, copyPRBranch } from "../actions"
+import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, openFailingChecks, checkoutPR } from "../providers"
 import {
   toggleStarAuthor,
   saveHistory,
@@ -407,9 +407,11 @@ export function useKeyboardNav({
     if (keys.matches(key, "action.browser")) {
       recordPRInteraction()
       dispatch({ type: "SHOW_MESSAGE", message: "Opening in browser..." })
-      openInBrowser(selectedPR).catch(() => {
-        dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
-      })
+      openInBrowser(selectedPR)
+        .then((result) => dispatch({ type: "SHOW_MESSAGE", message: result.message }))
+        .catch(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
+        })
       return
     }
 
@@ -417,9 +419,11 @@ export function useKeyboardNav({
     if (keys.matches(key, "action.repoBrowser")) {
       const repo = getRepoName(selectedPR)
       dispatch({ type: "SHOW_MESSAGE", message: `Opening ${repo}...` })
-      openRepoInBrowser(selectedPR).catch(() => {
-        dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
-      })
+      openRepoInBrowser(selectedPR)
+        .then((result) => dispatch({ type: "SHOW_MESSAGE", message: result.message }))
+        .catch(() => {
+          dispatch({ type: "SHOW_MESSAGE", message: "Failed to open browser" })
+        })
       return
     }
 
@@ -427,10 +431,14 @@ export function useKeyboardNav({
     if (keys.matches(key, "action.open")) {
       recordPRInteraction()
       renderer.suspend()
-      openInRiff(selectedPR).finally(() => {
-        renderer.resume()
-        fetchPRs(true)
-      })
+      openInRiff(selectedPR)
+        .then((result) => {
+          if (result.message) dispatch({ type: "SHOW_MESSAGE", message: result.message })
+        })
+        .finally(() => {
+          renderer.resume()
+          fetchPRs(true)
+        })
       return
     }
 
@@ -438,13 +446,8 @@ export function useKeyboardNav({
     if (keys.matches(key, "action.openTmux")) {
       recordPRInteraction()
       openInRiffTmuxWindow(selectedPR)
-        .then((ok) => {
-          dispatch({
-            type: "SHOW_MESSAGE",
-            message: ok
-              ? `Opened #${selectedPR.number} in tmux window`
-              : "Not running inside tmux",
-          })
+        .then((result) => {
+          dispatch({ type: "SHOW_MESSAGE", message: result.message })
         })
         .catch(() => {
           dispatch({ type: "SHOW_MESSAGE", message: "Failed to open tmux window" })
@@ -462,9 +465,13 @@ export function useKeyboardNav({
 
     if (keys.matches(key, "action.diff")) {
       renderer.suspend()
-      openDiff(selectedPR, config.tools.diff).finally(() => {
-        renderer.resume()
-      })
+      openDiff(selectedPR, config.tools.diff)
+        .then((result) => {
+          if (result.message) dispatch({ type: "SHOW_MESSAGE", message: result.message })
+        })
+        .finally(() => {
+          renderer.resume()
+        })
       return
     }
 

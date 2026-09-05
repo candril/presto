@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="presto">
+  <rect width="256" height="256" rx="56" fill="#1a1b26"/>
+  <!-- three PR rows: a list, the selected one lit -->
+  <rect x="32" y="52" width="192" height="40" rx="10" fill="#24283b"/>
+  <rect x="32" y="108" width="192" height="40" rx="10" fill="#1f2335"/>
+  <rect x="32" y="164" width="192" height="40" rx="10" fill="#1f2335"/>
+  <!-- status glyphs, row one: open · checks pass · approved · ready -->
+  <circle cx="56" cy="72" r="8" fill="none" stroke="#9ece6a" stroke-width="4"/>
+  <path d="M78 72 l7 7 l13 -14" fill="none" stroke="#9ece6a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M110 72 l7 7 l13 -14" fill="none" stroke="#9ece6a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="146" y="66" width="62" height="12" rx="6" fill="#c0caf5"/>
+  <!-- row two: open · checks running · review required · waiting on others -->
+  <circle cx="56" cy="128" r="8" fill="none" stroke="#9ece6a" stroke-width="4"/>
+  <path d="M88 118 v20 M78 123 l20 10 M78 133 l20 -10" fill="none" stroke="#e0af68" stroke-width="4" stroke-linecap="round"/>
+  <path d="M112 122 a8 8 0 1 1 11 8 l-3 3 v3 M120 141 v1" fill="none" stroke="#7aa2f7" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="146" y="122" width="44" height="12" rx="6" fill="#565f89"/>
+  <!-- row three: draft · checks fail · no review · author's move -->
+  <circle cx="56" cy="184" r="8" fill="none" stroke="#565f89" stroke-width="4" stroke-dasharray="4 4"/>
+  <path d="M80 176 l16 16 M96 176 l-16 16" fill="none" stroke="#f7768e" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M120 174 v13 M120 195 v1" fill="none" stroke="#e0af68" stroke-width="5" stroke-linecap="round"/>
+  <rect x="146" y="178" width="56" height="12" rx="6" fill="#565f89"/>
+</svg>

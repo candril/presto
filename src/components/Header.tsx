@@ -4,6 +4,8 @@ import { formatRelativeTime } from "../utils/time"
 
 interface HeaderProps {
   title: string
+  /** Dim tag after the title — "demo", so a screenshot can never pass for real data */
+  badge?: string
   /** Whether data is being loaded/refreshed */
   loading?: boolean
   /** Right side content (e.g., count) */
@@ -14,12 +16,13 @@ interface HeaderProps {
   isStale?: boolean
 }
 
-export function Header({ title, loading, right, lastRefresh, isStale }: HeaderProps) {
+export function Header({ title, badge, loading, right, lastRefresh, isStale }: HeaderProps) {
   return (
     <box height={1} backgroundColor={theme.headerBg} paddingX={1} flexDirection="row">
       {/* Left side: Title */}
       <text>
         <span fg={theme.primary}>{title}</span>
+        {badge && <span fg={theme.textMuted}>{`  ${badge}`}</span>}
       </text>
 
       {/* Spacer pushes right content to far right */}

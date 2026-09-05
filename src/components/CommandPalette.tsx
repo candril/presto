@@ -12,23 +12,24 @@ import {
   getAvailableCommands,
   groupCommands,
   formatCategory,
-  getRepoMergeSettings,
-  getPRMergeState,
   isMergeableState,
   mergeableStateToStatus,
-  executeMerge,
   type Command,
   type CommandContext,
   type CommandResult,
-  type MergeMethod,
   type RepoMergeSettings,
   type PRMergeState,
 } from "../commands"
+import type { MergeMethod } from "../types"
 import { fuzzyFilter } from "../utils/fuzzy"
 import { getRepoName, getShortRepoName } from "../types"
-import { submitPRReview, type ReviewEvent } from "../actions/review"
-import { enableAutoMerge } from "../actions/automerge"
 import {
+  submitPRReview,
+  enableAutoMerge,
+  executeMerge,
+  getRepoMergeSettings,
+  getPRMergeState,
+  type ReviewEvent,
   listWorkflows,
   getWorkflowInputs,
   getRepoEnvironments,
@@ -36,7 +37,7 @@ import {
   dispatchWorkflow,
   type WorkflowSummary,
   type WorkflowInput,
-} from "../actions/workflows"
+} from "../providers"
 
 interface CommandPaletteProps {
   visible: boolean
@@ -469,9 +470,13 @@ export function CommandPalette({
     const result =
       mode === "auto"
         ? await enableAutoMerge(pr, method)
-        : await executeMerge(pr, repo, method, context.dispatch)
-    if (mode === "auto" && result.success) {
-      context.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { autoMergeMethod: method } })
+        : await executeMerge(pr, repo, method)
+    if (result.success) {
+      context.dispatch({
+        type: "UPDATE_PR",
+        url: pr.url,
+        updates: mode === "auto" ? { autoMergeMethod: method } : { state: "MERGED" },
+      })
     }
     onClose()
     onResult(result.success 

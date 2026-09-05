@@ -2,124 +2,29 @@
  * Command definitions for the command palette
  */
 
-import { $ } from "bun"
 import type { Command, CommandContext } from "./types"
-import { openInBrowser, openRepoInBrowser, openInRiff, openInRiffTmuxWindow, openDiff, copyPRUrl, copyPRNumber, copyPRBranch } from "../actions/tools"
-import { checkoutPR } from "../actions/checkout"
-import { updateBranchFromBase } from "../actions/branch"
-import { disableAutoMerge } from "../actions/automerge"
-import { openFailingChecks, rerunChecks } from "../actions/checks"
+import { copyPRUrl, copyPRNumber, copyPRBranch } from "../actions/tools"
+import {
+  openInBrowser,
+  openRepoInBrowser,
+  openInRiff,
+  openInRiffTmuxWindow,
+  openDiff,
+  checkoutPR,
+  updateBranchFromBase,
+  disableAutoMerge,
+  openFailingChecks,
+  rerunChecks,
+  markReady,
+  convertToDraft,
+  closePR,
+  reopenPR,
+} from "../providers"
 import { toggleStarAuthor, saveHistory, toggleMarkPR, isPRMarked, getPRKey, removePRFromRecent, forgetRepo, isRepoVisited } from "../history"
 import { prHasChanges, togglePRUnread } from "../notifications"
 import { saveColumnVisibility } from "../cache"
-import { getRepoName, type ColumnId, type MergeMethod, type MergeStateStatus, type PR } from "../types"
+import { getRepoName, type ColumnId, type PR } from "../types"
 import type { AppAction } from "../state"
-
-/** Repo merge settings cache */
-export interface RepoMergeSettings {
-  allowMergeCommit: boolean
-  allowSquashMerge: boolean
-  allowRebaseMerge: boolean
-  allowAutoMerge: boolean
-}
-const repoMergeSettingsCache = new Map<string, RepoMergeSettings>()
-
-/** PR merge state */
-export interface PRMergeState {
-  /** null while GitHub is still computing the test merge */
-  mergeable: boolean | null
-  mergeableState: string // "clean", "unstable", "dirty", "blocked", "behind", "unknown"
-  baseRef: string
-}
-
-/** Fetch PR merge state */
-export async function getPRMergeState(repo: string, number: number): Promise<PRMergeState> {
-  try {
-    const result = await $`gh api repos/${repo}/pulls/${number} --jq '{mergeable: .mergeable, mergeableState: .mergeable_state, baseRef: .base.ref}'`.json()
-    return result as PRMergeState
-  } catch {
-    return { mergeable: true, mergeableState: "unknown", baseRef: "" }
-  }
-}
-
-/**
- * Whether GitHub would actually take the merge right now.
- *
- * The `mergeable` boolean only answers "no conflicts" — a PR that is behind a
- * strict base, or blocked by protection, reports `mergeable: true` and then has its
- * merge rejected. `mergeable_state` is the field that gates the merge button.
- */
-export function isMergeableState(state: string): boolean {
-  return state === "clean" || state === "unstable" || state === "has_hooks"
-}
-
-/**
- * Map REST `mergeable_state` onto the GraphQL vocabulary the PR rows render, so a
- * dialog that just fetched fresher truth can correct a stale row on the spot.
- */
-export function mergeableStateToStatus(state: string): MergeStateStatus | null {
-  switch (state) {
-    case "clean":
-      return "CLEAN"
-    case "has_hooks":
-      return "HAS_HOOKS"
-    case "unstable":
-      return "UNSTABLE"
-    case "behind":
-      return "BEHIND"
-    case "dirty":
-      return "DIRTY"
-    case "blocked":
-      return "BLOCKED"
-    case "draft":
-      return "DRAFT"
-    case "unknown":
-      return "UNKNOWN"
-    default:
-      return null
-  }
-}
-
-/** Fetch and cache repo merge settings */
-export async function getRepoMergeSettings(repo: string): Promise<RepoMergeSettings> {
-  const cached = repoMergeSettingsCache.get(repo)
-  if (cached) return cached
-
-  try {
-    const result = await $`gh api repos/${repo} --jq '{allowMergeCommit: .allow_merge_commit, allowSquashMerge: .allow_squash_merge, allowRebaseMerge: .allow_rebase_merge, allowAutoMerge: .allow_auto_merge}'`.json()
-    const settings = result as RepoMergeSettings
-    repoMergeSettingsCache.set(repo, settings)
-    return settings
-  } catch {
-    // Default to all allowed if we can't fetch
-    return { allowMergeCommit: true, allowSquashMerge: true, allowRebaseMerge: true, allowAutoMerge: false }
-  }
-}
-
-export type { MergeMethod } from "../types"
-
-/** Execute the actual merge with selected method */
-export async function executeMerge(
-  pr: { number: number; url: string },
-  repo: string,
-  method: MergeMethod,
-  dispatch: (action: AppAction) => void
-): Promise<{ success: boolean; message: string }> {
-  try {
-    const flag = method === "merge" ? "--merge" : method === "squash" ? "--squash" : "--rebase"
-    const result = await $`gh pr merge ${pr.number} -R ${repo} ${flag}`.quiet()
-    if (result.exitCode !== 0) {
-      return { success: false, message: result.stderr.toString().trim() || "Merge failed" }
-    }
-    // Update UI only on success
-    dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "MERGED" } })
-    const methodLabel = method === "merge" ? "Merged" : method === "squash" ? "Squash merged" : "Rebase merged"
-    return { success: true, message: `${methodLabel} #${pr.number}` }
-  } catch (e: any) {
-    const stderr = e?.stderr?.toString?.()?.trim() || e?.message || "Merge failed"
-    return { success: false, message: stderr }
-  }
-}
 
 /**
  * GitHub accepts the update and applies it asynchronously, so the row would otherwise
@@ -334,8 +239,8 @@ export const commands: Command[] = [
     shortcut: "o",
     requiresPR: true,
     execute: async (ctx) => {
-      await openInBrowser(ctx.selectedPR!)
-      return { type: "success", message: "Opened in browser" }
+      const result = await openInBrowser(ctx.selectedPR!)
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
   {
@@ -344,8 +249,8 @@ export const commands: Command[] = [
     category: "action",
     requiresPR: true,
     execute: async (ctx) => {
-      await openRepoInBrowser(ctx.selectedPR!)
-      return { type: "success", message: "Opened repository in browser" }
+      const result = await openRepoInBrowser(ctx.selectedPR!)
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
   {
@@ -357,12 +262,12 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       ctx.renderer.suspend()
       try {
-        await openInRiff(ctx.selectedPR!)
+        const result = await openInRiff(ctx.selectedPR!)
+        return { type: "success", message: result.message || undefined }
       } finally {
         ctx.renderer.resume()
         ctx.fetchPRs(true)
       }
-      return { type: "success" }
     },
   },
   {
@@ -372,10 +277,8 @@ export const commands: Command[] = [
     shortcut: "O",
     requiresPR: true,
     execute: async (ctx) => {
-      const ok = await openInRiffTmuxWindow(ctx.selectedPR!)
-      return ok
-        ? { type: "success", message: `Opened #${ctx.selectedPR!.number} in tmux window` }
-        : { type: "error", message: "Not running inside tmux" }
+      const result = await openInRiffTmuxWindow(ctx.selectedPR!)
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
   {
@@ -387,11 +290,11 @@ export const commands: Command[] = [
     execute: async (ctx) => {
       ctx.renderer.suspend()
       try {
-        await openDiff(ctx.selectedPR!, ctx.config.tools.diff)
+        const result = await openDiff(ctx.selectedPR!, ctx.config.tools.diff)
+        return { type: "success", message: result.message || undefined }
       } finally {
         ctx.renderer.resume()
       }
-      return { type: "success" }
     },
   },
   {
@@ -649,12 +552,10 @@ export const commands: Command[] = [
     available: (ctx) => ctx.selectedPR?.isDraft === true,
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
-      const repo = getRepoName(pr)
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { isDraft: false } })
-      // API call
-      await $`gh pr ready ${pr.number} -R ${repo}`.quiet()
-      return { type: "success", message: `Marked #${pr.number} as ready` }
+      const result = await markReady(pr)
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
   {
@@ -666,12 +567,10 @@ export const commands: Command[] = [
       ctx.selectedPR?.isDraft === false && ctx.selectedPR?.state === "OPEN",
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
-      const repo = getRepoName(pr)
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { isDraft: true } })
-      // API call
-      await $`gh pr ready ${pr.number} -R ${repo} --undo`.quiet()
-      return { type: "success", message: `Converted #${pr.number} to draft` }
+      const result = await convertToDraft(pr)
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
   {
@@ -683,12 +582,10 @@ export const commands: Command[] = [
     available: (ctx) => ctx.selectedPR?.state === "OPEN",
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
-      const repo = getRepoName(pr)
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "CLOSED" } })
-      // API call
-      await $`gh pr close ${pr.number} -R ${repo}`.quiet()
-      return { type: "success", message: `Closed #${pr.number}` }
+      const result = await closePR(pr)
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
   {
@@ -699,12 +596,10 @@ export const commands: Command[] = [
     available: (ctx) => ctx.selectedPR?.state === "CLOSED",
     execute: async (ctx) => {
       const pr = ctx.selectedPR!
-      const repo = getRepoName(pr)
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "OPEN" } })
-      // API call
-      await $`gh pr reopen ${pr.number} -R ${repo}`.quiet()
-      return { type: "success", message: `Reopened #${pr.number}` }
+      const result = await reopenPR(pr)
+      return { type: result.success ? "success" : "error", message: result.message }
     },
   },
   {
