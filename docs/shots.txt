@@ -17,7 +17,7 @@ palette          | c 3j C-p
 # ── Filtering ─────────────────────────────────────────────────────────────────
 filter           | c / @mara Space repo:
 filter-applied   | c / @mara Space repo:api Enter
-tabs             | c t / @mara Enter
+tabs             | c t / @me Enter t / state:draft Enter t BSpace / repo:infra Enter 1 v 2
 marks            | c m a j m b 2j m a
 unread           | c v 2j v
 

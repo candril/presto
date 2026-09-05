@@ -69,16 +69,29 @@ failing check.
 / https://github.com/polaris/api/pull/482   one PR, fetched if it is not loaded
 ```
 
-`t` turns the current filter into a tab. Tabs are restored on the next launch.
+## 5. Keep it as a tab
 
-## 5. Act
+The filters you type every day should not be typed every day. `t` opens a new tab — a copy of
+the current one — and `/` gives it a filter; the tab is named after it:
+
+```text
+t / @me ↵            My PRs
+t / >unread ↵        Unread
+t ⌫ / repo:infra ↵   infra
+```
+
+`1` `2` `3` switch, `[` `]` cycle, `d` closes, `u` brings one back. Every tab filters the same
+refreshed list, so they cost nothing, and they are all there again on the next launch. A dot
+on a tab means a PR in it changed since you looked. See [Tabs](/presto/reference/tabs/).
+
+## 6. Act
 
 `^P` opens the command palette with every action for the selected PR. Merge, submit a review,
 arm auto-merge, update the branch from base, re-run the failed checks, trigger a workflow, mark
 ready or draft, close — each with the confirmation GitHub itself would ask for. See
 [Actions](/presto/reference/actions/).
 
-## 6. Come back later
+## 7. Come back later
 
 presto refreshes every five minutes and whenever the terminal regains focus. Each refresh is
 diffed against the last one: a new push, new comments, an approval, a merge. Changed PRs get a

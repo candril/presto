@@ -1,19 +1,7 @@
 ---
-title: Tabs, Marks & Unread
-description: Keeping several lists open, tagging PRs with letters, and knowing what changed while you were away.
+title: Marks & Unread
+description: Tagging PRs with letters, and knowing what changed while you were away.
 ---
-
-## Tabs
-
-A tab is a filter with a name. `t` duplicates the current tab; change its filter and the name
-follows: `@me` becomes *My PRs*, `repo:api state:draft` becomes *api · Drafts*, `>starred`
-becomes *Starred*. *Rename tab* in the palette sets your own. `[` `]` and `1`–`9` switch, `d`
-closes, `u` brings the last one back. Tabs are saved to `tabs.json` and restored on launch.
-
-![Two tabs, the second named after its filter](../../../assets/screenshots/tabs.png)
-
-Every tab shares one PR list underneath, so switching is instant. A tab shows a dot when any
-PR it would list has unread changes.
 
 ## Marks
 
@@ -24,17 +12,22 @@ letter filters to that mark (`'a` is `marks:a`); `''` clears; `>marked` shows ev
 ![Marked PRs](../../../assets/screenshots/marks.png)
 
 Marks are the way to keep a hand-picked set: "the three I need to land this week" as `w`,
-"waiting on someone" as `z`. Marked PRs are fetched on every refresh even after they leave the
-open list, so a merged one is still there under `'w`.
+"waiting on someone" as `z`. A [tab](/presto/reference/tabs/) on `marks:w` keeps the set one
+key away. Marked PRs are fetched on every refresh even after they leave the open list, so a
+merged one is still there under `'w`.
 
 ## Unread
 
 Every refresh compares each PR to the snapshot from the last one. A difference — new commits,
 new comments, an approval, changes requested, merged, closed, reopened, ready, draft, checks
 passed or failed — marks the PR unread: a blue dot in front of the row, a toast at the bottom,
-and the changes listed in the preview.
+and the changes listed in the preview. Tabs containing an unread PR show a dot in the tab bar.
 
 ![The change toast after a refresh](../../../assets/screenshots/toast.png)
+
+Only PRs presto is *tracking* are compared: your own, plus any that are marked or that you
+opened recently. The first refresh after a PR starts being tracked takes its snapshot; changes
+are reported from the next one on.
 
 A PR is marked read when you open it (`↵`, `o`, `p`) or move off it with the preview open; `v`
 toggles it by hand. `>unread` (`^U`) lists what is still unread. With

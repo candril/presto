@@ -39,7 +39,7 @@ activity, so `G` and a few `k`s is the stable way to reach the older PRs.
 | `palette` | `c 3j ^P` | the command palette |
 | `filter` | `c / @mara repo:` | the filter prompt with suggestions |
 | `filter-applied` | `c / @mara repo:api ↵` | a narrowed list |
-| `tabs` | `c t / @mara ↵` | a second tab named after its filter |
+| `tabs` | `c t / @me ↵ t / state:draft ↵ t ⌫ / repo:infra ↵ 1 v 2` | four tabs named after their filters, a dot on one with unread changes |
 | `marks` | `c m a j m b 2j m a` | PRs marked with letters |
 | `unread` | `c v 2j v` | unread dots |
 | `review` / `merge` / `automerge` | `^P` then `review` / `merge` / `auto` | the dialogs |

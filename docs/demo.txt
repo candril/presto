@@ -18,8 +18,10 @@ auto | c                        | c    | expands the status columns: state, chec
 auto | 3j                       | j k  | moves — the M column says whose move it is: ✓ ready, ! author, ? reviewer
 auto | p                        | p    | opens the preview: the same five columns, spelled out
 auto | C-d                      | ^D   | …then comments, reviews, description, files, commits
-auto | p / @mara                | /    | filters as you type — @author, repo:, state:, or free text
-auto | Escape BSpace g 2j m w   | m w  | marks a PR; presto tracks it for changes from now on
+auto | p t / @me                | t    | opens a new tab and filters it as you type — @author, repo:, state:, free text
+auto | Enter t / state:draft Enter | t  | again, narrowed further — a tab is named after its filter, and survives a restart
+auto | 1                        | 1 2 3 | number keys switch tabs; each keeps its own cursor
+auto | g 2j m w                 | m w  | marks a PR; presto tracks it for changes from now on
 auto | r wait C-p               | ^P   | every action for the selected PR, with its shortcut
 auto | review Enter 2 Enter     | ↵    | approve — the row updates, and the toast says what changed
 auto | G 5k                     | ⇧G k | this one is approved and green — but behind its base

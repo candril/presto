@@ -34,10 +34,11 @@ export default defineConfig({
           label: 'Reference',
           items: [
             { label: 'Status Columns', slug: 'reference/status-columns' },
-            { label: 'Key Bindings', slug: 'reference/key-bindings' },
+            { label: 'Tabs', slug: 'reference/tabs' },
             { label: 'Filtering', slug: 'reference/filtering' },
             { label: 'Actions', slug: 'reference/actions' },
-            { label: 'Tabs, Marks & Unread', slug: 'reference/tabs-marks-unread' },
+            { label: 'Marks & Unread', slug: 'reference/marks-unread' },
+            { label: 'Key Bindings', slug: 'reference/key-bindings' },
             { label: 'Configuration', slug: 'reference/configuration' },
             { label: 'CLI', slug: 'reference/cli' },
           ],

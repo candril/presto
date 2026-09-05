@@ -45,6 +45,15 @@ ready*: measured across real repos that put 86 % of PRs in "blocked" and told yo
 
 ![The list with all five status columns](../../assets/screenshots/list.png)
 
+## One tab per question
+
+`t` opens a new tab; `/` gives it a filter; the name follows — *My PRs*, *Drafts*, *infra*,
+*Unread*. Every tab reads the same list, so five tabs cost one refresh, and each remembers its
+own cursor. Number keys switch. A dot on a tab means something in it changed. All of it comes
+back on the next launch.
+
+![Four tabs named after their filters](../../assets/screenshots/tabs.png)
+
 ## The preview spells it out
 
 `p` opens the same five columns with their meaning written out — *Author's move — 2 open
@@ -66,8 +75,7 @@ browser. A branch update shows `↻` until the next refresh proves it landed.
 ## Filter as you type
 
 `/` narrows the list live: `@me`, `@theo`, `repo:api`, `state:draft`, `>unread`, `>marked`,
-free text against the title, or paste a PR URL. Every filter can become a tab (`t`), and tabs
-survive a restart.
+free text against the title, or paste a PR URL. Anything you type here can be a tab.
 
 ![The filter prompt with suggestions](../../assets/screenshots/filter.png)
 

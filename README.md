@@ -6,6 +6,8 @@
 
 <p align="center">Every open PR across the repos you watch, in one list — and, for each one, whose move it is.</p>
 
+<p align="center"><a href="https://candril.github.io/presto/"><strong>Documentation</strong></a> · <a href="https://candril.github.io/presto/guide/installation/">Install</a> · <a href="https://candril.github.io/presto/reference/key-bindings/">Key bindings</a> · <a href="https://candril.github.io/presto/reference/status-columns/">Status columns</a></p>
+
 > [!CAUTION]
 > presto is young, spec-first, and was largely written with an AI pair. It talks to GitHub through the [`gh`](https://cli.github.com) CLI and it *writes* — reviews, merges, auto-merge, branch updates, workflow runs. Try it on repos you don't mind poking at, and expect rough edges.
 
@@ -23,6 +25,12 @@ A row carries five glyphs: **S**tate, **C**hecks, **R**eview, **B**ase, **M**erg
 
 <img src="site/src/assets/screenshots/list.png" alt="The list: state, checks, review, base and merge columns for every open PR across three repos" width="100%" />
 
+### One tab per question
+
+`t` opens a new tab, `/` gives it a filter, and the name follows — *My PRs*, *Drafts*, *infra*, *Unread*. Every tab reads the same list, so five tabs cost one refresh; each keeps its own cursor; number keys switch; a dot means something in it changed. They are all there again on the next launch.
+
+<img src="site/src/assets/screenshots/tabs.png" alt="Four tabs named after their filters, one with an unread dot" width="100%" />
+
 ### The preview spells it out
 
 `p` opens the same five columns with their meaning written out — *Author's move — 2 open comment threads to resolve* — then comments, reviews, the description as Markdown, files and commits.
@@ -37,7 +45,7 @@ A row carries five glyphs: **S**tate, **C**hecks, **R**eview, **B**ase, **M**erg
 
 ### Filter as you type, know what changed
 
-`/` narrows the list live — `@me`, `repo:api`, `state:draft`, `>unread`, free text, or a pasted PR URL — and `t` makes it a tab. Every refresh is diffed against the last: changed PRs get a dot and a toast.
+`/` narrows the list live — `@me`, `repo:api`, `state:draft`, `>unread`, free text, or a pasted PR URL. Every refresh is diffed against the last: changed PRs get a dot and a toast.
 
 <img src="site/src/assets/screenshots/toast.png" alt="A refresh toast listing what changed, with unread dots on the rows" width="100%" />
 
