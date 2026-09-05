@@ -60,11 +60,27 @@ in `site/src/assets/screenshots/`.
 just demo-gif         # → site/src/assets/presto-demo.gif
 ```
 
-Same machinery: `docs/demo.txt` is a list of `hold-seconds | keys | keycap | caption`
-steps, `scripts/demo.sh` plays them into one `presto --demo` session, captures a frame
-after each, and the renderer assembles the frames into a GIF at half size. The keycap
-and caption are drawn on a translucent panel low over the frame — without them the tour
-is a list flickering through states nobody can name — so every step says which keys
-were pressed and what they did. Give every step a caption: a step without one drops the
-panel, and it reads as a glitch. Edit the steps to change the tour; it comes out
-identical every time.
+Same machinery: `docs/demo.txt` is a list of `hold | keys | keycap | caption` steps,
+`scripts/demo.sh` plays them into one `presto --demo` session, captures a frame after
+each, and the renderer assembles the frames into a GIF at half size.
+
+The keycap and caption are drawn on a translucent panel low over the frame — without
+them the tour is a list flickering through states nobody can name — so every step says
+which keys were pressed and what they did. Give every step a caption: a step without one
+drops the panel, and it reads as a glitch.
+
+`hold` is seconds, or `auto` to derive the dwell from the caption's word count. Prefer
+`auto`: a caption nobody can finish reading is the same as no caption, and a hand-picked
+number goes stale the moment the wording changes. Keep captions short — every word is
+dwell time, and a minute is already a long loop for a README.
+
+A step whose keys are only cursor keys (`j k g G`, with counts such as `5k`) gets the
+selected row ringed in amber, with an arrow from where it was in the previous frame. A
+jump down the list is otherwise a cut between two dense stills, and no amount of extra
+dwell tells you which of twenty rows is the one that changed. Fold `Escape`, `BSpace`
+and a closing `p` into the next step's keys rather than spending a frame on them.
+
+The frames share one palette so the writer stores only what changed between them; that,
+not the colour count, is what keeps a tour of this size around a megabyte.
+
+Edit the steps to change the tour; it comes out identical every time.
