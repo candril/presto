@@ -24,14 +24,12 @@ hero:
 import { Aside } from '@astrojs/starlight/components'
 
 <Aside type="caution">
-presto is young and built spec-first — every feature traces to a numbered spec in
-[`specs/`](https://github.com/candril/presto/tree/main/specs). It talks to GitHub through the
-[`gh`](https://cli.github.com) CLI and it *writes*: reviews, merges, auto-merge, branch updates,
-workflow runs. Try it on repos you don't mind poking at.
+**Spec-driven, AI-generated.** Every feature in presto starts as a numbered spec in [`specs/`](https://github.com/candril/presto/tree/main/specs), and the code and this documentation were generated from those specs with an AI pair. Use it with care: presto *writes* to GitHub — reviews, merges, auto-merge, branch updates, workflow runs. Start with `presto --demo`, then point it at repos you don't mind poking at.
 </Aside>
 
 ```sh
-nix run github:candril/presto -- --demo    # the built-in demo — no GitHub, no config
+brew install candril/tap/presto         # or: nix run github:candril/presto
+presto --demo                           # the built-in demo — no GitHub, no config
 ```
 
 ![The README demo](../../assets/presto-demo.gif)

@@ -1,79 +1,32 @@
+# The binary comes from candril/homebrew-tap, which packages every release of the five
+# tools from the same SHA256SUMS the installer and the Homebrew formula verify against.
+# There is deliberately no flake.lock here: `nix run github:candril/presto` should
+# resolve the tap fresh and land on the latest release, not the one pinned at commit time.
+#
+# Generated from candril/homebrew-tap/templates/flake.nix; edit it there.
 {
-  description = "Presto - Terminal-based pull request discovery and management tool";
+  description = "presto — packaged from its GitHub releases via candril/homebrew-tap";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    tap.url = "github:candril/homebrew-tap";
+    nixpkgs.follows = "tap/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
+  outputs = { self, tap, nixpkgs }:
+    let
+      systems = builtins.attrNames tap.packages;
+      forAll = f: nixpkgs.lib.genAttrs systems f;
+    in {
+      packages = forAll (system: {
+        default = tap.packages.${system}.presto;
+      });
 
-        version = (builtins.fromJSON (builtins.readFile ./package.json)).version;
-
-        bunDeps = pkgs.stdenvNoCC.mkDerivation {
-          pname = "presto-deps";
-          inherit version;
-          src = pkgs.lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type:
-              builtins.elem (baseNameOf path) [ "package.json" "bun.lock" ];
+      devShells = forAll (system:
+        let pkgs = nixpkgs.legacyPackages.${system};
+        in {
+          default = pkgs.mkShell {
+            packages = with pkgs; [ bun just gh git typescript ];
           };
-
-          nativeBuildInputs = [ pkgs.bun ];
-
-          buildPhase = ''
-            export HOME=$TMPDIR
-            bun install --frozen-lockfile
-          '';
-
-          installPhase = ''
-            cp -r node_modules $out
-          '';
-
-          outputHashAlgo = "sha256";
-          outputHashMode = "recursive";
-          outputHash = "sha256-jIzDxDOviOzhyfel2l8aTaAkGFBfItxCgBPj5oVQ9AU=";
-        };
-
-      in {
-        packages.default = pkgs.stdenvNoCC.mkDerivation {
-          pname = "presto";
-          inherit version;
-          src = pkgs.lib.cleanSource ./.;
-
-          nativeBuildInputs = [ pkgs.bun pkgs.makeWrapper ];
-
-          buildPhase = ''
-            export HOME=$TMPDIR
-            cp -r ${bunDeps} node_modules
-            chmod -R u+w node_modules
-            bun scripts/build.ts
-          '';
-
-          installPhase = ''
-            install -Dm755 dist/presto $out/bin/presto
-            wrapProgram $out/bin/presto \
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.gh pkgs.git ]}
-          '';
-        };
-
-        devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
-            bun
-            just
-            gh
-            typescript
-            git
-          ];
-
-          shellHook = ''
-            echo "presto dev shell"
-            echo "  bun $(bun --version) | just $(just --version | head -1) | gh $(gh --version | head -1)"
-          '';
-        };
-      }
-    );
+        });
+    };
 }

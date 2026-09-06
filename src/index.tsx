@@ -9,7 +9,7 @@ import { getCurrentUser, initSource, usePRSource } from "./providers"
 import { createDemoSource, demoRepositories } from "./providers/demo"
 import { setupFocusReporting, type FocusCallback } from "./utils/focus-reporting"
 import { initBotPatterns } from "./utils/bots"
-import pkg from "../package.json"
+import { version } from "./version"
 
 const args = process.argv.slice(2)
 
@@ -28,7 +28,7 @@ Docs:   https://candril.github.io/presto/`)
   process.exit(0)
 }
 if (args.includes("--version") || args.includes("-v")) {
-  console.log(`presto ${pkg.version}`)
+  console.log(`presto ${version}`)
   process.exit(0)
 }
 

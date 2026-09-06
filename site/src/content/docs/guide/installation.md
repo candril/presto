@@ -5,26 +5,48 @@ description: Install presto, point it at your repos, and run it.
 
 ## Install
 
-### Nix
+Prebuilt binaries for macOS (Apple Silicon and Intel) and Linux (x64 and arm64), by any of three
+routes. All three install the same binary: the one attached to the latest
+[release](https://github.com/candril/presto/releases), verified against its `SHA256SUMS`.
 
-Run it without installing anything:
+### Homebrew
 
 ```sh
-nix run github:candril/presto
+brew install candril/tap/presto
 ```
 
-Or add it to your flake inputs:
+The tap is [candril/homebrew-tap](https://github.com/candril/homebrew-tap); `brew upgrade` picks
+up new releases.
 
-```nix
-{
-  inputs.presto.url = "github:candril/presto";
+### Nix
 
-  # then, in your system or home-manager config:
-  environment.systemPackages = [ inputs.presto.packages.${system}.default ];
-}
+```sh
+nix run github:candril/presto                 # run it once
+nix profile install github:candril/presto     # keep it
 ```
 
-The package wraps the binary with `gh` and `git` on its `PATH`, so nothing else is needed.
+Or as a flake input — `inputs.presto.url = "github:candril/presto"`, then
+`inputs.presto.packages.${system}.default`. The flake is deliberately unlocked and re-exports
+the package from the tap, so it always resolves to the latest release.
+
+The package wraps `gh` and `git` onto the binary's `PATH`, so nothing else is needed.
+
+### Installer script
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/candril/presto/main/scripts/install.sh | bash
+```
+
+The installer detects your platform, downloads the latest release, verifies its SHA256 against the
+release's `SHA256SUMS`, and puts `presto` in `/usr/local/bin`. Two variables change that:
+
+```sh
+PRESTO_INSTALL_DIR=~/.local/bin …   # somewhere else on your PATH
+PRESTO_VERSION=0.1.0 …              # a specific release
+```
+
+Or download `presto-<os>-<arch>.gz` from the releases page by hand, `gunzip` it, and put it on
+your `PATH`.
 
 ### From source
 

@@ -9,10 +9,11 @@
 <p align="center"><a href="https://candril.github.io/presto/"><strong>Documentation</strong></a> · <a href="https://candril.github.io/presto/guide/installation/">Install</a> · <a href="https://candril.github.io/presto/reference/key-bindings/">Key bindings</a> · <a href="https://candril.github.io/presto/reference/status-columns/">Status columns</a></p>
 
 > [!CAUTION]
-> presto is young, spec-first, and was largely written with an AI pair. It talks to GitHub through the [`gh`](https://cli.github.com) CLI and it *writes* — reviews, merges, auto-merge, branch updates, workflow runs. Try it on repos you don't mind poking at, and expect rough edges.
+> **Spec-driven, AI-generated.** Every feature in presto starts as a numbered spec in [`specs/`](specs/), and the code and this documentation were generated from those specs with an AI pair. Use it with care: presto *writes* to GitHub — reviews, merges, auto-merge, branch updates, workflow runs. Start with `presto --demo`, then point it at repos you don't mind poking at.
 
 ```sh
-nix run github:candril/presto -- --demo    # the built-in demo — no GitHub, no config
+brew install candril/tap/presto         # or: nix run github:candril/presto
+presto --demo                           # the built-in demo — no GitHub, no config
 ```
 
 <img src="site/src/assets/presto-demo.gif" alt="presto demo" width="100%" />
@@ -52,10 +53,23 @@ A row carries five glyphs: **S**tate, **C**hecks, **R**eview, **B**ase, **M**erg
 ## Install
 
 ```sh
-nix run github:candril/presto          # or add github:candril/presto to your flake inputs
+brew install candril/tap/presto
 ```
 
-Or from source with [Bun](https://bun.sh): `git clone https://github.com/candril/presto.git && cd presto && bun install && bun src/index.tsx`. Needs the [GitHub CLI](https://cli.github.com), logged in.
+```sh
+nix run github:candril/presto              # try it; `nix profile install github:candril/presto` keeps it
+```
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/candril/presto/main/scripts/install.sh | bash
+```
+
+All three install the same binary — the one attached to the latest
+[release](https://github.com/candril/presto/releases), verified against its `SHA256SUMS` — prebuilt
+for macOS (Apple Silicon, Intel) and Linux (x64, arm64). The installer puts it in `/usr/local/bin`;
+`PRESTO_INSTALL_DIR=~/.local/bin` moves it, `PRESTO_VERSION=0.1.0` pins it. Needs the [GitHub CLI](https://cli.github.com), logged in.
+
+From source, with [Bun](https://bun.sh): `git clone https://github.com/candril/presto.git && cd presto && bun install && just install-bin`.
 
 ## Setup
 
@@ -90,3 +104,7 @@ Features are specified before they are built — see [`specs/`](./specs). The de
 ## License
 
 MIT
+
+---
+
+<p align="center"><sub>One of five terminal tools from <a href="https://github.com/candril">candril</a> — one spec-first process, the same three installers:<br><a href="https://candril.github.io/lane/">lane</a> (Jira) · <a href="https://candril.github.io/monq/">monq</a> (MongoDB) · <a href="https://candril.github.io/presto/">presto</a> (pull requests) · <a href="https://candril.github.io/riff/">riff</a> (code review) · <a href="https://candril.github.io/topiq/">topiq</a> (Kafka)</sub></p>

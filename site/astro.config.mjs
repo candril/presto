@@ -44,6 +44,9 @@ export default defineConfig({
           ],
         },
       ],
+      components: {
+        Footer: './src/components/Footer.astro',
+      },
       customCss: ['./src/styles/custom.css'],
     }),
   ],
