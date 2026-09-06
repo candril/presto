@@ -1,0 +1,9 @@
+{
+  "version": "0.1.0",
+  "sha256": {
+    "darwin-arm64": "a2be9acd8a17bb970f22f2c72cfa2de47ed82ca7adcca94c42dda49a7d0d5141",
+    "darwin-x64": "64c3ce8c71850e9317df689d73233a5223708555f3f00ec0a6d795c835f941af",
+    "linux-arm64": "b7ce5e11582686ce0c645c3ac8c10d25a779b9a3b990c2e8f2bb59f893cb634e",
+    "linux-x64": "41cdc90ae7c66c31f5a24b2e719530e2c1715918515ee03f9850bb305dd04e2d"
+  }
+}

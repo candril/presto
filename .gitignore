@@ -26,6 +26,3 @@ Thumbs.db
 
 # TypeScript incremental build state
 tsconfig.tsbuildinfo
-
-# Nix: the flake is deliberately unlocked (see flake.nix)
-flake.lock
