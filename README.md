@@ -87,6 +87,15 @@ starred_only = true    # only PRs from authors you have starred (s)
 Every key, the filter grammar, the column legend and the full keymap are in the
 **[docs](https://candril.github.io/presto/)**. Press `?` in the app for the keymap.
 
+## The other terminal tools
+
+presto is one of five, built the same way and installed the same way (`brew install candril/tap/<tool>`, `nix run github:candril/<tool>`, or the curl installer):
+
+- [**lane**](https://candril.github.io/lane/) — Your Jira board, in the terminal. Read it, move it, and never touch the mouse.
+- [**monq**](https://candril.github.io/monq/) — Browse, query, edit. MongoDB without leaving the terminal.
+- [**riff**](https://candril.github.io/riff/) — Review the diff where you wrote it: PRs, branches and working-copy changes, with vim motions and inline comments.
+- [**topiq**](https://candril.github.io/topiq/) — Peek, filter, replay. Kafka without leaving the terminal.
+
 ## Development
 
 ```sh
