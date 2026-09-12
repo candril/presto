@@ -1,6 +1,6 @@
 {
   "name": "presto",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Terminal-based pull request discovery and management tool",
   "module": "src/index.tsx",
   "type": "module",

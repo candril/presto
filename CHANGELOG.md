@@ -7,6 +7,8 @@ release, so write it before tagging.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-12
+
 ### Changed
 
 - **OpenTUI 0.1.87 to 0.5.11**, the terminal renderer everything is drawn with, together with
@@ -17,6 +19,8 @@ release, so write it before tagging.
   rather than floating on a caret range.
 - GitHub Actions moved to the Node 24 majors ahead of Node 20 being removed from hosted runners on
   23 September 2026.
+- The build now declares the minimum Bun it needs and refuses to run below it, so an incompatible
+  runtime says so instead of failing later with an unexplained internal error.
 
 ## [0.1.0] - 2026-09-06
 
@@ -40,5 +44,6 @@ First release.
 - Prebuilt binaries for macOS (arm64, x64) and Linux (x64, arm64), a curl installer, a
   Homebrew formula and a Nix package via [candril/homebrew-tap](https://github.com/candril/homebrew-tap).
 
-[Unreleased]: https://github.com/candril/presto/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/candril/presto/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/candril/presto/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/candril/presto/releases/tag/v0.1.0
