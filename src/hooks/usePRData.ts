@@ -171,7 +171,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   const fullyFetchedRepos = useRef<Set<string>>(new Set())
   const fetchedClosedRepos = useRef<Set<string>>(new Set())
   const fetchedMergedRepos = useRef<Set<string>>(new Set())
-  const closedMergedDebounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const closedMergedDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
 
   // Epoch counter to re-trigger background fetch effects after a refresh

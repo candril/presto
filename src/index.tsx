@@ -65,7 +65,7 @@ const [currentUser] = await Promise.all([
 // Create renderer and mount app
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
-  useConsole: true,
+  consoleMode: "console-overlay",
   consoleOptions: {
     position: ConsolePosition.BOTTOM,
     sizePercent: 30,

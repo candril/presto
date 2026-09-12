@@ -16,15 +16,15 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/react": "^18.2.0"
+    "@types/react": "^19.3.0"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
-    "@opentui/core": "^0.1.81",
-    "@opentui/react": "^0.1.81",
-    "react": "19",
+    "@opentui/core": "0.5.11",
+    "@opentui/react": "0.5.11",
+    "react": "19.3.0",
     "smol-toml": "^1.6.0",
     "yaml": "^2.8.3"
   },
