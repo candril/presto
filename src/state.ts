@@ -12,6 +12,7 @@ import { getInitialTabsState, duplicateTab, generateTabTitle } from "./tabs"
 export type AppAction =
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "SET_REFRESHING"; refreshing: boolean }
+  | { type: "SET_CLOSED_MERGED_LOADING"; loading: boolean }
   | { type: "SET_LAST_REFRESH"; time: Date }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_PRS"; prs: PR[] }
@@ -77,6 +78,7 @@ export function createInitialState(): AppState {
     selectedIndex: 0,
     loading: !hasCachedPRs,
     refreshing: false,
+    closedMergedLoading: false,
     lastRefresh: null,
     error: null,
     discoveryVisible: false,
@@ -144,6 +146,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "SET_REFRESHING":
       return { ...state, refreshing: action.refreshing }
+
+    case "SET_CLOSED_MERGED_LOADING":
+      return { ...state, closedMergedLoading: action.loading }
 
     case "SET_LAST_REFRESH":
       return { ...state, lastRefresh: action.time }

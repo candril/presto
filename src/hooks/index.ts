@@ -2,7 +2,7 @@
  * Custom hooks for PResto
  */
 
-export { usePRData } from "./usePRData"
+export { usePRData, describeClosedMergedStates } from "./usePRData"
 export { useFiltering } from "./useFiltering"
 export { useKeyboardNav } from "./useKeyboardNav"
 export { useMessage } from "./useMessage"

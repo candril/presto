@@ -13,6 +13,19 @@ import { getRepoName } from "../types"
 import type { AppAction } from "../state"
 import type { ParsedFilter } from "../discovery"
 
+/** One repo's closed-or-merged query, with the claim that keeps it from being fired twice */
+interface RepoFetch {
+  cacheKey: string
+  claimed: Set<string>
+  list: () => Promise<PR[]>
+}
+
+/** Names the states a closed/merged fetch covers, for user-facing text */
+export function describeClosedMergedStates(wantsClosed: boolean, wantsMerged: boolean): string {
+  if (wantsClosed && wantsMerged) return "closed and merged"
+  return wantsMerged ? "merged" : "closed"
+}
+
 interface UsePRDataOptions {
   config: Config
   filter: ParsedFilter
@@ -172,6 +185,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   const fetchedClosedRepos = useRef<Set<string>>(new Set())
   const fetchedMergedRepos = useRef<Set<string>>(new Set())
   const closedMergedDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const closedMergedInFlight = useRef(0)
   const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
 
   // Epoch counter to re-trigger background fetch effects after a refresh
@@ -535,82 +549,109 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     })
   }, [filter.repos.join(","), refreshEpoch])
 
-  // Track which repos have had closed/merged PRs fetched
-  // Cache key includes author to re-fetch when author filter changes
-
   // Fetch closed/merged PRs when state:closed or state:merged filter is active
   useEffect(() => {
     const wantsClosed = filter.states.includes("closed")
     const wantsMerged = filter.states.includes("merged")
-    
+
     if (!wantsClosed && !wantsMerged) return
 
-    // Clear previous debounce timer
+    // Get repos to fetch from - either filtered repos or enabled repos
+    const enabledRepos = config.repositories
+      .filter((r) => !r.disabled)
+      .map((r) => r.name)
+
+    // If repo filter is active, only fetch those repos
+    let reposToCheck = enabledRepos
+    if (filter.repos.length > 0) {
+      reposToCheck = enabledRepos.filter((repo) =>
+        filter.repos.some((f) => repo.toLowerCase().includes(f))
+      )
+    }
+
+    // Include author in cache key so we re-fetch when author filter changes
+    const author = filter.authors.length > 0 ? filter.authors[0] : undefined
+    const cacheKeySuffix = author ? `@${author}` : ""
+
+    const planned: RepoFetch[] = []
+    const planFetches = (claimed: Set<string>, list: (repo: string) => Promise<PR[]>) => {
+      for (const repo of reposToCheck) {
+        const cacheKey = `${repo.toLowerCase()}${cacheKeySuffix}`
+        if (claimed.has(cacheKey)) continue
+        planned.push({ cacheKey, claimed, list: () => list(repo) })
+      }
+    }
+    if (wantsClosed) {
+      planFetches(fetchedClosedRepos.current, (repo) => listClosedPRs(repo, { author }))
+    }
+    if (wantsMerged) {
+      planFetches(fetchedMergedRepos.current, (repo) => listMergedPRs(repo, { author }))
+    }
+
+    if (planned.length === 0) return
+
+    // Announce the fetch before the debounce, not after it: these PRs are never in the
+    // open-PR list, so until the first repo answers the list is empty and would otherwise
+    // read as "nothing matched" for the debounce plus a full `gh` round trip.
+    dispatch({ type: "SET_CLOSED_MERGED_LOADING", loading: true })
+
     if (closedMergedDebounceRef.current) {
       clearTimeout(closedMergedDebounceRef.current)
     }
 
     closedMergedDebounceRef.current = setTimeout(() => {
-      // Get repos to fetch from - either filtered repos or enabled repos
-      const enabledRepos = config.repositories
-        .filter((r) => !r.disabled)
-        .map((r) => r.name)
-      
-      // If repo filter is active, only fetch those repos
-      let reposToCheck = enabledRepos
-      if (filter.repos.length > 0) {
-        reposToCheck = enabledRepos.filter((repo) =>
-          filter.repos.some((f) => repo.toLowerCase().includes(f))
-        )
-      }
+      closedMergedDebounceRef.current = undefined
 
-      // Include author in cache key so we re-fetch when author filter changes
-      const author = filter.authors.length > 0 ? filter.authors[0] : undefined
-      const cacheKeySuffix = author ? `@${author}` : ""
+      // Re-check the claims: this run planned against the sets as they were 300ms ago
+      const starting = planned.filter(({ cacheKey, claimed }) => {
+        if (claimed.has(cacheKey)) return false
+        claimed.add(cacheKey)
+        return true
+      })
 
-      const fetchPromises: Promise<PR[]>[] = []
-
-      // Fetch closed PRs if needed
-      if (wantsClosed) {
-        for (const repo of reposToCheck) {
-          const cacheKey = `${repo.toLowerCase()}${cacheKeySuffix}`
-          if (fetchedClosedRepos.current.has(cacheKey)) continue
-          fetchedClosedRepos.current.add(cacheKey)
-          fetchPromises.push(listClosedPRs(repo, { author }).catch(() => []))
+      if (starting.length === 0) {
+        if (closedMergedInFlight.current === 0) {
+          dispatch({ type: "SET_CLOSED_MERGED_LOADING", loading: false })
         }
+        return
       }
 
-      // Fetch merged PRs if needed
-      if (wantsMerged) {
-        for (const repo of reposToCheck) {
-          const cacheKey = `${repo.toLowerCase()}${cacheKeySuffix}`
-          if (fetchedMergedRepos.current.has(cacheKey)) continue
-          fetchedMergedRepos.current.add(cacheKey)
-          fetchPromises.push(listMergedPRs(repo, { author }).catch(() => []))
-        }
-      }
+      closedMergedInFlight.current += starting.length
+      dispatch({ type: "SET_REFRESHING", refreshing: true })
 
-      if (fetchPromises.length > 0) {
-        const stateLabel = wantsMerged ? "merged" : "closed"
-        dispatch({ type: "SET_REFRESHING", refreshing: true })
-        dispatch({ type: "SHOW_MESSAGE", message: `Loading ${stateLabel} PRs${author ? ` by @${author}` : ""}...` })
-        
-        Promise.all(fetchPromises).then((results) => {
-          const allPRs = results.flat()
-          if (allPRs.length > 0) {
-            dispatch({ type: "APPEND_PRS", prs: allPRs })
-            dispatch({ type: "SHOW_MESSAGE", message: `Found ${allPRs.length} ${stateLabel} PR${allPRs.length === 1 ? "" : "s"}` })
-          } else {
-            dispatch({ type: "CLEAR_MESSAGE" })
-          }
-          dispatch({ type: "SET_REFRESHING", refreshing: false })
-        })
+      let failed = 0
+      for (const { cacheKey, claimed, list } of starting) {
+        list()
+          .then((prs) => {
+            // Append per repo rather than awaiting them all: one slow repo would
+            // otherwise hold back every result behind it
+            if (prs.length > 0) dispatch({ type: "APPEND_PRS", prs })
+          })
+          .catch(() => {
+            // Release the claim so the next filter change retries this repo instead of
+            // leaving its PRs missing until a manual refresh clears the cache
+            claimed.delete(cacheKey)
+            failed++
+          })
+          .finally(() => {
+            closedMergedInFlight.current--
+            if (closedMergedInFlight.current > 0) return
+            dispatch({ type: "SET_REFRESHING", refreshing: false })
+            dispatch({ type: "SET_CLOSED_MERGED_LOADING", loading: false })
+            if (failed === starting.length) {
+              const stateLabel = describeClosedMergedStates(wantsClosed, wantsMerged)
+              dispatch({ type: "SHOW_MESSAGE", message: `Failed to load ${stateLabel} PRs` })
+            }
+          })
       }
     }, 300)
 
     return () => {
-      if (closedMergedDebounceRef.current) {
-        clearTimeout(closedMergedDebounceRef.current)
+      if (!closedMergedDebounceRef.current) return
+      clearTimeout(closedMergedDebounceRef.current)
+      closedMergedDebounceRef.current = undefined
+      if (closedMergedInFlight.current === 0) {
+        dispatch({ type: "SET_CLOSED_MERGED_LOADING", loading: false })
       }
     }
   }, [filter.states.join(","), filter.repos.join(","), filter.authors.join(","), config.repositories, refreshEpoch])

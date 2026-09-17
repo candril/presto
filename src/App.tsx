@@ -38,6 +38,7 @@ import { theme } from "./theme"
 import type { Config } from "./config"
 import {
   usePRData,
+  describeClosedMergedStates,
   useFiltering,
   useKeyboardNav,
   useMessage,
@@ -87,6 +88,14 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     setHistory,
     currentUser,
   })
+
+  // The states a closed/merged fetch is covering, or null when the filter wants neither.
+  // A fetch can outlive its filter, and without this check its flag would relabel an
+  // ordinary empty result as a search.
+  const wantsClosed = filter.states.includes("closed")
+  const wantsMerged = filter.states.includes("merged")
+  const searchingStates =
+    wantsClosed || wantsMerged ? describeClosedMergedStates(wantsClosed, wantsMerged) : null
 
   // Feature: Notifications - detect changes when PRs update
   // Use refs to avoid infinite loop: handlePRsUpdated -> setHistory -> new callback -> effect re-runs
@@ -312,6 +321,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
               <text fg={theme.error}>Error: {state.error}</text>
               <text fg={theme.textDim}>Press {config.keys.refresh} to retry</text>
             </box>
+          ) : searchingStates && state.closedMergedLoading && filteredPRs.length === 0 ? (
+            <Loading message={`Searching ${searchingStates} pull requests...`} />
           ) : (
             <PRList 
               prs={filteredPRs} 

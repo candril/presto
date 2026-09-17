@@ -47,8 +47,9 @@ Additionally, marked PRs from configured repos that have been closed/merged are 
 
 - **Fetch status feedback**: Show clear UI feedback during background fetches
   - Reuse existing refreshing indicator (spinner in header)
-  - Show toast message: "Loading PRs for @user..." / "Loading merged PRs..."
-  - On completion: "Found N additional PRs" (only if new PRs were added)
+  - Show toast message: "Loading PRs for @user..."
+  - For `state:closed` / `state:merged`, spec 044 governs the feedback: a searching
+    state in the list, no progress or completion toasts
 
 ### P2 - Should Have
 

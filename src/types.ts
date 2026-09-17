@@ -518,6 +518,8 @@ export interface AppState {
   loading: boolean
   /** Background refresh (shows ↻ in header) */
   refreshing: boolean
+  /** A state:closed / state:merged fetch is queued or in flight (spec 044) */
+  closedMergedLoading: boolean
   /** Last successful refresh timestamp */
   lastRefresh: Date | null
   error: string | null

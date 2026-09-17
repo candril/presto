@@ -168,7 +168,9 @@ async function listPRsByState(
     return prs
   } catch (error) {
     log.fail(error)
-    return []
+    // Rethrow: an empty array would be indistinguishable from "this repo has no
+    // matches", and the caller would record the repo as fetched.
+    throw error
   }
 }
 
