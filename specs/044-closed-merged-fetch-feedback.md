@@ -25,6 +25,9 @@ filter reads as "searching" rather than "nothing here, and here is an odd toast"
   recognised, before the 300ms debounce, so no empty flash precedes it.
 - **Results stream per repo**: each repo's result is appended as it arrives, instead of
   every repo waiting on the slowest one.
+- **A refresh keeps the results**: `SET_PRS` replaces the list with open PRs, which these
+  are not, so every refresh emptied the list under a `state:merged` filter and re-queried
+  every repo to refill it. What the backfill found is kept and put straight back.
 - **Failed repos stay retryable**: a repo whose query fails is not recorded as fetched,
   so the next filter change or refresh retries it. A failure currently looks like an
   empty result, which is why some PRs only appear after a manual refresh.
@@ -57,6 +60,12 @@ fetch per repo), and gains:
 - `APPEND_PRS` per repo rather than one `Promise.all`
 - `fetched.delete(cacheKey)` in the per-repo catch
 
+The backfilled PRs are kept in a `closedMergedPRs` ref, keyed by URL, and re-appended
+right after each `SET_PRS` in `fetchPRs`. The re-query still runs — a refresh should bring
+fresh data — but the list no longer empties while it is in flight. `APPEND_PRS` returns
+the state unchanged when it adds nothing, so a restore that finds everything already
+present costs no render.
+
 `AppState` gains `closedMergedLoading`, set as soon as the effect finds repos to query.
 `App.tsx` renders `<Loading>` when the filter asks for closed or merged PRs, the flag is
 set, and the filtered list is empty — the filter check keeps a fetch that outlives its
@@ -68,7 +77,8 @@ filter from mislabelling an ordinary empty result.
 src/
 ├── providers/github.ts   # listPRsByState rethrows instead of returning []
 ├── types.ts              # AppState.closedMergedLoading
-├── state.ts              # SET_CLOSED_MERGED_LOADING
-├── hooks/usePRData.ts    # streaming fetch, retry on failure, loading flag
+├── state.ts              # SET_CLOSED_MERGED_LOADING, APPEND_PRS no-op
+├── hooks/usePRData.ts    # streaming fetch, retry on failure, loading flag,
+│                         # restore backfilled PRs after a refresh
 └── App.tsx               # searching spinner for the empty list
 ```

@@ -176,6 +176,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // Merge new PRs, avoiding duplicates by PR URL, keep sorted by updatedAt
       const existingUrls = new Set(state.prs.map(pr => pr.url))
       const newPRs = action.prs.filter(pr => !existingUrls.has(pr.url))
+      // Same list, same state: a re-render here would send every PR back through change
+      // detection for nothing
+      if (newPRs.length === 0) return state
       const allPRs = [...state.prs, ...newPRs].sort(
         (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       )

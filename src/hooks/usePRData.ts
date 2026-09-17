@@ -186,6 +186,19 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   const fetchedMergedRepos = useRef<Set<string>>(new Set())
   const closedMergedDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const closedMergedInFlight = useRef(0)
+  // What the closed/merged backfill has found, keyed by URL. A refresh replaces the whole
+  // list with open PRs, and these are in none of them.
+  const closedMergedPRs = useRef<Map<string, PR>>(new Map())
+
+  /**
+   * Put the backfilled closed/merged PRs back after `SET_PRS` has replaced the list.
+   * A refresh re-queries them too, but that is a `gh` round trip per repo, and until it
+   * lands a state:merged filter would be looking at an empty list.
+   */
+  const restoreClosedMergedPRs = useCallback(() => {
+    const known = [...closedMergedPRs.current.values()]
+    if (known.length > 0) dispatch({ type: "APPEND_PRS", prs: known })
+  }, [dispatch])
   const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
 
   // Epoch counter to re-trigger background fetch effects after a refresh
@@ -262,6 +275,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         
         // Dispatch priority PRs immediately for fast UI update
         dispatch({ type: "SET_PRS", prs: priorityPRs })
+        restoreClosedMergedPRs()
         dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
         
         // Background load: rest of configured repos + tracked PRs + missing marked PRs
@@ -315,6 +329,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
               // Update with full data, then bump epoch to re-trigger background effects
               dispatch({ type: "SET_PRS", prs: backgroundPRs })
+              restoreClosedMergedPRs()
               setRefreshEpoch(e => e + 1)
               saveCache(backgroundPRs.filter(pr => {
                 const repoName = getRepoName(pr).toLowerCase()
@@ -368,6 +383,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         }
 
         dispatch({ type: "SET_PRS", prs: allFetchedPRs })
+        restoreClosedMergedPRs()
         dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
         // Bump epoch so background fetch effects re-run (caches were cleared above)
         setRefreshEpoch(e => e + 1)
@@ -390,7 +406,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         dispatch({ type: "SHOW_MESSAGE", message: "Refresh failed (offline?) — showing cached PRs" })
       }
     }
-  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos])
+  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreClosedMergedPRs])
 
   // Revalidate on mount - PRs are already hydrated from cache in createInitialState()
   // so always do a background refresh (stale data shows immediately)
@@ -623,9 +639,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       for (const { cacheKey, claimed, list } of starting) {
         list()
           .then((prs) => {
+            if (prs.length === 0) return
+            for (const pr of prs) closedMergedPRs.current.set(pr.url, pr)
             // Append per repo rather than awaiting them all: one slow repo would
             // otherwise hold back every result behind it
-            if (prs.length > 0) dispatch({ type: "APPEND_PRS", prs })
+            dispatch({ type: "APPEND_PRS", prs })
           })
           .catch(() => {
             // Release the claim so the next filter change retries this repo instead of

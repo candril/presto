@@ -12,6 +12,9 @@ release, so write it before tagging.
 - `state:merged` and `state:closed` no longer read as "No pull requests found" while the
   query is still running: the list says it is searching, each repo's results appear as
   they arrive instead of behind the slowest one, and the progress toasts are gone.
+- A refresh no longer empties the list under `state:merged` or `state:closed`. The
+  refresh replaces the list with open PRs, which these are not, so they vanished for as
+  long as it took to query every repo again.
 - A repo whose closed/merged query fails is retried on the next filter change. It used to
   be recorded as fetched, so its PRs stayed missing until a manual refresh.
 
