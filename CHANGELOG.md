@@ -7,6 +7,19 @@ release, so write it before tagging.
 
 ## [Unreleased]
 
+### Added
+
+- **Rows fade as they age.** A PR nobody has touched for three weeks dims, one untouched for
+  six sits at the floor, and the status glyphs keep their colour throughout — an old PR with
+  a failing check is still the one that catches the eye. `[display] fade_after_days` and
+  `fade_floor` tune it; `fade_after_days = 0` turns it off.
+
+- An `@author` filter now fetches that person's open PRs instead of only filtering the
+  ones already loaded. The initial load is the 50 most recently updated open PRs per repo,
+  so on a busy repo somebody's older PR was missing from their own tab entirely — it is
+  asked for by name now, per repo, as each answer arrives. What it finds stays on screen
+  across a refresh, and a refresh only re-asks about the people whose tab is open.
+
 ### Fixed
 
 - `state:merged` and `state:closed` no longer read as "No pull requests found" while the

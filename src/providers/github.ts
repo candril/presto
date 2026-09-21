@@ -200,7 +200,9 @@ export async function listPRsByAuthor(
     return prs
   } catch (error) {
     log.fail(error)
-    return []
+    // Thrown, not swallowed: the caller releases its claim on this repo so the next
+    // filter change retries it. An empty array would read as "this person has none".
+    throw error
   }
 }
 

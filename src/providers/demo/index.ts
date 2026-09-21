@@ -38,6 +38,11 @@ export function createDemoSource(): PRSource {
     },
     listClosedPRs: (repo, options) => listByState(repo, ["CLOSED"], options?.author),
     listMergedPRs: (repo, options) => listByState(repo, ["MERGED"], options?.author),
+    listPRsByAuthor: (repo, author, state = "all") => {
+      const states: Array<PR["state"]> =
+        state === "open" ? ["OPEN"] : state === "closed" ? ["CLOSED"] : state === "merged" ? ["MERGED"] : ["OPEN", "CLOSED", "MERGED"]
+      return listByState(repo, states, author)
+    },
     listPRsFromRepos: async (repos) => {
       await sleep(LIST_MS)
       return { prs: store.list(repos.length > 0 ? repos : DEMO_REPOS, ["OPEN"]), failedRepos: [] }

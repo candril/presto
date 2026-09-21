@@ -17,6 +17,7 @@ export type AppAction =
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_PRS"; prs: PR[] }
   | { type: "APPEND_PRS"; prs: PR[] }
+  | { type: "REMOVE_PRS"; urls: string[] }
   | { type: "SELECT"; index: number }
   | { type: "MOVE"; delta: number }
   | { type: "OPEN_DISCOVERY" }
@@ -139,6 +140,19 @@ function settlePendingActions(
 }
 
 /** State reducer */
+/**
+ * Is `incoming` a later reading of the same PR than `held`? Equal timestamps count as
+ * newer: a second fetch of the same second still carries the fresher check and review
+ * state, and the list is keyed by URL either way.
+ */
+function isNewer(incoming: PR, held: PR): boolean {
+  const a = new Date(incoming.updatedAt).getTime()
+  const b = new Date(held.updatedAt).getTime()
+  if (Number.isNaN(a)) return false
+  if (Number.isNaN(b)) return true
+  return a >= b
+}
+
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "SET_LOADING":
@@ -173,18 +187,38 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
 
     case "APPEND_PRS": {
-      // Merge new PRs, avoiding duplicates by PR URL, keep sorted by updatedAt
-      const existingUrls = new Set(state.prs.map(pr => pr.url))
-      const newPRs = action.prs.filter(pr => !existingUrls.has(pr.url))
+      // Merge by URL, keep sorted by updatedAt. A copy that has moved on replaces the one
+      // held: a backfill answering later than the list was built is the fresher of the two,
+      // and keeping the older one is how a merged PR goes on reading as open.
+      const byUrl = new Map(state.prs.map((pr) => [pr.url, pr]))
+      let changed = false
+      for (const pr of action.prs) {
+        const held = byUrl.get(pr.url)
+        if (held && !isNewer(pr, held)) continue
+        byUrl.set(pr.url, pr)
+        changed = true
+      }
       // Same list, same state: a re-render here would send every PR back through change
       // detection for nothing
-      if (newPRs.length === 0) return state
-      const allPRs = [...state.prs, ...newPRs].sort(
+      if (!changed) return state
+      const allPRs = [...byUrl.values()].sort(
         (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       )
       return {
         ...state,
         prs: allPRs,
+      }
+    }
+
+    case "REMOVE_PRS": {
+      if (action.urls.length === 0) return state
+      const dropping = new Set(action.urls)
+      const kept = state.prs.filter((pr) => !dropping.has(pr.url))
+      if (kept.length === state.prs.length) return state
+      return {
+        ...state,
+        prs: kept,
+        selectedIndex: Math.min(state.selectedIndex, Math.max(0, kept.length - 1)),
       }
     }
 

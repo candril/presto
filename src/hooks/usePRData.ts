@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useCallback, useRef, useState } from "react"
-import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs } from "../providers"
+import { listPRs, listPRsFromRepos, getPR, getPRsBulk, listClosedPRs, listMergedPRs, listPRsByAuthor } from "../providers"
 import { saveCache } from "../cache"
 import { recordPRView, recordRepoVisit, saveHistory, type History } from "../history"
 import type { Config } from "../config"
@@ -12,6 +12,7 @@ import type { PR } from "../types"
 import { getRepoName } from "../types"
 import type { AppAction } from "../state"
 import type { ParsedFilter } from "../discovery"
+import { claimAuthorFetch, planAuthorFetches, releaseAuthorFetch } from "../discovery/authorFetch"
 
 /** One repo's closed-or-merged query, with the claim that keeps it from being fired twice */
 interface RepoFetch {
@@ -190,16 +191,31 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   // list with open PRs, and these are in none of them.
   const closedMergedPRs = useRef<Map<string, PR>>(new Map())
 
+  const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
+  const authorDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const authorInFlight = useRef(0)
+  // The author backfill's last answer per `author|repo`. Held so the rows survive the
+  // `SET_PRS` of a refresh — re-asking takes a `gh` round trip per repo, and the tab
+  // would be empty until it lands. A later answer replaces the slice, so a PR that has
+  // since merged is removed rather than restored for ever.
+  const authorSlices = useRef<Map<string, PR[]>>(new Map())
+  const authorEpoch = useRef(0)
+
   /**
    * Put the backfilled closed/merged PRs back after `SET_PRS` has replaced the list.
    * A refresh re-queries them too, but that is a `gh` round trip per repo, and until it
    * lands a state:merged filter would be looking at an empty list.
+   *
+   * The author backfill's rows come back too. They are only as fresh as the last answer,
+   * which is why re-asking replaces the whole slice and drops what is no longer in it.
    */
-  const restoreClosedMergedPRs = useCallback(() => {
-    const known = [...closedMergedPRs.current.values()]
+  const restoreBackfilledPRs = useCallback(() => {
+    const known = [
+      ...closedMergedPRs.current.values(),
+      ...[...authorSlices.current.values()].flat(),
+    ]
     if (known.length > 0) dispatch({ type: "APPEND_PRS", prs: known })
   }, [dispatch])
-  const fetchedAuthorRepos = useRef<Map<string, Set<string>>>(new Map())
 
   // Epoch counter to re-trigger background fetch effects after a refresh
   // (refs are cleared but effects need a dep change to re-run)
@@ -228,7 +244,6 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     dispatch({ type: "CLEAR_PREVIEW_CACHE" })
     fetchedClosedRepos.current.clear()
     fetchedMergedRepos.current.clear()
-    fetchedAuthorRepos.current.clear()
     fullyFetchedRepos.current.clear()
 
     try {
@@ -275,7 +290,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         
         // Dispatch priority PRs immediately for fast UI update
         dispatch({ type: "SET_PRS", prs: priorityPRs })
-        restoreClosedMergedPRs()
+        restoreBackfilledPRs()
         dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
         
         // Background load: rest of configured repos + tracked PRs + missing marked PRs
@@ -329,7 +344,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
               // Update with full data, then bump epoch to re-trigger background effects
               dispatch({ type: "SET_PRS", prs: backgroundPRs })
-              restoreClosedMergedPRs()
+              restoreBackfilledPRs()
               setRefreshEpoch(e => e + 1)
               saveCache(backgroundPRs.filter(pr => {
                 const repoName = getRepoName(pr).toLowerCase()
@@ -383,7 +398,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         }
 
         dispatch({ type: "SET_PRS", prs: allFetchedPRs })
-        restoreClosedMergedPRs()
+        restoreBackfilledPRs()
         dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
         // Bump epoch so background fetch effects re-run (caches were cleared above)
         setRefreshEpoch(e => e + 1)
@@ -406,7 +421,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         dispatch({ type: "SHOW_MESSAGE", message: "Refresh failed (offline?) — showing cached PRs" })
       }
     }
-  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreClosedMergedPRs])
+  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreBackfilledPRs])
 
   // Revalidate on mount - PRs are already hydrated from cache in createInitialState()
   // so always do a background refresh (stale data shows immediately)
@@ -673,6 +688,88 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       }
     }
   }, [filter.states.join(","), filter.repos.join(","), filter.authors.join(","), config.repositories, refreshEpoch])
+
+  // Fetch an author's open PRs when an `@author` filter is active. The initial load is
+  // the 50 most recently updated open PRs per repo; on a busy repo that window is only
+  // days wide, so an older PR of theirs is not in the list for the filter to find.
+  useEffect(() => {
+    // A refresh re-verifies the authors on screen and leaves the rest claimed: every
+    // release is a `gh` round trip per repo the next time that tab is opened, and with a
+    // tab per person, clearing them all made switching tabs pay for it again and again.
+    if (authorEpoch.current !== refreshEpoch) {
+      authorEpoch.current = refreshEpoch
+      for (const author of filter.authors) {
+        fetchedAuthorRepos.current.delete(author.toLowerCase())
+      }
+    }
+
+    const planned = planAuthorFetches({
+      authors: filter.authors,
+      states: filter.states,
+      repoFilters: filter.repos,
+      enabledRepos: config.repositories.filter((r) => !r.disabled).map((r) => r.name),
+      allRepos: config.repositories.map((r) => r.name),
+      fetched: fetchedAuthorRepos.current,
+    })
+
+    if (planned.length === 0) return
+
+    if (authorDebounceRef.current) {
+      clearTimeout(authorDebounceRef.current)
+    }
+
+    authorDebounceRef.current = setTimeout(() => {
+      authorDebounceRef.current = undefined
+
+      // Re-check the claims: this run planned against the map as it was 300ms ago
+      const starting = planned.filter(({ author, cacheKey }) => {
+        if (fetchedAuthorRepos.current.get(author.toLowerCase())?.has(cacheKey)) return false
+        claimAuthorFetch(fetchedAuthorRepos.current, author, cacheKey)
+        return true
+      })
+
+      if (starting.length === 0) return
+
+      authorInFlight.current += starting.length
+      dispatch({ type: "SET_REFRESHING", refreshing: true })
+
+      for (const { author, repo, cacheKey } of starting) {
+        const sliceKey = `${author.toLowerCase()}|${cacheKey}`
+        listPRsByAuthor(repo, author, "open")
+          .then((prs) => {
+            const previous = authorSlices.current.get(sliceKey) ?? []
+            authorSlices.current.set(sliceKey, prs)
+
+            // What this slice held and no longer does has left the open list — merged,
+            // closed, or no longer theirs — so it goes, rather than lingering as a row
+            // nothing will correct.
+            const fresh = new Set(prs.map((pr) => pr.url))
+            const gone = previous.filter((pr) => !fresh.has(pr.url)).map((pr) => pr.url)
+            if (gone.length > 0) dispatch({ type: "REMOVE_PRS", urls: gone })
+
+            if (prs.length === 0) return
+            // Append per repo rather than awaiting them all: one slow repo would
+            // otherwise hold back every result behind it
+            dispatch({ type: "APPEND_PRS", prs })
+          })
+          .catch(() => {
+            releaseAuthorFetch(fetchedAuthorRepos.current, author, cacheKey)
+          })
+          .finally(() => {
+            authorInFlight.current--
+            if (authorInFlight.current === 0) {
+              dispatch({ type: "SET_REFRESHING", refreshing: false })
+            }
+          })
+      }
+    }, 300)
+
+    return () => {
+      if (!authorDebounceRef.current) return
+      clearTimeout(authorDebounceRef.current)
+      authorDebounceRef.current = undefined
+    }
+  }, [filter.authors.join(","), filter.states.join(","), filter.repos.join(","), config.repositories, refreshEpoch])
 
   return { fetchPRs }
 }

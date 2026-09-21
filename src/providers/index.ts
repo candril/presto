@@ -30,6 +30,7 @@ export const githubSource: PRSource = {
   listPRs: github.listPRs,
   listClosedPRs: github.listClosedPRs,
   listMergedPRs: github.listMergedPRs,
+  listPRsByAuthor: github.listPRsByAuthor,
   listPRsFromRepos: github.listPRsFromRepos,
   getPRsByBranch: github.getPRsByBranch,
   getPR: github.getPR,
@@ -80,6 +81,7 @@ export const getCurrentUser: PRSource["getCurrentUser"] = () => active.getCurren
 export const listPRs: PRSource["listPRs"] = (...args) => active.listPRs(...args)
 export const listClosedPRs: PRSource["listClosedPRs"] = (...args) => active.listClosedPRs(...args)
 export const listMergedPRs: PRSource["listMergedPRs"] = (...args) => active.listMergedPRs(...args)
+export const listPRsByAuthor: PRSource["listPRsByAuthor"] = (...args) => active.listPRsByAuthor(...args)
 export const listPRsFromRepos: PRSource["listPRsFromRepos"] = (...args) => active.listPRsFromRepos(...args)
 export const getPRsByBranch: PRSource["getPRsByBranch"] = (...args) => active.getPRsByBranch(...args)
 export const getPR: PRSource["getPR"] = (...args) => active.getPR(...args)
