@@ -332,6 +332,10 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
               history={history}
               pendingActions={state.pendingActions}
               gateDetail={state.gateDetail}
+              fadeSettings={{
+                afterDays: config.display.fadeAfterDays,
+                floor: config.display.fadeFloor,
+              }}
               emptyMessage={
                 filter.starred && history.starredAuthors.length === 0
                   ? "No starred authors"

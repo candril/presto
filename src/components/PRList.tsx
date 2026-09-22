@@ -12,6 +12,7 @@ import { useRef, useEffect } from "react"
 import { useTerminalDimensions } from "@opentui/react"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { theme, getMarkColor } from "../theme"
+import { fade, fadeLevel, type FadeSettings } from "../fade"
 import type { PR, ColumnVisibility, PendingAction } from "../types"
 import { getRepoName, getShortRepoName, getPRCheckState, computeMergeVerdict } from "../types"
 import { getStateIndicator, getCheckIndicator, getReviewIndicator, getSyncIndicator, getMergeIndicator } from "../status"
@@ -82,12 +83,14 @@ interface PRListProps {
   emptyMessage?: string
   /** Secondary hint when list is empty */
   emptyHint?: string
+  /** How a row's text dims with the age of its last update (spec 045) */
+  fadeSettings: FadeSettings
 }
 
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, pendingActions, gateDetail, emptyMessage, emptyHint }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, pendingActions, gateDetail, emptyMessage, emptyHint, fadeSettings }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const { width: terminalWidth } = useTerminalDimensions()
 
@@ -142,6 +145,7 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
             titleWidth={titleWidth}
             history={history}
             pendingActions={pendingActions}
+            fadeSettings={fadeSettings}
           />
         ))}
       </scrollbox>
@@ -190,9 +194,10 @@ interface PRRowProps {
   titleWidth: number
   history: History
   pendingActions: Record<string, PendingAction>
+  fadeSettings: FadeSettings
 }
 
-function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, pendingActions }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, pendingActions, fadeSettings }: PRRowProps) {
   const v = columnVisibility
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(getPRCheckState(pr))
@@ -214,6 +219,12 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
   // Title color: marked PRs get gold, everything else gets base text color.
   // The unread dot and mark letters handle visual differentiation (spec 029).
   const titleColor = isMarked ? theme.warning : theme.text
+
+  // Age fade (spec 045): the row's prose recedes as its last update ages, while the
+  // status glyphs keep their colour — an old PR with a failing check is usually the one
+  // worth noticing. The row under the cursor is the one being read, so it never dims.
+  const level = selected ? 1 : fadeLevel(pr.updatedAt, fadeSettings)
+  const dim = (color: string) => fade(color, level)
   
   // Title with PR number suffix: "Fix the bug (#123)"
   const prSuffix = ` (${prId})`
@@ -247,17 +258,17 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
         {isGateVisible(v, gateMode, "sync") && " "}
         {v.merge && <span fg={mergeIndicator.color}>{mergeIndicator.icon}</span>}
         {v.merge && " "}
-        {v.comments && <span fg={theme.textMuted}>{padRight(commentCount, COL.comments)}</span>}
+        {v.comments && <span fg={dim(theme.textMuted)}>{padRight(commentCount, COL.comments)}</span>}
         {v.comments && " "}
-        {v.time && <span fg={theme.textMuted}>{padRight(timeAgo, COL.time)}</span>}
+        {v.time && <span fg={dim(theme.textMuted)}>{padRight(timeAgo, COL.time)}</span>}
         {v.time && " "}
-        <span fg={titleColor}>{title}</span>
-        <span fg={theme.textDim}>{prSuffix}</span>
+        <span fg={dim(titleColor)}>{title}</span>
+        <span fg={dim(theme.textDim)}>{prSuffix}</span>
         <span>{" ".repeat(Math.max(0, titleTextWidth - title.length))}</span>
         {v.author && " "}
-        {v.author && <span fg={theme.textMuted}>{padRight(truncate(author, COL.author), COL.author)}</span>}
+        {v.author && <span fg={dim(theme.textMuted)}>{padRight(truncate(author, COL.author), COL.author)}</span>}
         {v.repo && " "}
-        {v.repo && <span fg={theme.primary}>{padRight(truncate(repoName, COL.repo), COL.repo)}</span>}
+        {v.repo && <span fg={dim(theme.primary)}>{padRight(truncate(repoName, COL.repo), COL.repo)}</span>}
       </text>
     </box>
   )

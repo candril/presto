@@ -247,6 +247,14 @@ function parseDisplay(value: unknown): Partial<Config["display"]> {
   if (typeof obj.relativeTime === "boolean") {
     result.relativeTime = obj.relativeTime
   }
+  const fadeAfterDays = obj.fade_after_days ?? obj.fadeAfterDays
+  if (typeof fadeAfterDays === "number" && fadeAfterDays >= 0) {
+    result.fadeAfterDays = fadeAfterDays
+  }
+  const fadeFloor = obj.fade_floor ?? obj.fadeFloor
+  if (typeof fadeFloor === "number" && fadeFloor >= 0 && fadeFloor <= 1) {
+    result.fadeFloor = fadeFloor
+  }
 
   return result
 }

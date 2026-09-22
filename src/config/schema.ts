@@ -78,6 +78,10 @@ export interface Config {
     compact: boolean
     /** Show relative time ("2h ago" vs timestamp) */
     relativeTime: boolean
+    /** Days before a row's text starts fading with age (0 disables) */
+    fadeAfterDays: number
+    /** How much colour a fully faded row keeps, 0-1 */
+    fadeFloor: number
   }
 
   /** Refresh settings */
@@ -129,6 +133,10 @@ export const defaultConfig: Config = {
     theme: "dark",
     compact: false,
     relativeTime: true,
+    // Three weeks: long enough that an active PR never dims, short enough that a
+    // forgotten one has visibly receded by the time you next scroll past it.
+    fadeAfterDays: 21,
+    fadeFloor: 0.45,
   },
 
   refresh: {

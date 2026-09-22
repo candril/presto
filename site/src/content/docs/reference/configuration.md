@@ -82,6 +82,17 @@ set up.
 | --- | --- | --- |
 | `diff` | `"auto"` | the pager `⇧D` pipes the diff into. `auto` picks `delta --paging=always`, then `bat -l diff --paging=always`, then `less -R`; any other string is run as given |
 
+## `[display]`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `fade_after_days` | `21` | days without an update before a row's text starts dimming; `0` turns the fade off |
+| `fade_floor` | `0.45` | how much colour the oldest rows keep, `0`-`1` |
+
+A row that has not been updated for `fade_after_days` drops to half the fade, and one that
+has gone twice that long sits on `fade_floor`. The status glyphs keep their colour at every
+age, and the row under the cursor is never dimmed.
+
 ## `[refresh]`
 
 | Key | Default | Meaning |
