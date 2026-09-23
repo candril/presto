@@ -211,19 +211,47 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   // since merged is removed rather than restored for ever.
   const authorSlices = useRef<Map<string, PR[]>>(new Map())
   const authorEpoch = useRef(0)
+  // The last answer per repo outside the enabled config (disabled, visited, ad-hoc), keyed
+  // lowercase. A refresh rebuilds the list from enabled repos only, and without these a
+  // `repo:` tab on such a repo would be empty until its own fetch came back.
+  const outsideRepoPRs = useRef<Map<string, PR[]>>(new Map())
+
+  /**
+   * Record what a fetch said about repos outside the enabled config, and drop whatever
+   * the previous answer held that this one no longer does: merged or closed since.
+   */
+  const rememberOutsideRepoPRs = useCallback((repos: string[], prs: PR[]) => {
+    const enabled = new Set(
+      config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
+    )
+    const gone: string[] = []
+    for (const repo of repos) {
+      const key = repo.toLowerCase()
+      if (enabled.has(key)) continue
+      const slice = prs.filter((pr) => getRepoName(pr).toLowerCase() === key)
+      const fresh = new Set(slice.map((pr) => pr.url))
+      for (const pr of outsideRepoPRs.current.get(key) ?? []) {
+        if (!fresh.has(pr.url)) gone.push(pr.url)
+      }
+      outsideRepoPRs.current.set(key, slice)
+    }
+    if (gone.length > 0) dispatch({ type: "REMOVE_PRS", urls: gone })
+  }, [config.repositories, dispatch])
 
   /**
    * Put the backfilled closed/merged PRs back after `SET_PRS` has replaced the list.
    * A refresh re-queries them too, but that is a `gh` round trip per repo, and until it
    * lands a state:merged filter would be looking at an empty list.
    *
-   * The author backfill's rows come back too. They are only as fresh as the last answer,
-   * which is why re-asking replaces the whole slice and drops what is no longer in it.
+   * The author backfill's rows and those of repos outside the config come back too. They
+   * are only as fresh as the last answer, which is why re-asking replaces the whole slice
+   * and drops what is no longer in it.
    */
   const restoreBackfilledPRs = useCallback(() => {
     const known = [
       ...closedMergedPRs.current.values(),
       ...[...authorSlices.current.values()].flat(),
+      ...[...outsideRepoPRs.current.values()].flat(),
     ]
     if (known.length > 0) dispatch({ type: "APPEND_PRS", prs: known })
   }, [dispatch])
@@ -281,6 +309,10 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
           if (priorityResult.failedRepos.includes(repo)) continue
           fullyFetchedRepos.current.add(repo.toLowerCase())
         }
+        rememberOutsideRepoPRs(
+          priority.filter((repo) => !priorityResult.failedRepos.includes(repo)),
+          priorityResult.prs
+        )
 
         // Record ad-hoc priority repos as visited
         const configRepoNames = new Set(config.repositories.map((r) => r.name.toLowerCase()))
@@ -433,7 +465,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         dispatch({ type: "SHOW_MESSAGE", message: "Refresh failed (offline?) — showing cached PRs" })
       }
     }
-  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreBackfilledPRs])
+  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreBackfilledPRs, rememberOutsideRepoPRs])
 
   // Revalidate on mount - PRs are already hydrated from cache in createInitialState()
   // so always do a background refresh (stale data shows immediately)
@@ -558,12 +590,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     if (reposToFetch.length === 0) return
 
     dispatch({ type: "SHOW_MESSAGE", message: `Loading ${reposToFetch.join(", ")}...` })
-    // Forced, because this is a load rather than a refresh: the repo being
-    // filtered to is one presto holds no PRs for, and the digest only ever
-    // answers "has anything moved since the last fetch", never "do you
-    // already have this". An unforced probe would answer "unchanged" and
-    // leave the user looking at "No open PRs found".
-    listPRsFromRepos(reposToFetch, { force: true }).then(({ prs: fetchedPRs, failedRepos }) => {
+    listPRsFromRepos(reposToFetch).then(({ prs: fetchedPRs, failedRepos }) => {
       if (failedRepos.length === reposToFetch.length) {
         dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(failedRepos) })
         return
@@ -574,6 +601,10 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         if (failedRepos.includes(repo)) continue
         fullyFetchedRepos.current.add(repo.toLowerCase())
       }
+      rememberOutsideRepoPRs(
+        reposToFetch.filter((repo) => !failedRepos.includes(repo)),
+        fetchedPRs
+      )
 
       // Record ad-hoc repos as visited so they appear in suggestions next time
       if (adHocRepos.length > 0) {
