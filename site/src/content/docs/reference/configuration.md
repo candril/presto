@@ -140,7 +140,7 @@ values are a key, an uppercase letter for shift, or `ctrl+` / `shift+` combinati
 | Navigation | `nav.down` `nav.up` `nav.top` `nav.bottom` `nav.pageDown` `nav.pageUp` |
 | Actions | `action.open` `action.openTmux` `action.browser` `action.repoBrowser` `action.checkout` `action.copyNumber` `action.copyUrl` `action.copyBranch` `action.diff` `action.checks` `action.star` `action.mark` `action.toggleSeen` `action.refresh` `action.forceRefresh` |
 | Filters | `filter.open` `filter.clear` `filter.marked` `filter.recent` `filter.starred` `filter.expanded` `filter.unread` |
-| Tabs | `tab.new` `tab.close` `tab.undo` `tab.prev` `tab.next` `tab.1` … `tab.9` |
+| Tabs | `tab.new` `tab.blank` `tab.close` `tab.undo` `tab.prev` `tab.next` `tab.1` … `tab.9` |
 | UI | `ui.help` `ui.quit` `ui.preview` `ui.previewCycle` `ui.gateDetail` `ui.commandPalette` `ui.console` |
 
 ## Environment

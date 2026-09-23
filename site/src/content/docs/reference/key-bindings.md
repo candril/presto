@@ -65,6 +65,7 @@ Press `?` at any time for this list in the app; `esc`, `?` or `q` closes it.
 | Keys | Action |
 | --- | --- |
 | `t` | new tab (a copy of the current one — change its filter) |
+| `n` | new blank tab (no filter) |
 | `d` | close the tab |
 | `u` | undo the last close |
 | `[` / `]` | previous / next tab |

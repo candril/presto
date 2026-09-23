@@ -71,3 +71,24 @@ describe("REMOVE_PRS", () => {
     expect(appReducer(before, { type: "REMOVE_PRS", urls: ["https://example.com/x"] })).toBe(before)
   })
 })
+
+describe("NEW_TAB", () => {
+  test("opens a blank tab after the others and switches to it, keeping the old tab's cursor", () => {
+    const filtered = appReducer(appReducer(withPRs([pr(1), pr(2)]), {
+      type: "SET_DISCOVERY_QUERY",
+      query: "@candril",
+    }), { type: "SELECT", index: 1 })
+
+    const state = appReducer(filtered, { type: "NEW_TAB" })
+    const left = state.tabs.find((t) => t.id === filtered.activeTabId)
+    const opened = state.tabs[state.tabs.length - 1]
+
+    expect(state.tabs).toHaveLength(filtered.tabs.length + 1)
+    expect(state.activeTabId).toBe(opened.id)
+    expect(opened.filterQuery).toBe("")
+    expect(state.discoveryQuery).toBe("")
+    expect(state.selectedIndex).toBe(0)
+    expect(left?.filterQuery).toBe("@candril")
+    expect(left?.selectedIndex).toBe(1)
+  })
+})

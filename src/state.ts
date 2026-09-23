@@ -6,7 +6,7 @@ import type { AppState, PendingAction, PendingActionKind, PR, PreviewPosition, C
 import { getRepoName, isPendingActionSettled, PENDING_ACTION_TTL_MS } from "./types"
 import { getPRKey } from "./history"
 import { loadCache, getColumnVisibility, getGateDetail, saveGateDetail } from "./cache"
-import { getInitialTabsState, duplicateTab, generateTabTitle } from "./tabs"
+import { getInitialTabsState, duplicateTab, generateTabTitle, createDefaultTab } from "./tabs"
 
 /** Action types for the reducer */
 export type AppAction =
@@ -48,6 +48,7 @@ export type AppAction =
   | { type: "TOGGLE_GATE_DETAIL" }
   // Tab actions (spec 011)
   | { type: "DUPLICATE_TAB" }
+  | { type: "NEW_TAB" }
   | { type: "CLOSE_TAB"; tabId: string }
   | { type: "CLOSE_OTHER_TABS" }
   | { type: "SWITCH_TAB"; tabId: string }
@@ -399,6 +400,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         tabs: [...state.tabs, newTab],
         activeTabId: newTab.id,
+      }
+    }
+
+    case "NEW_TAB": {
+      const newTab = createDefaultTab()
+      const tabs = state.tabs.map((t: Tab) =>
+        t.id === state.activeTabId ? { ...t, selectedIndex: state.selectedIndex } : t
+      )
+      return {
+        ...state,
+        tabs: [...tabs, newTab],
+        activeTabId: newTab.id,
+        discoveryQuery: "",
+        selectedIndex: 0,
       }
     }
 

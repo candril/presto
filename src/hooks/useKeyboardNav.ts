@@ -151,6 +151,11 @@ export function useKeyboardNav({
       return
     }
 
+    if (keys.matches(key, "tab.blank")) {
+      dispatch({ type: "NEW_TAB" })
+      return
+    }
+
     // Close current tab (if more than one)
     if (keys.matches(key, "tab.close") && tabs.length > 1) {
       const currentIndex = tabs.findIndex(t => t.id === activeTabId)

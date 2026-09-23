@@ -119,6 +119,17 @@ export function getTabCommands(ctx: CommandContext): Command[] {
     },
   })
 
+  cmds.push({
+    id: "tab.blank",
+    label: "New Blank Tab",
+    category: "action" as const,
+    shortcut: "n",
+    execute: async (execCtx: CommandContext) => {
+      execCtx.dispatch({ type: "NEW_TAB" })
+      return { type: "success", message: "New tab" }
+    },
+  })
+
   // Rename tab
   cmds.push({
     id: "tab.rename",

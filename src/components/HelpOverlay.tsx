@@ -84,7 +84,8 @@ function getHelpSections(keys: KeybindingsContext) {
     {
       title: "Tabs",
       items: [
-        [keys.getKeyDisplay("tab.new"), "New tab"],
+        [keys.getKeyDisplay("tab.new"), "Duplicate tab"],
+        [keys.getKeyDisplay("tab.blank"), "New blank tab"],
         [keys.getKeyDisplay("tab.close"), "Close tab"],
         [keys.getKeyDisplay("tab.undo"), "Undo close"],
         [keys.getKeyDisplay("tab.prev") + " / " + keys.getKeyDisplay("tab.next"), "Previous / next tab"],

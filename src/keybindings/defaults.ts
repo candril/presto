@@ -43,6 +43,7 @@ export const defaultBindings: Record<KeyAction, string> = {
 
   // Tabs
   "tab.new": "t",
+  "tab.blank": "n",
   "tab.close": "d",
   "tab.undo": "u",
   "tab.prev": "[",

@@ -17,6 +17,9 @@ to it. Then change the filter: `/` opens the prompt with the tab's query already
 can narrow further (`state:draft` on top of `@me` gives *My Drafts*) or clear it first with `⌫`
 and start over.
 
+`n` opens a **blank** tab instead — no filter, cursor at the top — for a view that has
+nothing to do with the one you are on.
+
 ```text
 t  / @me ↵                 My PRs
 t  / state:draft ↵         My Drafts        (narrowed from the copy)

@@ -37,6 +37,7 @@ export type KeyAction =
   | "filter.unread"
   // Tabs
   | "tab.new"
+  | "tab.blank"
   | "tab.close"
   | "tab.undo"
   | "tab.prev"
