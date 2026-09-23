@@ -140,7 +140,7 @@ function SuggestionRow({
 }
 
 /** Build suggestions based on current query and state */
-function buildSuggestions(
+export function buildSuggestions(
   query: string,
   history: History,
   prs: PR[],
@@ -238,15 +238,15 @@ function buildSuggestions(
     
     const prCountByRepo = new Map<string, number>()
     for (const pr of prs) {
-      const name = getRepoName(pr)
+      const name = getRepoName(pr).toLowerCase()
       prCountByRepo.set(name, (prCountByRepo.get(name) || 0) + 1)
     }
 
-    const configRepoNames = new Set(repositories.map((r) => r.name))
+    const configRepoNames = new Set(repositories.map((r) => r.name.toLowerCase()))
 
     for (const repo of repositories) {
       if (!existingRepos.some(r => repo.name.toLowerCase().includes(r))) {
-        const count = prCountByRepo.get(repo.name) || 0
+        const count = prCountByRepo.get(repo.name.toLowerCase()) || 0
         items.push({
           type: "repo",
           value: `${existingQuery}repo:${repo.name}`,
@@ -258,7 +258,7 @@ function buildSuggestions(
 
     // Show visited repos not in config (spec 018)
     for (const visited of history.visitedRepos ?? []) {
-      if (!configRepoNames.has(visited.name) && !existingRepos.some(r => visited.name.toLowerCase().includes(r))) {
+      if (!configRepoNames.has(visited.name.toLowerCase()) && !existingRepos.some(r => visited.name.toLowerCase().includes(r))) {
         items.push({
           type: "repo",
           value: `${existingQuery}repo:${visited.name}`,
@@ -323,13 +323,11 @@ function buildSuggestions(
     } else if (isTypingRepo) {
       // Typing repo: - suggest repos (including disabled ones from config and visited)
       const partial = lastToken.slice(5)
-      const reposFromPRs = getAllRepos(prs)
-      const seenRepos = new Set(reposFromPRs.map((r) => r.name))
-      const configRepoNames = new Set(repositories.map((r) => r.name))
+      const repos = getSuggestableRepos(prs, repositories)
+      const seenRepos = new Set(repos.map((r) => r.name.toLowerCase()))
 
-      // First show repos we have PRs for
-      for (const repo of reposFromPRs) {
-        if (repo.name.toLowerCase().includes(partial)) {
+      for (const repo of repos) {
+        if (repoMatches(repo, partial)) {
           items.push({
             type: "repo",
             value: `${prefixWithSpace}repo:${repo.name}`,
@@ -339,26 +337,9 @@ function buildSuggestions(
         }
       }
 
-      // Then show disabled repos from config (no PRs loaded yet)
-      for (const repo of repositories) {
-        if (repo.disabled && !seenRepos.has(repo.name)) {
-          const shortName = repo.alias || repo.name.split("/")[1] || repo.name
-          if (
-            repo.name.toLowerCase().includes(partial) ||
-            shortName.toLowerCase().includes(partial)
-          ) {
-            items.push({
-              type: "repo",
-              value: `${prefixWithSpace}repo:${repo.name}`,
-              label: repo.name,
-            })
-          }
-        }
-      }
-
       // Then show visited repos not in config (spec 018)
       for (const visited of history.visitedRepos ?? []) {
-        if (!seenRepos.has(visited.name) && !configRepoNames.has(visited.name)) {
+        if (!seenRepos.has(visited.name.toLowerCase())) {
           const shortName = visited.name.split("/")[1] || visited.name
           if (
             visited.name.toLowerCase().includes(partial) ||
@@ -425,15 +406,10 @@ function buildSuggestions(
         }
       }
 
-      // Filter matching repos (from PRs)
-      const repos = getAllRepos(prs)
-      const seenRepos = new Set(repos.map((r) => r.name))
+      const repos = getSuggestableRepos(prs, repositories)
+      const seenRepos = new Set(repos.map((r) => r.name.toLowerCase()))
       for (const repo of repos) {
-        const shortName = repo.name.split("/")[1] || repo.name
-        if (
-          repo.name.toLowerCase().includes(lastToken) ||
-          shortName.toLowerCase().includes(lastToken)
-        ) {
+        if (repoMatches(repo, lastToken)) {
           items.push({
             type: "repo",
             value: `${prefixWithSpace}repo:${repo.name}`,
@@ -444,9 +420,8 @@ function buildSuggestions(
       }
 
       // Filter matching visited repos (spec 018)
-      const configRepoNames = new Set(repositories.map((r) => r.name))
       for (const visited of history.visitedRepos ?? []) {
-        if (!seenRepos.has(visited.name) && !configRepoNames.has(visited.name)) {
+        if (!seenRepos.has(visited.name.toLowerCase())) {
           const shortName = visited.name.split("/")[1] || visited.name
           if (
             visited.name.toLowerCase().includes(lastToken) ||
@@ -515,6 +490,41 @@ function getAllAuthors(
       if (!aStarred && bStarred) return 1
       return b.count - a.count
     })
+}
+
+interface SuggestableRepo {
+  name: string
+  alias?: string
+  /** Loaded PRs; absent for a disabled repo, whose count would only reflect what a filter pulled in */
+  count?: number
+}
+
+/**
+ * Every configured repo, plus any other the loaded PRs come from. Configured repos are
+ * listed whether or not they have PRs loaded: one with nothing open is still a filter
+ * worth offering. Names compare case-insensitively — GitHub's casing need not match the
+ * config's.
+ */
+function getSuggestableRepos(prs: PR[], repositories: Repository[]): SuggestableRepo[] {
+  const byKey = new Map<string, SuggestableRepo>()
+  for (const { name, count } of getAllRepos(prs)) {
+    byKey.set(name.toLowerCase(), { name, count })
+  }
+  for (const repo of repositories) {
+    const key = repo.name.toLowerCase()
+    const loaded = byKey.get(key)?.count
+    byKey.set(key, {
+      name: repo.name,
+      alias: repo.alias,
+      count: repo.disabled ? loaded : loaded ?? 0,
+    })
+  }
+  return [...byKey.values()].sort((a, b) => (b.count ?? -1) - (a.count ?? -1))
+}
+
+function repoMatches(repo: SuggestableRepo, partial: string): boolean {
+  const shortName = repo.name.split("/")[1] || repo.name
+  return [repo.name, shortName, repo.alias ?? ""].some((n) => n.toLowerCase().includes(partial))
 }
 
 function getAllRepos(prs: PR[]): { name: string; count: number }[] {
