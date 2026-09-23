@@ -33,7 +33,7 @@ export interface PRSource {
   listClosedPRs(repo: string, options?: { author?: string; days?: number }): Promise<PR[]>
   listMergedPRs(repo: string, options?: { author?: string; days?: number }): Promise<PR[]>
   listPRsByAuthor(repo: string, author: string, state?: "open" | "closed" | "merged" | "all"): Promise<PR[]>
-  listPRsFromRepos(repos: string[]): Promise<RepoFetchResult>
+  listPRsFromRepos(repos: string[], opts?: { force?: boolean }): Promise<RepoFetchResult>
   getPRsByBranch(repos: string[], branch: string): Promise<PR[]>
   getPR(repo: string, number: number): Promise<PR | null>
   getPRsBulk(prs: Array<{ repo: string; number: number }>): Promise<PR[]>

@@ -278,7 +278,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     } else if (result.type === "error") {
       dispatch({ type: "SHOW_MESSAGE", message: `Error: ${result.message}` })
     } else if (result.type === "refresh") {
-      fetchPRs(true)
+      fetchPRs(true, true)
     }
   }
 

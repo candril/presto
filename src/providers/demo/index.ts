@@ -45,7 +45,11 @@ export function createDemoSource(): PRSource {
     },
     listPRsFromRepos: async (repos) => {
       await sleep(LIST_MS)
-      return { prs: store.list(repos.length > 0 ? repos : DEMO_REPOS, ["OPEN"]), failedRepos: [] }
+      return {
+        prs: store.list(repos.length > 0 ? repos : DEMO_REPOS, ["OPEN"]),
+        failedRepos: [],
+        unchangedRepos: [],
+      }
     },
     getPRsByBranch: async (repos, branch) => {
       await sleep(LIST_MS)

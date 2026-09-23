@@ -75,6 +75,74 @@ const PR_FRAGMENT = `
   }
 `
 
+/**
+ * The cheap half of a refresh.
+ *
+ * `PR_FRAGMENT` costs 28 of the 5,000 GraphQL points GitHub grants an hour,
+ * measured against Dg.GalaxusAbos — every count it derives needs the authors
+ * behind it, and authors only come one node at a time. Three repos on a 300s
+ * interval spend 1,008 points an hour on nothing but asking.
+ *
+ * This fragment is what a refresh needs in order to decide whether the
+ * expensive one is worth sending. It costs 1 point: the only connection
+ * carrying nodes is `commits(last: 1)`, and a `totalCount` with no
+ * `first`/`last` returns no nodes at all, so the three counts are free.
+ *
+ * A PR's `updatedAt` alone would not do. GitHub leaves it untouched when a
+ * check run finishes or a review lands, which is exactly the movement a PR
+ * dashboard exists to show — hence the head oid, the rollup state, the
+ * review decision and the merge state alongside it.
+ */
+const PR_DIGEST_FRAGMENT = `
+  number
+  updatedAt
+  isDraft
+  reviewDecision
+  mergeStateStatus
+  comments { totalCount }
+  reviews { totalCount }
+  reviewThreads { totalCount }
+  commits(last: 1) {
+    nodes { commit { oid statusCheckRollup { state } } }
+  }
+`
+
+/**
+ * Resolving a review thread moves none of the digest fields — GitHub treats
+ * it as neither an update nor a new comment. An unresolved-thread badge can
+ * therefore sit one or more ticks behind until something else on the PR
+ * moves; `r` forces a full fetch and settles it.
+ */
+export function digestOf(nodes: any[]): string {
+  return nodes
+    .filter(Boolean)
+    .map((pr) => {
+      const commit = pr.commits?.nodes?.[0]?.commit
+      return [
+        pr.number,
+        pr.updatedAt,
+        pr.isDraft,
+        pr.reviewDecision ?? "",
+        pr.mergeStateStatus ?? "",
+        pr.comments?.totalCount ?? 0,
+        pr.reviews?.totalCount ?? 0,
+        pr.reviewThreads?.totalCount ?? 0,
+        commit?.oid ?? "",
+        commit?.statusCheckRollup?.state ?? "",
+      ].join("|")
+    })
+    .sort()
+    .join("\n")
+}
+
+/**
+ * The digest each repo last presented, so the next refresh can tell whether
+ * anything moved. Module state for the same reason the token is: presto runs
+ * one of these per process, and the alternative is threading a cache through
+ * every caller for no gain.
+ */
+const lastDigests = new Map<string, string>()
+
 /** Comment tallies derived from one PR's conversation, reviews and review threads */
 export interface CommentCounts {
   /** Every human comment: PR-level, review bodies, and review-thread comments */
@@ -212,12 +280,7 @@ const RETRY_BASE_DELAY_MS = 400
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/**
- * Single GraphQL round-trip for one repo.
- * Throws on every failure mode — GitHub reports rate limits and outages as
- * HTTP 200 with an `errors` body, and returning [] for those is indistinguishable
- * from "no open PRs", which then overwrites good cached data with nothing.
- */
+/** Single GraphQL round-trip for one repo, at full 28-point depth. */
 async function fetchRepoPRsOnce(repo: string, token: string): Promise<PR[]> {
   const [owner, name] = repo.split("/")
 
@@ -230,6 +293,18 @@ async function fetchRepoPRsOnce(repo: string, token: string): Promise<PR[]> {
     }
   }`
 
+  return (await fetchRepoNodes(query, token)).map(transformGraphQLPR)
+}
+
+/**
+ * POST one repository query and hand back its pull request nodes.
+ *
+ * Throws on every failure mode — GitHub reports rate limits and outages as
+ * HTTP 200 with an `errors` body, and returning [] for those is
+ * indistinguishable from "no open PRs", which then overwrites good cached
+ * data with nothing.
+ */
+async function fetchRepoNodes(query: string, token: string): Promise<any[]> {
   const response = await fetch("https://api.github.com/graphql", {
     method: "POST",
     headers: {
@@ -259,7 +334,26 @@ async function fetchRepoPRsOnce(repo: string, token: string): Promise<PR[]> {
     throw new RepoFetchError(detail, isRetryableGraphQLError(error?.type))
   }
 
-  return nodes.filter(Boolean).map(transformGraphQLPR)
+  return nodes.filter(Boolean)
+}
+
+/**
+ * Ask a repo what its open PRs look like from outside, for 1 GraphQL point.
+ * Equal to the repo's last digest means nothing on any PR has moved, and the
+ * 28-point fetch would produce exactly what the caller already holds.
+ */
+async function probeRepo(repo: string, token: string): Promise<string> {
+  const [owner, name] = repo.split("/")
+
+  const query = `query {
+    repository(owner: "${owner}", name: "${name}") {
+      pullRequests(first: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
+        nodes { ${PR_DIGEST_FRAGMENT} }
+      }
+    }
+  }`
+
+  return digestOf(await fetchRepoNodes(query, token))
 }
 
 /**
@@ -271,22 +365,46 @@ function isRetryableGraphQLError(type?: string): boolean {
   return type !== "RATE_LIMITED" && type !== "NOT_FOUND" && type !== "FORBIDDEN"
 }
 
+/** A repo the probe cleared: nothing moved, so the caller keeps what it has. */
+const UNCHANGED = Symbol("unchanged")
+
 /**
- * Fetch PRs from a single repository, retrying transient failures
+ * Fetch PRs from a single repository, retrying transient failures.
+ *
+ * Always probes, for 1 point; only pays the other 28 when the digest moved
+ * or `force` overrides it. A forced refresh still probes so that the digest
+ * it stores lets the *next* refresh skip — otherwise pressing `r` would make
+ * every following refresh full price again.
+ *
+ * The digest is stored only once the fetch succeeds. A fetch that died after
+ * stamping it would leave the next refresh skipping a repo whose PRs presto
+ * never actually loaded.
  */
-async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
+async function fetchRepoPRs(
+  repo: string,
+  token: string,
+  force: boolean
+): Promise<PR[] | typeof UNCHANGED> {
   const [owner, name] = repo.split("/")
   if (!owner || !name) throw new RepoFetchError(`invalid repo name "${repo}"`, false)
 
   const log = logRequest("graphql", `fetchRepoPRs ${repo}`)
   for (let attempt = 1; ; attempt++) {
     try {
+      const digest = await probeRepo(repo, token)
+      if (!force && digest === lastDigests.get(repo)) {
+        log.finish("unchanged (1pt)")
+        return UNCHANGED
+      }
+
       const prs = await fetchRepoPRsOnce(repo, token)
+      lastDigests.set(repo, digest)
       log.finish(`${prs.length} PRs`)
       return prs
     } catch (error) {
       const retryable = error instanceof RepoFetchError ? error.retryable : true
       if (!retryable || attempt >= MAX_ATTEMPTS) {
+        lastDigests.delete(repo)
         log.fail(error)
         throw error
       }
@@ -295,34 +413,45 @@ async function fetchRepoPRs(repo: string, token: string): Promise<PR[]> {
   }
 }
 
-/** PRs fetched plus the repos that could not be fetched at all */
+/** PRs fetched, plus the repos that produced none and why */
 export interface RepoFetchResult {
   prs: PR[]
   failedRepos: string[]
+  /**
+   * Repos the probe cleared. Distinct from `failedRepos` only in what the UI
+   * should say about them — both mean "keep the PRs you already have".
+   */
+  unchangedRepos: string[]
 }
 
 /**
  * Fetch PRs from multiple repositories using GraphQL
  * Fetches all repos in parallel for maximum speed (~3s for 4 large repos)
  */
-export async function listPRsGraphQL(repos: string[]): Promise<RepoFetchResult> {
-  if (repos.length === 0) return { prs: [], failedRepos: [] }
+export async function listPRsGraphQL(
+  repos: string[],
+  { force = false }: { force?: boolean } = {}
+): Promise<RepoFetchResult> {
+  if (repos.length === 0) return { prs: [], failedRepos: [], unchangedRepos: [] }
 
   const token = await getToken()
 
   // Fetch ALL repos in parallel - each as a separate request
   // This avoids resource limits while maximizing speed
   const results = await Promise.allSettled(
-    repos.map(repo => fetchRepoPRs(repo, token))
+    repos.map(repo => fetchRepoPRs(repo, token, force))
   )
 
   const allPRs: PR[] = []
   const failedRepos: string[] = []
+  const unchangedRepos: string[] = []
   results.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      allPRs.push(...result.value)
-    } else {
+    if (result.status === "rejected") {
       failedRepos.push(repos[index])
+    } else if (result.value === UNCHANGED) {
+      unchangedRepos.push(repos[index])
+    } else {
+      allPRs.push(...result.value)
     }
   })
 
@@ -330,7 +459,7 @@ export async function listPRsGraphQL(repos: string[]): Promise<RepoFetchResult> 
 
   // Sort by updatedAt (most recent first)
   allPRs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  return { prs: allPRs, failedRepos }
+  return { prs: allPRs, failedRepos, unchangedRepos }
 }
 
 /**

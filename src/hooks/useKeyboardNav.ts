@@ -36,7 +36,7 @@ export interface UseKeyboardNavOptions {
   history: History
   setHistory: (history: History) => void
   dispatch: (action: AppAction) => void
-  fetchPRs: (showAsRefresh?: boolean) => void
+  fetchPRs: (showAsRefresh?: boolean, force?: boolean) => void
   terminalHeight: number
   showHelp: boolean
   setShowHelp: (show: boolean) => void
@@ -339,7 +339,10 @@ export function useKeyboardNav({
 
     // Refresh
     if (keys.matches(key, "action.refresh") || keys.matches(key, "action.forceRefresh")) {
-      fetchPRs(true)
+      // Asked for by hand: skip the digest probe's verdict and refetch, so a
+      // stale unresolved-thread count (the one thing the digest cannot see)
+      // has a way back to the truth.
+      fetchPRs(true, true)
       return
     }
 
@@ -437,7 +440,7 @@ export function useKeyboardNav({
         })
         .finally(() => {
           renderer.resume()
-          fetchPRs(true)
+          fetchPRs(true, true)
         })
       return
     }

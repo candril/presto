@@ -39,6 +39,9 @@ export function useAutoRefresh({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isRefreshingRef = useRef(false)
   const lastRefreshRef = useRef(lastRefresh)
+  // Terminals without focus reporting never send an event, so the only safe
+  // starting assumption is that someone is looking at us.
+  const isFocusedRef = useRef(true)
   
   // Keep lastRefreshRef in sync
   useEffect(() => {
@@ -67,6 +70,13 @@ export function useAutoRefresh({
         clearTimeout(timeoutRef.current)
       }
       timeoutRef.current = setTimeout(() => {
+        // Nobody is reading an unfocused presto, and the GitHub bill arrives
+        // either way: a window left open in a detached terminal drained the
+        // whole hourly GraphQL budget on its own. Focus-in catches up.
+        if (onFocus && !isFocusedRef.current) {
+          scheduleNext()
+          return
+        }
         doRefresh().then(scheduleNext)
       }, interval * 1000)
     }
@@ -79,13 +89,14 @@ export function useAutoRefresh({
         clearTimeout(timeoutRef.current)
       }
     }
-  }, [interval, doRefresh])
+  }, [interval, doRefresh, onFocus])
 
   // Set up focus-based refresh via terminal focus reporting (tmux/window switches)
   useEffect(() => {
     if (!onFocus || !registerFocusCallback) return
 
     const handleFocus = (focused: boolean) => {
+      isFocusedRef.current = focused
       if (!focused) return // Only refresh on focus IN
       
       // Only refresh if data is potentially stale (> 30 seconds since last refresh)

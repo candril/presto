@@ -264,21 +264,24 @@ export async function listRecentPRs(repo: string, days: number): Promise<PR[]> {
  * caching) whatever they already had for those repos — an empty result must
  * only ever mean "no open PRs", never "the request failed".
  */
-export async function listPRsFromRepos(repos: string[]): Promise<RepoFetchResult> {
+export async function listPRsFromRepos(
+  repos: string[],
+  opts: { force?: boolean } = {}
+): Promise<RepoFetchResult> {
   if (repos.length === 0) {
     // Default to current repo
-    return { prs: await listPRs(), failedRepos: [] }
+    return { prs: await listPRs(), failedRepos: [], unchangedRepos: [] }
   }
 
   const log = logRequest("graphql", `listPRsFromRepos (${repos.length} repos)`)
-  const graphQL = await listPRsGraphQL(repos).catch((error) => {
+  const graphQL = await listPRsGraphQL(repos, opts).catch((error) => {
     // Token lookup or a comparable up-front failure: nothing was fetched
     log.fail(error)
-    return { prs: [] as PR[], failedRepos: repos }
+    return { prs: [] as PR[], failedRepos: repos, unchangedRepos: [] as string[] }
   })
 
   if (graphQL.failedRepos.length === 0) {
-    log.finish(`${graphQL.prs.length} PRs`)
+    log.finish(`${graphQL.prs.length} PRs, ${graphQL.unchangedRepos.length} repos unchanged`)
     return graphQL
   }
 
@@ -299,7 +302,7 @@ export async function listPRsFromRepos(repos: string[]): Promise<RepoFetchResult
 
   // Sort by updatedAt (most recent first)
   prs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  return { prs, failedRepos }
+  return { prs, failedRepos, unchangedRepos: graphQL.unchangedRepos }
 }
 
 /**
