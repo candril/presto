@@ -47,7 +47,7 @@ interface UsePRDataOptions {
  * GitHub error neither blanks the list nor lets the follow-up cache write
  * persist that blank.
  */
-function retainPRsFromRepos(current: PR[], fetched: PR[], repos: string[]): PR[] {
+export function retainPRsFromRepos(current: PR[], fetched: PR[], repos: string[]): PR[] {
   if (repos.length === 0) return fetched
 
   const retain = new Set(repos.map((r) => r.toLowerCase()))
@@ -58,6 +58,17 @@ function retainPRsFromRepos(current: PR[], fetched: PR[], repos: string[]): PR[]
       !fetchedKeys.has(`${getRepoName(pr)}#${pr.number}`)
   )
   return [...fetched, ...retained]
+}
+
+/**
+ * The list with `repos`' PRs swapped for `fetched` and every other repo's left as held.
+ * A refresh narrowed to one tab's repos must not take the rest of the list with it: the
+ * other tabs read from the same list, and the background half that restores them can
+ * fail or be overtaken.
+ */
+export function replaceReposPRs(current: PR[], fetched: PR[], repos: string[]): PR[] {
+  const replacing = new Set(repos.map((r) => r.toLowerCase()))
+  return [...fetched, ...current.filter((pr) => !replacing.has(getRepoName(pr).toLowerCase()))]
 }
 
 function describeFailedRepos(failedRepos: string[]): string {
@@ -289,17 +300,18 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         }
         
         // Dispatch priority PRs immediately for fast UI update
-        dispatch({ type: "SET_PRS", prs: priorityPRs })
+        dispatch({ type: "SET_PRS", prs: replaceReposPRs(prsRef.current, priorityPRs, priority) })
         restoreBackfilledPRs()
         dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
         
-        // Background load: rest of configured repos + tracked PRs + missing marked PRs
-        // Don't await - let it run in background
+        // Rest of configured repos + tracked PRs + missing marked PRs. Awaited, though the
+        // priority PRs are already on screen, so the caller's in-flight guard covers the
+        // whole refresh and a second one cannot start underneath it.
         const hasBackgroundWork = rest.length > 0 
           || getTrackedPRsFromNonConfiguredRepos().length > 0
           || Object.keys(history.markedPRs ?? {}).length > 0
         if (hasBackgroundWork) {
-          (async () => {
+          await (async () => {
             try {
               let backgroundPRs = [...priorityPRs]
 
