@@ -71,6 +71,16 @@ export function replaceReposPRs(current: PR[], fetched: PR[], repos: string[]): 
   return [...fetched, ...current.filter((pr) => !replacing.has(getRepoName(pr).toLowerCase()))]
 }
 
+/**
+ * Whether a `repo:` filter term names this repo. A full owner/name must match exactly —
+ * `acme/api` is not `acme/api-gateway`, and treating it as such would skip fetching the
+ * repo that was asked for — while a bare fragment matches anywhere in the name.
+ */
+export function filterNamesRepo(filterRepo: string, repo: string): boolean {
+  const name = repo.toLowerCase()
+  return filterRepo.includes("/") ? name === filterRepo : name.includes(filterRepo)
+}
+
 function describeFailedRepos(failedRepos: string[]): string {
   const names = failedRepos.slice(0, 3).join(", ")
   const more = failedRepos.length > 3 ? ` +${failedRepos.length - 3} more` : ""
@@ -147,9 +157,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     const rest: string[] = []
 
     for (const repo of enabledRepos) {
-      const repoLower = repo.toLowerCase()
-      const matches = filterLower.some((f) => repoLower.includes(f))
-      if (matches) {
+      if (filterLower.some((f) => filterNamesRepo(f, repo))) {
         priority.push(repo)
       } else {
         rest.push(repo)
@@ -160,11 +168,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     // (from disabled config repos or visited repos)
     for (const filterRepo of filter.repos) {
       // Skip if already matched an enabled repo
-      if (priority.some((r) => r.toLowerCase().includes(filterRepo))) continue
+      if (priority.some((r) => filterNamesRepo(filterRepo, r))) continue
 
       // Check disabled config repos
       const disabledRepo = config.repositories.find(
-        (r) => r.disabled && r.name.toLowerCase().includes(filterRepo)
+        (r) => r.disabled && filterNamesRepo(filterRepo, r.name)
       )
       if (disabledRepo) {
         priority.push(disabledRepo.name)
@@ -173,7 +181,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
       // Check visited repos
       const visitedRepo = (history.visitedRepos ?? []).find(
-        (r) => r.name.toLowerCase().includes(filterRepo)
+        (r) => filterNamesRepo(filterRepo, r.name)
       )
       if (visitedRepo) {
         priority.push(visitedRepo.name)
@@ -264,6 +272,10 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   // working against the currently displayed list rather than a stale closure.
   const prsRef = useRef(prs)
   prsRef.current = prs
+  // Every async path reads history once its fetch lands; the render it started in may
+  // hold a copy that has since gained snapshots, marks or visits
+  const historyRef = useRef(history)
+  historyRef.current = history
 
   // Fetch PRs from GitHub
   // When repo filter is active: fetch filtered repos first, then background load the rest
@@ -526,45 +538,33 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     })
   }, [filter.prRef?.repo, filter.prRef?.number])
 
-  // Track which repos have been fully fetched (not just individual PRs)
-
   // Fetch PRs on-demand when filtering by a repo not in current PR list (spec 018)
+  const repoFilterDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => {
     if (filter.repos.length === 0) return
 
-    // Get repos we're filtering for
-    const filterRepos = filter.repos
-
     // Enabled repos are always fully loaded, skip those
-    const enabledConfigRepos = new Set(
-      config.repositories.filter((r) => !r.disabled).map((r) => r.name.toLowerCase())
-    )
+    const enabledConfigRepos = config.repositories.filter((r) => !r.disabled).map((r) => r.name)
 
     // Find repos that match filter and need fetching
     const reposToFetch: string[] = []
     const adHocRepos: string[] = []
-    for (const filterRepo of filterRepos) {
-      // Skip if this is an enabled config repo (already fully loaded)
-      const isEnabledRepo = [...enabledConfigRepos].some((r) => r.includes(filterRepo))
-      if (isEnabledRepo) continue
-
-      // Skip if we already fully fetched this repo
-      const alreadyFetched = [...fullyFetchedRepos.current].some((r) => r.includes(filterRepo))
-      if (alreadyFetched) continue
+    for (const filterRepo of filter.repos) {
+      if (enabledConfigRepos.some((r) => filterNamesRepo(filterRepo, r))) continue
+      if ([...fullyFetchedRepos.current].some((r) => filterNamesRepo(filterRepo, r))) continue
 
       // Find full repo name from config (disabled) or visited repos
       let fullRepoName: string | null = null
       let isAdHoc = false
-      
+
       const configRepo = config.repositories.find(
-        (r) => r.disabled && r.name.toLowerCase().includes(filterRepo)
+        (r) => r.disabled && filterNamesRepo(filterRepo, r.name)
       )
       if (configRepo) {
         fullRepoName = configRepo.name
       } else {
-        // Check visited repos
-        const visitedRepo = (history.visitedRepos ?? []).find(
-          (r) => r.name.toLowerCase().includes(filterRepo)
+        const visitedRepo = (historyRef.current.visitedRepos ?? []).find(
+          (r) => filterNamesRepo(filterRepo, r.name)
         )
         if (visitedRepo) {
           fullRepoName = visitedRepo.name
@@ -589,43 +589,54 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
     if (reposToFetch.length === 0) return
 
-    dispatch({ type: "SHOW_MESSAGE", message: `Loading ${reposToFetch.join(", ")}...` })
-    listPRsFromRepos(reposToFetch).then(({ prs: fetchedPRs, failedRepos }) => {
-      if (failedRepos.length === reposToFetch.length) {
-        dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(failedRepos) })
-        return
-      }
-
-      // Mark repos as fully fetched (failed ones stay unmarked so they can be retried)
-      for (const repo of reposToFetch) {
-        if (failedRepos.includes(repo)) continue
-        fullyFetchedRepos.current.add(repo.toLowerCase())
-      }
-      rememberOutsideRepoPRs(
-        reposToFetch.filter((repo) => !failedRepos.includes(repo)),
-        fetchedPRs
-      )
-
-      // Record ad-hoc repos as visited so they appear in suggestions next time
-      if (adHocRepos.length > 0) {
-        let newHistory = history
-        for (const repo of adHocRepos) {
-          newHistory = recordRepoVisit(newHistory, repo)
+    // The filter follows every keystroke, and each half-typed owner/name would otherwise
+    // be looked up — a GraphQL miss plus a `gh` fallback apiece, for repos that do not exist
+    repoFilterDebounceRef.current = setTimeout(() => {
+      repoFilterDebounceRef.current = undefined
+      dispatch({ type: "SHOW_MESSAGE", message: `Loading ${reposToFetch.join(", ")}...` })
+      listPRsFromRepos(reposToFetch).then(({ prs: fetchedPRs, failedRepos }) => {
+        if (failedRepos.length === reposToFetch.length) {
+          dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(failedRepos) })
+          return
         }
-        setHistory(newHistory)
-        saveHistory(newHistory)
-      }
-      
-      if (fetchedPRs.length > 0) {
-        // Use APPEND_PRS to merge with existing PRs (handles deduplication)
-        dispatch({ type: "APPEND_PRS", prs: fetchedPRs })
-        dispatch({ type: "SHOW_MESSAGE", message: `Loaded ${fetchedPRs.length} PRs` })
-      } else {
-        dispatch({ type: "SHOW_MESSAGE", message: "No open PRs found" })
-      }
-    }).catch(() => {
-      dispatch({ type: "SHOW_MESSAGE", message: "Failed to load PRs" })
-    })
+
+        // Mark repos as fully fetched (failed ones stay unmarked so they can be retried)
+        for (const repo of reposToFetch) {
+          if (failedRepos.includes(repo)) continue
+          fullyFetchedRepos.current.add(repo.toLowerCase())
+        }
+        rememberOutsideRepoPRs(
+          reposToFetch.filter((repo) => !failedRepos.includes(repo)),
+          fetchedPRs
+        )
+
+        // Record ad-hoc repos as visited so they appear in suggestions next time
+        const visited = adHocRepos.filter((repo) => !failedRepos.includes(repo))
+        if (visited.length > 0) {
+          let newHistory = historyRef.current
+          for (const repo of visited) {
+            newHistory = recordRepoVisit(newHistory, repo)
+          }
+          setHistory(newHistory)
+          saveHistory(newHistory)
+        }
+
+        if (fetchedPRs.length > 0) {
+          // Use APPEND_PRS to merge with existing PRs (handles deduplication)
+          dispatch({ type: "APPEND_PRS", prs: fetchedPRs })
+          dispatch({ type: "SHOW_MESSAGE", message: `Loaded ${fetchedPRs.length} PRs` })
+        } else {
+          dispatch({ type: "SHOW_MESSAGE", message: "No open PRs found" })
+        }
+      }).catch(() => {
+        dispatch({ type: "SHOW_MESSAGE", message: "Failed to load PRs" })
+      })
+    }, 300)
+
+    return () => {
+      clearTimeout(repoFilterDebounceRef.current)
+      repoFilterDebounceRef.current = undefined
+    }
   }, [filter.repos.join(","), refreshEpoch])
 
   // Fetch closed/merged PRs when state:closed or state:merged filter is active
