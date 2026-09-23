@@ -68,5 +68,5 @@ configured repos:
 
 ## Starred-only repos
 
-A repo with `starred_only = true` shows only PRs by authors you have starred (`s`). It is the
+A repo with `starred_only = true` shows only PRs by authors you have starred (`⇧S`). It is the
 way to watch a busy repo for a few people. `*` in the filter lifts the restriction for a look.

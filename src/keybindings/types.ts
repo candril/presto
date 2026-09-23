@@ -11,6 +11,7 @@ export type KeyAction =
   | "nav.bottom"
   | "nav.pageDown"
   | "nav.pageUp"
+  | "nav.jump"
   // Actions
   | "action.open"
   | "action.openTmux"

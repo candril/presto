@@ -15,6 +15,7 @@ Press `?` at any time for this list in the app; `esc`, `?` or `q` closes it.
 | --- | --- |
 | `j` / `k` (or `↓` / `↑`) | move down / up |
 | `g` / `⇧G` | top / bottom |
+| `s` | jump: label the rows on screen, type a label to land there (`esc` cancels) |
 | `^D` / `^U` | scroll the preview half a page down / up |
 | `p` | toggle the preview panel |
 | `⇧P` | move the preview: right → bottom → off |
@@ -57,7 +58,7 @@ Press `?` at any time for this list in the app; `esc`, `?` or `q` closes it.
 | --- | --- |
 | `m` then `a`–`z` | mark the PR with a letter (again to unmark) |
 | `'` then `a`–`z` | filter to that letter; `''` clears |
-| `s` | star / unstar the author |
+| `⇧S` | star / unstar the author |
 | `v` | toggle read / unread |
 
 ## Tabs

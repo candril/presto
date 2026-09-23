@@ -8,9 +8,9 @@
  * Title column format: #1234 PR title here...
  */
 
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, type MutableRefObject } from "react"
 import { useTerminalDimensions } from "@opentui/react"
-import type { ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { theme, getMarkColor } from "../theme"
 import { fade, fadeLevel, type FadeSettings } from "../fade"
 import type { PR, ColumnVisibility, PendingAction } from "../types"
@@ -69,6 +69,20 @@ function getFixedColumnsWidth(v: ColumnVisibility, mode: GateMode): number {
   return width
 }
 
+/** How far a row's prose recedes while jump labels are up, so the labels are what the eye finds */
+const FLASH_DIM = 0.45
+
+/**
+ * What the list tells the flash jump (spec 047) about its scroll position: which rows
+ * are on screen to be labelled, and a way to keep the next selection from scrolling.
+ */
+export interface ListViewHandle {
+  /** Indices of the rows on screen, end exclusive */
+  visibleRows(): { start: number; end: number } | null
+  /** The next selection change leaves the scroll position alone */
+  holdScroll(): void
+}
+
 interface PRListProps {
   prs: PR[]
   selectedIndex: number
@@ -85,19 +99,44 @@ interface PRListProps {
   emptyHint?: string
   /** How a row's text dims with the age of its last update (spec 045) */
   fadeSettings: FadeSettings
+  /** Jump labels by PR URL while a flash jump is active (spec 047) */
+  flashLabels?: Map<string, string>
+  viewHandle?: MutableRefObject<ListViewHandle | null>
 }
 
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, pendingActions, gateDetail, emptyMessage, emptyHint, fadeSettings }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, pendingActions, gateDetail, emptyMessage, emptyHint, fadeSettings, flashLabels, viewHandle }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
+  const holdScrollRef = useRef(false)
   const { width: terminalWidth } = useTerminalDimensions()
+
+  if (viewHandle) {
+    viewHandle.current = {
+      visibleRows() {
+        const scrollbox = scrollRef.current
+        if (!scrollbox) return null
+        const start = scrollbox.scrollTop
+        const height = scrollbox.viewport?.height ?? 0
+        return { start, end: Math.min(prs.length, start + height) }
+      },
+      holdScroll() {
+        holdScrollRef.current = true
+      },
+    }
+  }
 
   // Scroll to keep selected item visible with margin
   useEffect(() => {
     const scrollbox = scrollRef.current
     if (!scrollbox) return
+    // A jump lands on a row that was on screen; moving the list under it would lose the
+    // place the eye just found
+    if (holdScrollRef.current) {
+      holdScrollRef.current = false
+      return
+    }
 
     const viewportHeight = scrollbox.viewport?.height ?? 20
     const scrollTop = scrollbox.scrollTop
@@ -146,6 +185,8 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
             history={history}
             pendingActions={pendingActions}
             fadeSettings={fadeSettings}
+            flashing={flashLabels !== undefined}
+            flashLabel={flashLabels?.get(pr.url)}
           />
         ))}
       </scrollbox>
@@ -195,9 +236,11 @@ interface PRRowProps {
   history: History
   pendingActions: Record<string, PendingAction>
   fadeSettings: FadeSettings
+  flashing: boolean
+  flashLabel?: string
 }
 
-function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, pendingActions, fadeSettings }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, pendingActions, fadeSettings, flashing, flashLabel }: PRRowProps) {
   const v = columnVisibility
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(getPRCheckState(pr))
@@ -223,13 +266,29 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
   // Age fade (spec 045): the row's prose recedes as its last update ages, while the
   // status glyphs keep their colour — an old PR with a failing check is usually the one
   // worth noticing. The row under the cursor is the one being read, so it never dims.
-  const level = selected ? 1 : fadeLevel(pr.updatedAt, fadeSettings)
+  const level = flashing
+    ? Math.min(FLASH_DIM, fadeLevel(pr.updatedAt, fadeSettings))
+    : selected ? 1 : fadeLevel(pr.updatedAt, fadeSettings)
   const dim = (color: string) => fade(color, level)
   
   // Title with PR number suffix: "Fix the bug (#123)"
   const prSuffix = ` (${prId})`
   const titleTextWidth = titleWidth - prSuffix.length
   const title = truncate(pr.title, titleTextWidth)
+
+  // Everything between the mark column and the title. A jump label (spec 047) is drawn
+  // over its last cells — the separator, and for a two-key label the time column's last
+  // cell — so it sits against the title without moving it or covering any of it.
+  const lead: Segment[] = [
+    { text: hasChanges ? "• " : "  ", fg: hasChanges ? theme.primary : undefined },
+  ]
+  if (v.state) lead.push({ text: stateIndicator.icon, fg: stateIndicator.color }, { text: " " })
+  if (isGateVisible(v, gateMode, "checks")) lead.push({ text: checkIndicator.icon, fg: checkIndicator.color }, { text: " " })
+  if (isGateVisible(v, gateMode, "review")) lead.push({ text: reviewIndicator.icon, fg: reviewIndicator.color }, { text: " " })
+  if (isGateVisible(v, gateMode, "sync")) lead.push({ text: syncIndicator.icon, fg: syncIndicator.color }, { text: " " })
+  if (v.merge) lead.push({ text: mergeIndicator.icon, fg: mergeIndicator.color }, { text: " " })
+  if (v.comments) lead.push({ text: padRight(commentCount, COL.comments), fg: dim(theme.textMuted) }, { text: " " })
+  if (v.time) lead.push({ text: padRight(timeAgo, COL.time), fg: dim(theme.textMuted) }, { text: " " })
 
   return (
     <box
@@ -246,22 +305,12 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
         ) : (
           <span>{"  "}</span>
         )}
-        {/* Change indicator dot */}
-        <span fg={hasChanges ? theme.primary : undefined}>{hasChanges ? "• " : "  "}</span>
-        {v.state && <span fg={stateIndicator.color}>{stateIndicator.icon}</span>}
-        {v.state && " "}
-        {isGateVisible(v, gateMode, "checks") && <span fg={checkIndicator.color}>{checkIndicator.icon}</span>}
-        {isGateVisible(v, gateMode, "checks") && " "}
-        {isGateVisible(v, gateMode, "review") && <span fg={reviewIndicator.color}>{reviewIndicator.icon}</span>}
-        {isGateVisible(v, gateMode, "review") && " "}
-        {isGateVisible(v, gateMode, "sync") && <span fg={syncIndicator.color}>{syncIndicator.icon}</span>}
-        {isGateVisible(v, gateMode, "sync") && " "}
-        {v.merge && <span fg={mergeIndicator.color}>{mergeIndicator.icon}</span>}
-        {v.merge && " "}
-        {v.comments && <span fg={dim(theme.textMuted)}>{padRight(commentCount, COL.comments)}</span>}
-        {v.comments && " "}
-        {v.time && <span fg={dim(theme.textMuted)}>{padRight(timeAgo, COL.time)}</span>}
-        {v.time && " "}
+        {(flashLabel ? dropTrailingCells(lead, flashLabel.length) : lead).map((segment, i) => (
+          <span key={i} fg={segment.fg}>{segment.text}</span>
+        ))}
+        {flashLabel && (
+          <span fg={theme.bg} bg={theme.error} attributes={TextAttributes.BOLD}>{flashLabel}</span>
+        )}
         <span fg={dim(titleColor)}>{title}</span>
         <span fg={dim(theme.textDim)}>{prSuffix}</span>
         <span>{" ".repeat(Math.max(0, titleTextWidth - title.length))}</span>
@@ -272,6 +321,28 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
       </text>
     </box>
   )
+}
+
+interface Segment {
+  text: string
+  fg?: string
+}
+
+/** The segments with their last `cells` characters removed, to make room for an overlay */
+export function dropTrailingCells(segments: Segment[], cells: number): Segment[] {
+  const out = [...segments]
+  let remaining = cells
+  while (remaining > 0 && out.length > 0) {
+    const last = out[out.length - 1]
+    if (last.text.length <= remaining) {
+      remaining -= last.text.length
+      out.pop()
+    } else {
+      out[out.length - 1] = { ...last, text: last.text.slice(0, last.text.length - remaining) }
+      remaining = 0
+    }
+  }
+  return out
 }
 
 /** Pad string to the right (left-align) */

@@ -40,6 +40,7 @@ function getHelpSections(keys: KeybindingsContext) {
       items: [
         [keys.getKeyDisplay("nav.down") + " / " + keys.getKeyDisplay("nav.up"), "Move down / up"],
         [keys.getKeyDisplay("nav.top") + " / " + keys.getKeyDisplay("nav.bottom"), "Go to top / bottom"],
+        [keys.getKeyDisplay("nav.jump"), "Jump to a visible row"],
         [keys.getKeyDisplay("action.open"), "Open in riff"],
         [keys.getKeyDisplay("action.openTmux"), "Open in riff (tmux window)"],
         [keys.getKeyDisplay("action.browser"), "Open in browser"],

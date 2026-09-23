@@ -361,7 +361,7 @@ export const commands: Command[] = [
     id: "action.star",
     label: "Star/unstar author",
     category: "action",
-    shortcut: "s",
+    shortcut: "S",
     requiresPR: true,
     execute: async (ctx) => {
       const author = ctx.selectedPR!.author.login

@@ -13,6 +13,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "nav.bottom": "G",
   "nav.pageDown": "ctrl+d",
   "nav.pageUp": "ctrl+u",
+  "nav.jump": "s",
 
   // Actions
   "action.open": "return",
@@ -26,7 +27,7 @@ export const defaultBindings: Record<KeyAction, string> = {
   "action.copyBranch": "b",
   "action.diff": "D",
   "action.checks": "x",
-  "action.star": "s",
+  "action.star": "S",
   "action.mark": "m",
   "action.toggleSeen": "v",
   "action.refresh": "r",

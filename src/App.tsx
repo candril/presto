@@ -11,7 +11,7 @@ import { Shell } from "./components/Shell"
 import { Header } from "./components/Header"
 import { TabBar } from "./components/TabBar"
 import { StatusBar } from "./components/StatusBar"
-import { PRList } from "./components/PRList"
+import { PRList, type ListViewHandle } from "./components/PRList"
 import { PreviewPanel } from "./components/PreviewPanel"
 import { Loading } from "./components/Loading"
 import { DiscoverySuggestions } from "./components/DiscoverySuggestions"
@@ -45,6 +45,7 @@ import {
   useHeaderInfo,
   usePreview,
   useAutoRefresh,
+  useFlash,
   useTabNotifications,
 } from "./hooks"
 import { debouncedSaveTabs } from "./tabs"
@@ -181,6 +182,15 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     registerFocusCallback: onFocusChange,
   })
 
+  // Feature: Flash jump (spec 047)
+  const { flash, startFlash, handleFlashKey } = useFlash()
+  const listView = useRef<ListViewHandle | null>(null)
+  const startFlashOnScreen = useCallback(() => {
+    const rows = listView.current?.visibleRows()
+    if (!rows) return
+    startFlash(filteredPRs.slice(rows.start, rows.end).map((pr) => pr.url))
+  }, [filteredPRs, startFlash])
+
   // Feature: Keyboard navigation
   useKeyboardNav({
     config,
@@ -201,6 +211,12 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     activeTabId: state.activeTabId,
     markPending: state.markPending,
     jumpPending: state.jumpPending,
+    flash: {
+      active: flash !== null,
+      start: startFlashOnScreen,
+      handleKey: handleFlashKey,
+      holdScroll: () => listView.current?.holdScroll(),
+    },
   })
 
   // Feature: PR Preview
@@ -336,6 +352,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
                 afterDays: config.display.fadeAfterDays,
                 floor: config.display.fadeFloor,
               }}
+              flashLabels={flash?.labels}
+              viewHandle={listView}
               emptyMessage={
                 filter.starred && history.starredAuthors.length === 0
                   ? "No starred authors"

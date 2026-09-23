@@ -36,7 +36,7 @@ toggles it by hand. `>unread` (`^U`) lists what is still unread. With
 
 ## Stars and recent
 
-`s` stars the selected PR's author. Starred authors are offered first by `tab` completion,
+`⇧S` stars the selected PR's author. Starred authors are offered first by `tab` completion,
 `>starred` (`^S`) lists their PRs, and a repo with `starred_only = true` shows nobody else.
 
 PRs you open are remembered; `>recent` (`^R`) lists the last thirty, fetching the ones that

@@ -46,6 +46,18 @@ export interface UseKeyboardNavOptions {
   // Mark categories (spec 028)
   markPending: boolean
   jumpPending: boolean
+  // Flash jump (spec 047)
+  flash: FlashControls
+}
+
+export interface FlashControls {
+  active: boolean
+  /** Label the rows on screen */
+  start: () => void
+  /** Feed a key to the active jump; the PR URL it lands on, if it completes a label */
+  handleKey: (key: string) => string | null
+  /** Keep the list from scrolling on the next selection change */
+  holdScroll: () => void
 }
 
 export function useKeyboardNav({
@@ -67,11 +79,40 @@ export function useKeyboardNav({
   activeTabId,
   markPending,
   jumpPending,
+  flash,
 }: UseKeyboardNavOptions) {
   const renderer = useRenderer()
   const keys = useKeybindings(config)
 
   useKeyboard((key) => {
+    // Helper to mark current PR as seen when navigating with preview open
+    // Uses debounced save to avoid blocking I/O on every keystroke during rapid j/k navigation
+    const markCurrentAsSeen = () => {
+      if (previewPosition) {
+        const pr = filteredPRs[selectedIndex]
+        if (pr) {
+          const prKey = getPRKey(getRepoName(pr), pr.number)
+          if (history.prSnapshots?.[prKey]?.hasChanges) {
+            const newHistory = markPRSeen(history, prKey)
+            setHistory(newHistory)
+            debouncedSaveHistory(newHistory)
+          }
+        }
+      }
+    }
+
+    // An active flash jump (spec 047) owns the keyboard: every key is a label or a cancel
+    if (flash.active) {
+      const url = flash.handleKey(key.name ?? "")
+      const index = url ? filteredPRs.findIndex((pr) => pr.url === url) : -1
+      if (index >= 0 && index !== selectedIndex) {
+        markCurrentAsSeen()
+        flash.holdScroll()
+        dispatch({ type: "SELECT", index })
+      }
+      return
+    }
+
     // Mark-pending mode (spec 028): waiting for a-z letter after M
     if (markPending) {
       dispatch({ type: "SET_MARK_PENDING", pending: false })
@@ -140,6 +181,11 @@ export function useKeyboardNav({
     // Open command palette
     if (keys.matches(key, "ui.commandPalette")) {
       dispatch({ type: "OPEN_COMMAND_PALETTE" })
+      return
+    }
+
+    if (keys.matches(key, "nav.jump")) {
+      flash.start()
       return
     }
 
@@ -352,22 +398,6 @@ export function useKeyboardNav({
     }
 
     // Navigation - clamp to filtered list bounds
-    // Helper to mark current PR as seen when navigating with preview open
-    // Uses debounced save to avoid blocking I/O on every keystroke during rapid j/k navigation
-    const markCurrentAsSeen = () => {
-      if (previewPosition) {
-        const pr = filteredPRs[selectedIndex]
-        if (pr) {
-          const prKey = getPRKey(getRepoName(pr), pr.number)
-          if (history.prSnapshots?.[prKey]?.hasChanges) {
-            const newHistory = markPRSeen(history, prKey)
-            setHistory(newHistory)
-            debouncedSaveHistory(newHistory)
-          }
-        }
-      }
-    }
-
     if (keys.matches(key, "nav.down") || key.name === "down") {
       markCurrentAsSeen()
       const newIndex = Math.min(selectedIndex + 1, filteredPRs.length - 1)
