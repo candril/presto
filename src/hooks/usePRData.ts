@@ -43,13 +43,9 @@ interface UsePRDataOptions {
  * (and thus aren't in the initial open-only fetch).
  */
 /**
- * Keep the PRs we already have for repos that came back empty-handed, so a
- * transient GitHub error neither blanks the list nor lets the follow-up cache
- * write persist that blank.
- *
- * Two kinds of repo land here. A failed one has nothing to say; an unchanged
- * one was cleared by the digest probe, which established that what we hold is
- * already current. Both mean "keep what you have".
+ * Keep the PRs we already have for repos whose fetch failed, so a transient
+ * GitHub error neither blanks the list nor lets the follow-up cache write
+ * persist that blank.
  */
 function retainPRsFromRepos(current: PR[], fetched: PR[], repos: string[]): PR[] {
   if (repos.length === 0) return fetched
@@ -62,11 +58,6 @@ function retainPRsFromRepos(current: PR[], fetched: PR[], repos: string[]): PR[]
       !fetchedKeys.has(`${getRepoName(pr)}#${pr.number}`)
   )
   return [...fetched, ...retained]
-}
-
-/** The repos a result carried no PRs for, whether it failed or simply had no news. */
-function reposWithoutPRs(result: { failedRepos: string[]; unchangedRepos: string[] }): string[] {
-  return [...result.failedRepos, ...result.unchangedRepos]
 }
 
 function describeFailedRepos(failedRepos: string[]): string {
@@ -267,7 +258,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         const priorityPRs = retainPRsFromRepos(
           prsRef.current,
           priorityResult.prs,
-          reposWithoutPRs(priorityResult)
+          priorityResult.failedRepos
         )
         if (priorityResult.failedRepos.length > 0) {
           dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(priorityResult.failedRepos) })
@@ -321,7 +312,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
                 const restPRs = retainPRsFromRepos(
                   prsRef.current,
                   restResult.prs,
-                  reposWithoutPRs(restResult)
+                  restResult.failedRepos
                 )
                 if (restResult.failedRepos.length > 0) {
                   dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(restResult.failedRepos) })
@@ -382,7 +373,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         let allFetchedPRs = retainPRsFromRepos(
           prsRef.current,
           allResult.prs,
-          reposWithoutPRs(allResult)
+          allResult.failedRepos
         )
         if (allResult.failedRepos.length > 0) {
           dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(allResult.failedRepos) })

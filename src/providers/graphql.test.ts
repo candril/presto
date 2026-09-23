@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { countComments, digestOf } from "./graphql"
+import { afterEach, describe, expect, test } from "bun:test"
+import { countComments, digestOf, fetchRepoPRs } from "./graphql"
 
 const human = (login: string) => ({ author: { login } })
 const thread = (opts: { author?: string; typename?: string; resolved: boolean; comments: number }) => ({
@@ -118,5 +118,55 @@ describe("digestOf", () => {
 
   test("nulls in the node list are dropped", () => {
     expect(digestOf([null, node(), undefined])).toBe(digestOf([node()]))
+  })
+})
+
+describe("fetchRepoPRs", () => {
+  const realFetch = globalThis.fetch
+  afterEach(() => {
+    globalThis.fetch = realFetch
+  })
+
+  const prNode = {
+    number: 7,
+    title: "Add thing",
+    url: "https://github.com/acme/unchanged/pull/7",
+    state: "OPEN",
+    isDraft: false,
+    createdAt: "2026-09-20T10:00:00Z",
+    updatedAt: "2026-09-23T10:00:00Z",
+    author: { login: "alice" },
+    commits: { nodes: [] },
+  }
+
+  /** Answers every probe and full fetch with the same one PR, counting the full fetches */
+  function stubGitHub() {
+    const calls = { full: 0 }
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      const full = init.body.includes("latestOpinionatedReviews")
+      if (full) calls.full++
+      return new Response(JSON.stringify({ data: { repository: { pullRequests: { nodes: [prNode] } } } }))
+    }) as unknown as typeof fetch
+    return calls
+  }
+
+  test("an unchanged repo answers with the PRs it last fetched, not with nothing", async () => {
+    const calls = stubGitHub()
+    const first = await fetchRepoPRs("acme/unchanged", "token", false)
+    const second = await fetchRepoPRs("acme/unchanged", "token", false)
+
+    expect(first.unchanged).toBe(false)
+    expect(second.unchanged).toBe(true)
+    expect(second.prs.map((pr) => pr.number)).toEqual([7])
+    expect(calls.full).toBe(1)
+  })
+
+  test("force pays for the full fetch even when nothing moved", async () => {
+    const calls = stubGitHub()
+    await fetchRepoPRs("acme/forced", "token", false)
+    const forced = await fetchRepoPRs("acme/forced", "token", true)
+
+    expect(forced.unchanged).toBe(false)
+    expect(calls.full).toBe(2)
   })
 })

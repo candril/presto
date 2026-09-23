@@ -136,12 +136,18 @@ export function digestOf(nodes: any[]): string {
 }
 
 /**
- * The digest each repo last presented, so the next refresh can tell whether
- * anything moved. Module state for the same reason the token is: presto runs
- * one of these per process, and the alternative is threading a cache through
- * every caller for no gain.
+ * Each repo's last full fetch and the digest it was taken at, so the next
+ * refresh can tell whether anything moved. Module state for the same reason
+ * the token is: presto runs one of these per process, and the alternative is
+ * threading a cache through every caller for no gain.
+ *
+ * The PRs are kept beside the digest because "unchanged" is only true of the
+ * fetch the digest was taken from. Leaving the caller to supply them from
+ * whatever it has on screen breaks as soon as that list has been narrowed —
+ * a tab's repo filter, a refresh that had only landed its first half — and
+ * the repo's PRs then vanish until something in it moves.
  */
-const lastDigests = new Map<string, string>()
+const lastFetches = new Map<string, { digest: string; prs: PR[] }>()
 
 /** Comment tallies derived from one PR's conversation, reviews and review threads */
 export interface CommentCounts {
@@ -365,9 +371,6 @@ function isRetryableGraphQLError(type?: string): boolean {
   return type !== "RATE_LIMITED" && type !== "NOT_FOUND" && type !== "FORBIDDEN"
 }
 
-/** A repo the probe cleared: nothing moved, so the caller keeps what it has. */
-const UNCHANGED = Symbol("unchanged")
-
 /**
  * Fetch PRs from a single repository, retrying transient failures.
  *
@@ -380,11 +383,11 @@ const UNCHANGED = Symbol("unchanged")
  * stamping it would leave the next refresh skipping a repo whose PRs presto
  * never actually loaded.
  */
-async function fetchRepoPRs(
+export async function fetchRepoPRs(
   repo: string,
   token: string,
   force: boolean
-): Promise<PR[] | typeof UNCHANGED> {
+): Promise<{ prs: PR[]; unchanged: boolean }> {
   const [owner, name] = repo.split("/")
   if (!owner || !name) throw new RepoFetchError(`invalid repo name "${repo}"`, false)
 
@@ -392,19 +395,20 @@ async function fetchRepoPRs(
   for (let attempt = 1; ; attempt++) {
     try {
       const digest = await probeRepo(repo, token)
-      if (!force && digest === lastDigests.get(repo)) {
+      const last = lastFetches.get(repo)
+      if (!force && last?.digest === digest) {
         log.finish("unchanged (1pt)")
-        return UNCHANGED
+        return { prs: last.prs, unchanged: true }
       }
 
       const prs = await fetchRepoPRsOnce(repo, token)
-      lastDigests.set(repo, digest)
+      lastFetches.set(repo, { digest, prs })
       log.finish(`${prs.length} PRs`)
-      return prs
+      return { prs, unchanged: false }
     } catch (error) {
       const retryable = error instanceof RepoFetchError ? error.retryable : true
       if (!retryable || attempt >= MAX_ATTEMPTS) {
-        lastDigests.delete(repo)
+        lastFetches.delete(repo)
         log.fail(error)
         throw error
       }
@@ -417,10 +421,7 @@ async function fetchRepoPRs(
 export interface RepoFetchResult {
   prs: PR[]
   failedRepos: string[]
-  /**
-   * Repos the probe cleared. Distinct from `failedRepos` only in what the UI
-   * should say about them — both mean "keep the PRs you already have".
-   */
+  /** Repos the probe cleared; their PRs in `prs` are the ones last fetched. */
   unchangedRepos: string[]
 }
 
@@ -448,10 +449,9 @@ export async function listPRsGraphQL(
   results.forEach((result, index) => {
     if (result.status === "rejected") {
       failedRepos.push(repos[index])
-    } else if (result.value === UNCHANGED) {
-      unchangedRepos.push(repos[index])
     } else {
-      allPRs.push(...result.value)
+      allPRs.push(...result.value.prs)
+      if (result.value.unchanged) unchangedRepos.push(repos[index])
     }
   })
 
