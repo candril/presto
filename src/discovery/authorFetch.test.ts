@@ -29,6 +29,14 @@ describe("planAuthorFetches", () => {
     expect(fetches.map((f) => f.repo)).toEqual(["candril/presto"])
   })
 
+  test("a full owner/name asks only that repo, not every repo it is a prefix of", () => {
+    const fetches = plan({
+      repoFilters: ["candril/presto"],
+      allRepos: [...ALL, "candril/presto-docs"],
+    })
+    expect(fetches.map((f) => f.repo)).toEqual(["candril/presto"])
+  })
+
   test("state:merged is left to the closed/merged backfill", () => {
     expect(plan({ states: ["merged"] })).toEqual([])
     expect(plan({ states: ["closed"] })).toEqual([])

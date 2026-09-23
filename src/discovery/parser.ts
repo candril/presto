@@ -10,6 +10,7 @@
 
 import type { PR } from "../types"
 import { getRepoName } from "../types"
+import { filterNamesRepo } from "./repoFilter"
 
 export interface ParsedFilter {
   authors: string[]         // @username entries
@@ -182,12 +183,12 @@ export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
 
     // Repo inclusion filter
     if (filter.repos.length > 0) {
-      if (!filter.repos.some((r) => prRepo.includes(r))) return false
+      if (!filter.repos.some((r) => filterNamesRepo(r, prRepo))) return false
     }
 
     // Repo exclusion filter
     if (filter.excludeRepos.length > 0) {
-      if (filter.excludeRepos.some((r) => prRepo.includes(r))) return false
+      if (filter.excludeRepos.some((r) => filterNamesRepo(r, prRepo))) return false
     }
 
     // State inclusion filter

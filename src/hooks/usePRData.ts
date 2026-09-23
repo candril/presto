@@ -13,6 +13,7 @@ import { getRepoName } from "../types"
 import type { AppAction } from "../state"
 import type { ParsedFilter } from "../discovery"
 import { claimAuthorFetch, planAuthorFetches, releaseAuthorFetch } from "../discovery/authorFetch"
+import { filterNamesRepo } from "../discovery/repoFilter"
 
 /** One repo's closed-or-merged query, with the claim that keeps it from being fired twice */
 interface RepoFetch {
@@ -69,16 +70,6 @@ export function retainPRsFromRepos(current: PR[], fetched: PR[], repos: string[]
 export function replaceReposPRs(current: PR[], fetched: PR[], repos: string[]): PR[] {
   const replacing = new Set(repos.map((r) => r.toLowerCase()))
   return [...fetched, ...current.filter((pr) => !replacing.has(getRepoName(pr).toLowerCase()))]
-}
-
-/**
- * Whether a `repo:` filter term names this repo. A full owner/name must match exactly —
- * `acme/api` is not `acme/api-gateway`, and treating it as such would skip fetching the
- * repo that was asked for — while a bare fragment matches anywhere in the name.
- */
-export function filterNamesRepo(filterRepo: string, repo: string): boolean {
-  const name = repo.toLowerCase()
-  return filterRepo.includes("/") ? name === filterRepo : name.includes(filterRepo)
 }
 
 function describeFailedRepos(failedRepos: string[]): string {
@@ -655,7 +646,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     let reposToCheck = enabledRepos
     if (filter.repos.length > 0) {
       reposToCheck = enabledRepos.filter((repo) =>
-        filter.repos.some((f) => repo.toLowerCase().includes(f))
+        filter.repos.some((f) => filterNamesRepo(f, repo))
       )
     }
 

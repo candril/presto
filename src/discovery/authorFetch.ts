@@ -6,6 +6,8 @@
  * list for an `@author` filter to find — it has to be fetched by name.
  */
 
+import { filterNamesRepo } from "./repoFilter"
+
 /** One repo to ask about one author, and the key that keeps it from being asked twice. */
 export interface AuthorFetch {
   author: string
@@ -48,7 +50,7 @@ export function planAuthorFetches({
   const candidates =
     repoFilters.length > 0
       ? allRepos.filter((repo) =>
-          repoFilters.some((wanted) => repo.toLowerCase().includes(wanted.toLowerCase())),
+          repoFilters.some((wanted) => filterNamesRepo(wanted, repo)),
         )
       : enabledRepos
 

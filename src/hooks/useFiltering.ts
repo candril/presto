@@ -5,6 +5,7 @@
 
 import { useMemo, useEffect, useRef, useState, useCallback } from "react"
 import { parseFilter, applyFilter, applyStarredOnlyFilter } from "../discovery"
+import { filterNamesRepo } from "../discovery/repoFilter"
 import { saveFilterQuery } from "../cache"
 import { getPR, getPRsByBranch } from "../providers"
 import type { Config } from "../config"
@@ -326,7 +327,7 @@ export function useFiltering({
       let result = prs.filter((pr) => {
         const repoName = getRepoName(pr).toLowerCase()
         if (enabledRepoNames.has(repoName)) return true
-        if (hasRepoFilter && filter.repos.some((r) => repoName.includes(r))) return true
+        if (hasRepoFilter && filter.repos.some((r) => filterNamesRepo(r, repoName))) return true
         return false
       })
       
@@ -355,7 +356,7 @@ export function useFiltering({
       // Always allow if repo is in enabled config
       if (enabledRepoNames.has(repoName)) return true
       // Allow if there's a repo filter and this PR matches it
-      if (hasRepoFilter && filter.repos.some((r) => repoName.includes(r))) return true
+      if (hasRepoFilter && filter.repos.some((r) => filterNamesRepo(r, repoName))) return true
       return false
     })
     

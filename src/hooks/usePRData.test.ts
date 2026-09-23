@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PR } from "../types"
-import { filterNamesRepo, replaceReposPRs, retainPRsFromRepos } from "./usePRData"
+import { replaceReposPRs, retainPRsFromRepos } from "./usePRData"
 
 const pr = (repo: string, number: number) =>
   ({ number, url: `https://github.com/${repo}/pull/${number}` }) as PR
@@ -27,16 +27,5 @@ describe("retainPRsFromRepos", () => {
     const held = [pr("acme/api", 1), pr("acme/web", 2)]
     const next = retainPRsFromRepos(held, [pr("acme/web", 3)], ["acme/api"])
     expect(next.map((p) => p.number).sort()).toEqual([1, 3])
-  })
-})
-
-describe("filterNamesRepo", () => {
-  test("a fragment matches anywhere in the name", () => {
-    expect(filterNamesRepo("api", "acme/api-gateway")).toBe(true)
-  })
-
-  test("a full owner/name matches only that repo", () => {
-    expect(filterNamesRepo("acme/api", "acme/api-gateway")).toBe(false)
-    expect(filterNamesRepo("acme/api", "Acme/API")).toBe(true)
   })
 })
