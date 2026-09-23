@@ -328,8 +328,8 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
         // Record ad-hoc priority repos as visited
         const configRepoNames = new Set(config.repositories.map((r) => r.name.toLowerCase()))
-        const visitedRepoNames = new Set((history.visitedRepos ?? []).map((r) => r.name.toLowerCase()))
-        let updatedHistory = history
+        const visitedRepoNames = new Set((historyRef.current.visitedRepos ?? []).map((r) => r.name.toLowerCase()))
+        let updatedHistory = historyRef.current
         let historyChanged = false
         for (const repo of priority) {
           const repoLower = repo.toLowerCase()
@@ -353,7 +353,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         // whole refresh and a second one cannot start underneath it.
         const hasBackgroundWork = rest.length > 0 
           || getTrackedPRsFromNonConfiguredRepos().length > 0
-          || Object.keys(history.markedPRs ?? {}).length > 0
+          || Object.keys(historyRef.current.markedPRs ?? {}).length > 0
         if (hasBackgroundWork) {
           await (async () => {
             try {
@@ -392,7 +392,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
               }
 
               // Fetch marked PRs that are missing (e.g. closed/merged PRs from configured repos)
-              const missingMarked = getMissingMarkedPRs(backgroundPRs, history)
+              const missingMarked = getMissingMarkedPRs(backgroundPRs, historyRef.current)
               if (missingMarked.length > 0) {
                 const markedPRs = await getPRsBulk(missingMarked)
                 backgroundPRs = [...backgroundPRs, ...markedPRs]
@@ -447,7 +447,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         }
 
         // Fetch marked PRs that are missing (e.g. closed/merged PRs from configured repos)
-        const missingMarked = getMissingMarkedPRs(allFetchedPRs, history)
+        const missingMarked = getMissingMarkedPRs(allFetchedPRs, historyRef.current)
         if (missingMarked.length > 0) {
           const markedPRs = await getPRsBulk(missingMarked)
           allFetchedPRs = [...allFetchedPRs, ...markedPRs]
@@ -520,11 +520,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     dispatch({ type: "SHOW_MESSAGE", message: `Fetching PR #${number}...` })
     getPR(repo, number).then((pr) => {
       if (pr) {
-        dispatch({ type: "SET_PRS", prs: [pr, ...prs] })
+        dispatch({ type: "APPEND_PRS", prs: [pr] })
         dispatch({ type: "SHOW_MESSAGE", message: `Loaded PR #${number}` })
         
         // Record as viewed (spec 015)
-        const newHistory = recordPRView(history, {
+        const newHistory = recordPRView(historyRef.current, {
           repo: getRepoName(pr),
           number: pr.number,
           title: pr.title,
