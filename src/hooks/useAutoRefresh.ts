@@ -48,18 +48,25 @@ export function useAutoRefresh({
     lastRefreshRef.current = lastRefresh
   }, [lastRefresh])
 
-  // Perform refresh and update timestamp
+  // Callers pass fresh closures on every render. Depending on them would re-run the
+  // interval effect each time, and every keypress would push the next refresh back by a
+  // whole interval — while someone is using presto, it would never fire.
+  const onRefreshRef = useRef(onRefresh)
+  onRefreshRef.current = onRefresh
+  const onRefreshCompleteRef = useRef(onRefreshComplete)
+  onRefreshCompleteRef.current = onRefreshComplete
+
   const doRefresh = useCallback(async () => {
     if (isRefreshingRef.current) return
     isRefreshingRef.current = true
     
     try {
-      await onRefresh()
-      onRefreshComplete(new Date())
+      await onRefreshRef.current()
+      onRefreshCompleteRef.current(new Date())
     } finally {
       isRefreshingRef.current = false
     }
-  }, [onRefresh, onRefreshComplete])
+  }, [])
 
   // Set up interval-based refresh
   useEffect(() => {
