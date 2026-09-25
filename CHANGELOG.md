@@ -7,6 +7,10 @@ release, so write it before tagging.
 
 ## [Unreleased]
 
+### Changed
+
+- OpenTUI 0.5.12 and `smol-toml` 1.9.
+
 ### Added
 
 - **Rows fade as they age.** A PR nobody has touched for three weeks dims, one untouched for
