@@ -7,6 +7,8 @@ release, so write it before tagging.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-25
+
 ### Changed
 
 - OpenTUI 0.5.12 and `smol-toml` 1.9.
@@ -72,6 +74,7 @@ First release.
 - Prebuilt binaries for macOS (arm64, x64) and Linux (x64, arm64), a curl installer, a
   Homebrew formula and a Nix package via [candril/homebrew-tap](https://github.com/candril/homebrew-tap).
 
-[Unreleased]: https://github.com/candril/presto/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/candril/presto/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/candril/presto/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/candril/presto/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/candril/presto/releases/tag/v0.1.0
