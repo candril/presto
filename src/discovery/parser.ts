@@ -5,6 +5,7 @@
  * - @username - filter by author
  * - repo:name - filter by repository
  * - state:open|closed|merged|draft - filter by state (P2)
+ * - 123 - PR number, among the loaded rows only
  * - plain text - search in titles
  */
 
@@ -19,6 +20,7 @@ export interface ParsedFilter {
   excludeRepos: string[]    // -repo:name entries
   states: string[]          // state:open entries
   excludeStates: string[]   // -state:draft entries
+  numbers: number[]         // bare 123 entries
   text: string              // Remaining text for title search
   showAll: boolean          // * modifier - bypass starred-only filter
   prRef: { repo?: string; number: number } | null  // Direct PR reference (URL, #123, etc.)
@@ -40,6 +42,7 @@ export const emptyFilter: ParsedFilter = {
   excludeRepos: [],
   states: [],
   excludeStates: [],
+  numbers: [],
   text: "",
   showAll: false,
   prRef: null,
@@ -60,6 +63,7 @@ export function isFilterActive(filter: ParsedFilter): boolean {
     filter.excludeRepos.length > 0 ||
     filter.states.length > 0 ||
     filter.excludeStates.length > 0 ||
+    filter.numbers.length > 0 ||
     filter.text.length > 0 ||
     filter.showAll ||
     filter.prRef !== null ||
@@ -81,6 +85,7 @@ export function parseFilter(query: string): ParsedFilter {
     excludeRepos: [],
     states: [],
     excludeStates: [],
+    numbers: [],
     text: "",
     showAll: false,
     prRef: null,
@@ -134,6 +139,8 @@ export function parseFilter(query: string): ParsedFilter {
       result.excludeRepos.push(token.slice(6).toLowerCase())
     } else if (token.startsWith("repo:")) {
       result.repos.push(token.slice(5).toLowerCase())
+    } else if (/^\d+$/.test(token)) {
+      result.numbers.push(parseInt(token, 10))
     } else if (token.startsWith("-state:")) {
       result.excludeStates.push(token.slice(7).toLowerCase())
     } else if (token.startsWith("state:")) {
@@ -205,6 +212,10 @@ export function applyFilter(prs: PR[], filter: ParsedFilter): PR[] {
     if (filter.excludeStates.length > 0) {
       const excluded = filter.excludeStates.some((state) => matchesState(pr, state))
       if (excluded) return false
+    }
+
+    if (filter.numbers.length > 0) {
+      if (!filter.numbers.includes(pr.number)) return false
     }
 
     // Text search in title, author (login + display name), and repo

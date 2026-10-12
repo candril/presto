@@ -28,6 +28,7 @@ leading `-` negates.
 | `>recent` | PRs you opened recently |
 | `>starred` | PRs by starred authors |
 | `*` | show everything, including PRs hidden by `starred_only` repos |
+| `482` | PR number, among the rows already listed — nothing is fetched |
 | anything else | free text against the title |
 
 Without a `state:` token the list shows open PRs and drafts only. Merged and closed PRs are
@@ -52,6 +53,9 @@ Paste a PR reference and the filter becomes a lookup:
 / api#482
 / #482                 searched across every configured repo
 ```
+
+Without the `#`, a number is just a filter on the list in front of you (see the grammar
+above).
 
 If the PR is not in the list — it is merged, or from a repo you don't watch — presto fetches
 it. A repo you look into this way is remembered as *visited* and offered by `tab` completion
