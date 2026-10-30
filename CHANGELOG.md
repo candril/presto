@@ -15,7 +15,9 @@ release, so write it before tagging.
   were missing altogether. `*` and `repo:` still load every author. Each repo's rows also
   land as soon as that repo answers rather than waiting on the slowest one, and the
   change check no longer asks for the merge state, which GitHub is slowest to compute: a
-  PR that only fell behind its base shows it one refresh later, or at once with `r`.
+  PR that only fell behind its base shows it one refresh later, or at once with `r`. The
+  first refresh after startup and `r` skip that check altogether, since there is nothing
+  yet to compare it with.
 
 ## [0.3.0] — 2026-09-25
 

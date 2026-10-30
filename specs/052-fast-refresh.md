@@ -37,6 +37,9 @@ answers, and the change probe no longer asks for the field GitHub is slowest to 
 - A search query is split into several aliased searches when the author list would push it
   past GitHub's 256-character query limit.
 - The REST fallback for a failed scoped repo searches the same authors.
+- With no earlier digest to compare against (first refresh after startup, a failed last
+  fetch) or on `r`, the probe is skipped: the full fetch carries every digest field and
+  stores the digest itself. Saves the probe's ~1.5s per repo on those refreshes.
 
 ## Technical Notes
 

@@ -50,15 +50,18 @@ const PR_FRAGMENT = `
   viewerCanUpdateBranch
   autoMergeRequest { mergeMethod }
   reviewThreads(first: 50) {
+    totalCount
     nodes {
       isResolved
       comments(first: 1) { totalCount nodes { author { login __typename } } }
     }
   }
   comments(first: 100) {
+    totalCount
     nodes { author { login } }
   }
   reviews(first: 50) {
+    totalCount
     nodes { author { login } }
   }
   latestOpinionatedReviews(first: 10) {
@@ -67,6 +70,7 @@ const PR_FRAGMENT = `
   commits(last: 1) {
     nodes {
       commit {
+        oid
         committedDate
         statusCheckRollup { state }
         checkSuites(first: 20) { nodes { status } }
@@ -340,9 +344,19 @@ function openPRsQuery(repo: string, fields: string, authors?: string[]): string 
   }`
 }
 
-/** Single GraphQL round-trip for one repo, at full 28-point depth. */
-async function fetchRepoPRsOnce(repo: string, token: string, authors?: string[]): Promise<PR[]> {
-  return (await fetchRepoNodes(openPRsQuery(repo, PR_FRAGMENT, authors), token)).map(transformGraphQLPR)
+/**
+ * Single GraphQL round-trip for one repo, at full 28-point depth.
+ *
+ * `PR_FRAGMENT` carries every field `digestOf` reads, so the digest comes from
+ * the same answer as the PRs and no probe is needed to start one.
+ */
+async function fetchRepoPRsOnce(
+  repo: string,
+  token: string,
+  authors?: string[]
+): Promise<{ prs: PR[]; digest: string }> {
+  const nodes = await fetchRepoNodes(openPRsQuery(repo, PR_FRAGMENT, authors), token)
+  return { prs: nodes.map(transformGraphQLPR), digest: digestOf(nodes) }
 }
 
 /**
@@ -417,10 +431,11 @@ function isRetryableGraphQLError(type?: string): boolean {
 /**
  * Fetch PRs from a single repository, retrying transient failures.
  *
- * Always probes, for 1 point; only pays the other 28 when the digest moved
- * or `force` overrides it. A forced refresh still probes so that the digest
- * it stores lets the *next* refresh skip — otherwise pressing `r` would make
- * every following refresh full price again.
+ * Probes for 1 point and only pays the other 28 when the digest moved. With
+ * no earlier digest to compare against (the first fetch, a failed last one)
+ * or under `force`, the probe could not skip anything: it goes straight to the
+ * full fetch, which yields the digest for the next refresh itself. On
+ * Dg.GalaxusAbos that is 1.5s of a 5s first refresh.
  *
  * The digest is stored only once the fetch succeeds. A fetch that died after
  * stamping it would leave the next refresh skipping a repo whose PRs presto
@@ -444,14 +459,13 @@ export async function fetchRepoPRs(
   const log = logRequest("graphql", `fetchRepoPRs ${repo}${authors ? ` (${authors.length} authors)` : ""}`)
   for (let attempt = 1; ; attempt++) {
     try {
-      const digest = await probeRepo(repo, token, authors)
-      const last = lastFetches.get(cacheKey)
-      if (!force && last?.digest === digest) {
+      const last = force ? undefined : lastFetches.get(cacheKey)
+      if (last && last.digest === (await probeRepo(repo, token, authors))) {
         log.finish("unchanged (1pt)")
         return { prs: last.prs, unchanged: true }
       }
 
-      const prs = await fetchRepoPRsOnce(repo, token, authors)
+      const { prs, digest } = await fetchRepoPRsOnce(repo, token, authors)
       lastFetches.set(cacheKey, { digest, prs })
       log.finish(`${prs.length} PRs`)
       return { prs, unchanged: false }

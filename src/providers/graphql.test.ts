@@ -137,12 +137,13 @@ describe("fetchRepoPRs", () => {
     commits: { nodes: [] },
   }
 
-  /** Answers every probe and full fetch with the same one PR, counting the full fetches */
+  /** Answers every probe and full fetch with the same one PR, counting both */
   function stubGitHub() {
-    const calls = { full: 0 }
+    const calls = { full: 0, probe: 0 }
     globalThis.fetch = (async (_url: string, init: { body: string }) => {
       const full = init.body.includes("latestOpinionatedReviews")
       if (full) calls.full++
+      else calls.probe++
       return new Response(JSON.stringify({ data: { repository: { pullRequests: { nodes: [prNode] } } } }))
     }) as unknown as typeof fetch
     return calls
@@ -157,6 +158,12 @@ describe("fetchRepoPRs", () => {
     expect(second.unchanged).toBe(true)
     expect(second.prs.map((pr) => pr.number)).toEqual([7])
     expect(calls.full).toBe(1)
+  })
+
+  test("a first fetch has no digest to compare, so it does not probe", async () => {
+    const calls = stubGitHub()
+    await fetchRepoPRs("acme/first", "token", false)
+    expect(calls).toEqual({ full: 1, probe: 0 })
   })
 
   test("a scoped fetch asks a search for the authors and reads its nodes", async () => {
@@ -197,7 +204,15 @@ describe("fetchRepoPRs", () => {
     const forced = await fetchRepoPRs("acme/forced", "token", true)
 
     expect(forced.unchanged).toBe(false)
-    expect(calls.full).toBe(2)
+    expect(calls).toEqual({ full: 2, probe: 0 })
+  })
+
+  test("the digest a forced fetch stores lets the next refresh skip", async () => {
+    const calls = stubGitHub()
+    await fetchRepoPRs("acme/forced-then-skip", "token", true)
+    const next = await fetchRepoPRs("acme/forced-then-skip", "token", false)
+    expect(next.unchanged).toBe(true)
+    expect(calls).toEqual({ full: 1, probe: 1 })
   })
 })
 
