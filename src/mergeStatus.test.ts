@@ -51,9 +51,14 @@ const checks = (...statuses: Array<PreviewCheck["status"]>): PRPreview["checks"]
 describe("Merge column label", () => {
   test("names the blocker, not just whose move it is", () => {
     expect(getMergeLabel(pr({ mergeStateStatus: "DIRTY" }), false).text).toBe("conflicts")
-    expect(getMergeLabel(pr({ mergeStateStatus: "BEHIND" }), false).text).toBe("behind master")
+    expect(getMergeLabel(pr({ mergeStateStatus: "BEHIND" }), false).text).toBe("behind")
     expect(getMergeLabel(pr({ unresolvedThreads: 3 }), false).text).toBe("3 threads")
-    expect(getMergeLabel(pr({ mergeStateStatus: "CLEAN" }), false).text).toBe("ready")
+  })
+
+  test("no words where the glyph says it all", () => {
+    expect(getMergeLabel(pr({ mergeStateStatus: "CLEAN" }), false).text).toBe("")
+    expect(getMergeLabel(pr({ mergeStateStatus: "BLOCKED", reviewDecision: "REVIEW_REQUIRED" }), false).text).toBe("")
+    expect(getMergeLabel(pr({ autoMergeMethod: "squash" }), false).text).toBe("")
   })
 
   test("running CI shows how far it got", () => {
@@ -71,7 +76,7 @@ describe("Merge column label", () => {
     })
     const label = getMergeLabel(queued, false)
     expect(label.icon).toBe("⧗")
-    expect(label.text).toBe("queue #2 ~3m")
+    expect(label.text).toBe("#2 ~3m")
   })
 
   test("unmergeable in the queue is the author's move", () => {

@@ -30,7 +30,6 @@ const COL = {
   review: 1,     // icon (no trailing space)
   sync: 1,       // icon (no trailing space)
   merge: 1,      // icon (no trailing space)
-  mergeLabel: 15, // icon + space + "queue #12 ~45m"
   comments: 3,   // open comment count (e.g. "12" or "99+")
   time: 4,       // "1d" or "2mo" (without "ago")
   repo: 16,      // Short repo name
@@ -44,14 +43,16 @@ const COL = {
  */
 export type GateMode = "full" | "compact"
 
-/** The status columns as drawn: the gate glyphs, and the Merge column in words or as a glyph */
+/** The status columns as drawn */
 export interface ListLayout {
   gates: GateMode
-  mergeWords: boolean
 }
 
 /** Below this the title stops being readable, so the gate detail goes instead */
 const MIN_TITLE_WIDTH = 32
+
+/** A title shorter than this is unreadable, so the reason is dropped instead */
+const MIN_REASON_TITLE = 16
 
 /**
  * Column visibility is a mask, never an override: collapsing hides gate columns but
@@ -62,24 +63,16 @@ function isGateVisible(v: ColumnVisibility, mode: GateMode, column: "checks" | "
 }
 
 /**
- * The richest layout that leaves the title readable. The gate glyphs go first: they
- * explain the verdict, while the Merge column's words are the one-glance answer. The
- * toggle only ever asks for the gates; width decides whether it gets them.
+ * The gate glyphs when they leave the title readable. The toggle only ever asks for them;
+ * width decides whether it gets them.
  */
 export function chooseLayout(listWidth: number, v: ColumnVisibility, gateDetail: boolean): ListLayout {
-  const candidates: ListLayout[] = [
-    ...(gateDetail ? [{ gates: "full" as const, mergeWords: true }] : []),
-    { gates: "compact", mergeWords: true },
-    { gates: "compact", mergeWords: false },
-  ]
-  return (
-    candidates.find((layout) => listWidth - getFixedColumnsWidth(v, layout) >= MIN_TITLE_WIDTH) ??
-    candidates[candidates.length - 1]
-  )
+  const full: ListLayout = { gates: "full" }
+  return gateDetail && listWidth - getFixedColumnsWidth(v, full) >= MIN_TITLE_WIDTH ? full : { gates: "compact" }
 }
 
 /** Calculate total fixed width (everything except title) */
-function getFixedColumnsWidth(v: ColumnVisibility, { gates: mode, mergeWords }: ListLayout): number {
+function getFixedColumnsWidth(v: ColumnVisibility, { gates: mode }: ListLayout): number {
   let width = 2 // padding left + right
   width += 2 // mark letters column (2 chars)
   width += 2 // change indicator dot + space
@@ -87,7 +80,7 @@ function getFixedColumnsWidth(v: ColumnVisibility, { gates: mode, mergeWords }: 
   if (isGateVisible(v, mode, "checks")) width += COL.checks // icon + space
   if (isGateVisible(v, mode, "review")) width += COL.review + 1 // icon + space
   if (isGateVisible(v, mode, "sync")) width += COL.sync + 1 // icon + space
-  if (v.merge) width += (mergeWords ? COL.mergeLabel : COL.merge) + 1 // + space
+  if (v.merge) width += COL.merge + 1 // + space
   if (v.comments) width += COL.comments + 1 // comments + space
   if (v.time) width += COL.time + 1 // time + space
   if (v.author) width += COL.author + 1 // space + author
@@ -237,7 +230,7 @@ function PRHeaderRow({ columnVisibility, layout, titleWidth }: { columnVisibilit
         {isGateVisible(v, gateMode, "checks") && "C "}
         {isGateVisible(v, gateMode, "review") && "R "}
         {isGateVisible(v, gateMode, "sync") && "B "}
-        {v.merge && (layout.mergeWords ? padRight("Merge", COL.mergeLabel + 1) : "M ")}
+        {v.merge && "M "}
         {v.comments && padRight("#", COL.comments)}
         {v.comments && " "}
         {v.time && padRight("", COL.time)}
@@ -299,7 +292,12 @@ function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pe
   
   // Title with PR number suffix: "Fix the bug (#123)"
   const prSuffix = ` (${prId})`
-  const titleTextWidth = titleWidth - prSuffix.length
+  // The verdict's reason, right-aligned in the title's space: only rows with something to
+  // say give up title width, and the reasons line up at the edge. It goes before the title
+  // does — the title must keep a readable stub.
+  const reasonCells = v.merge && mergeLabel.text ? mergeLabel.text.length + 3 : 0
+  const reason = reasonCells > 0 && titleWidth - prSuffix.length - reasonCells >= MIN_REASON_TITLE ? mergeLabel.text : ""
+  const titleTextWidth = titleWidth - prSuffix.length - (reason ? reasonCells : 0)
   const title = truncate(pr.title, titleTextWidth)
 
   // Everything between the mark column and the title. A jump label (spec 047) is drawn
@@ -312,15 +310,7 @@ function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pe
   if (isGateVisible(v, gateMode, "checks")) lead.push({ text: checkIndicator.icon, fg: checkIndicator.color }, { text: " " })
   if (isGateVisible(v, gateMode, "review")) lead.push({ text: reviewIndicator.icon, fg: reviewIndicator.color }, { text: " " })
   if (isGateVisible(v, gateMode, "sync")) lead.push({ text: syncIndicator.icon, fg: syncIndicator.color }, { text: " " })
-  if (v.merge) {
-    lead.push({ text: mergeLabel.icon, fg: mergeLabel.color })
-    if (layout.mergeWords) {
-      // Status, like the glyph: kept in colour when the row fades with age
-      const words = truncate(mergeLabel.text, COL.mergeLabel - 2)
-      lead.push({ text: ` ${padRight(words, COL.mergeLabel - 2)}`, fg: mergeLabel.color })
-    }
-    lead.push({ text: " " })
-  }
+  if (v.merge) lead.push({ text: mergeLabel.icon, fg: mergeLabel.color }, { text: " " })
   if (v.comments) lead.push({ text: padRight(commentCount, COL.comments), fg: dim(theme.textMuted) }, { text: " " })
   if (v.time) lead.push({ text: padRight(timeAgo, COL.time), fg: dim(theme.textMuted) }, { text: " " })
 
@@ -348,6 +338,8 @@ function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pe
         <span fg={dim(titleColor)}>{title}</span>
         <span fg={dim(theme.textDim)}>{prSuffix}</span>
         <span>{" ".repeat(Math.max(0, titleTextWidth - title.length))}</span>
+        {/* Muted so the glyph stays the signal; not faded with age, since it is status */}
+        {reason && <span fg={theme.textMuted}>{`  ${reason} `}</span>}
         {v.author && " "}
         {v.author && <span fg={dim(theme.textMuted)}>{padRight(truncate(author, COL.author), COL.author)}</span>}
         {v.repo && " "}

@@ -4,9 +4,9 @@ description: The status columns on every row, and how the merge verdict is decid
 ---
 
 Every row carries five status columns. The first four are single-glyph **gates** GitHub
-evaluates; the fifth is presto's **verdict** on them: whose move it is, and in a word or two
-what is holding the PR up. `c` toggles between the verdict alone and all five; `?` shows
-this legend in the app.
+evaluates; the fifth is presto's **verdict** on them: whose move it is. Where that glyph
+alone is ambiguous, the end of the title says in a word what is holding the PR up. `c`
+toggles between the verdict alone and all five; `?` shows this legend in the app.
 
 ![The shortcut dialog with the column legend](../../../assets/screenshots/help.png)
 
@@ -62,10 +62,12 @@ need only read access — classic branch protection needs admin rights and 404s 
 
 ## M — Merge verdict
 
-The single answer to *who is holding this up?*, the glyph followed by the reason:
-`! conflicts`, `! 2 failing`, `! behind main`, `? review`, `· CI 5/8`, `⧗ queue #1 ~3m`.
-The words go first when the list is narrow: the C/R/B gates give way, then the Merge
-column shrinks to its glyph, so the title stays readable.
+The single answer to *who is holding this up?*. Where one glyph covers several reasons,
+the reason sits muted at the right edge of the title: `conflicts`, `2 failing`, `behind`,
+`2 threads`, `CI 5/8`, `computing`, `protected`, `#1 ~3m`. Ready, review and auto-merge
+have none — the word would only repeat the glyph. Only rows with a reason give up title
+width for it, and on a list too narrow for both the reason goes before the title does.
+The preview spells every reason out.
 
 Deliberately not blocked / pending / ready:
 measured across the configured repos, that split put 86 % of open PRs in "blocked" and made the

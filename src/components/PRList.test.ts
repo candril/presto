@@ -22,15 +22,15 @@ describe("dropTrailingCells", () => {
 describe("chooseLayout", () => {
   const v = defaultColumnVisibility
 
-  test("a wide list gets the gate glyphs and the Merge column in words", () => {
-    expect(chooseLayout(200, v, true)).toEqual({ gates: "full", mergeWords: true })
+  test("a wide list gets the gate glyphs it asks for", () => {
+    expect(chooseLayout(200, v, true)).toEqual({ gates: "full" })
   })
 
-  test("the gate glyphs give way before the Merge column's words", () => {
-    expect(chooseLayout(100, v, true)).toEqual({ gates: "compact", mergeWords: true })
+  test("the gate glyphs give way before the title does", () => {
+    expect(chooseLayout(80, v, true)).toEqual({ gates: "compact" })
   })
 
-  test("a narrow list keeps the title readable with the glyph alone", () => {
-    expect(chooseLayout(80, v, false)).toEqual({ gates: "compact", mergeWords: false })
+  test("collapsed stays collapsed however wide", () => {
+    expect(chooseLayout(200, v, false)).toEqual({ gates: "compact" })
   })
 })

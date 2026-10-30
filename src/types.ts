@@ -215,7 +215,10 @@ export interface MergeVerdictDetail {
   verdict: MergeVerdict
   /** The rule that produced the verdict, spelled out */
   reason: string
-  /** The same rule in a word or two, for the list's Merge column; empty for a draft */
+  /**
+   * The same rule in a word, for the list's Merge column: only where the glyph alone is
+   * ambiguous. Empty for ready, review, auto-merge and draft, whose glyph says it all.
+   */
   short: string
 }
 
@@ -238,13 +241,13 @@ export function computeMergeVerdictDetail(pr: PR, hasPendingAction: boolean): Me
   // position 2" says more than "will land when ready"
   if (pr.mergeQueue) {
     if (pr.mergeQueue.state === "UNMERGEABLE") {
-      return verdict("author", "unmergeable in the merge queue", "queue: unmergeable")
+      return verdict("author", "unmergeable in the merge queue", "queue err")
     }
     return verdict("queued", describeQueueEntry(pr.mergeQueue), queueShort(pr.mergeQueue))
   }
 
   if (pr.autoMergeMethod) {
-    return verdict("auto-merge", `auto-merge (${pr.autoMergeMethod}) armed — lands when ready`, `auto ${pr.autoMergeMethod}`)
+    return verdict("auto-merge", `auto-merge (${pr.autoMergeMethod}) armed — lands when ready`, "")
   }
 
   // Before any merge-state reading: this team blocks with plain comments instead of
@@ -261,12 +264,12 @@ export function computeMergeVerdictDetail(pr: PR, hasPendingAction: boolean): Me
   }
 
   if (pr.mergeStateStatus === "CLEAN" || pr.mergeStateStatus === "HAS_HOOKS") {
-    return verdict("ready", "can be merged now", "ready")
+    return verdict("ready", "can be merged now", "")
   }
   // UNSTABLE is mergeable too: only a non-required check is red, and GitHub offers the
   // merge. The checks column carries the warning.
   if (pr.mergeStateStatus === "UNSTABLE") {
-    return verdict("ready", "mergeable — a non-required check is red", "ready")
+    return verdict("ready", "mergeable — a non-required check is red", "")
   }
 
   const rollupState = computeCheckState(pr.statusCheckRollup)
@@ -277,21 +280,21 @@ export function computeMergeVerdictDetail(pr: PR, hasPendingAction: boolean): Me
   // previously falling through to "waiting on others", which reads as "needs a review".
   if (pr.mergeStateStatus === "DIRTY") return verdict("author", "conflicts with base to resolve", "conflicts")
   if (pr.mergeStateStatus === "BEHIND") {
-    return verdict("author", "base branch must be merged in", `behind ${pr.baseRefName ?? "base"}`)
+    return verdict("author", "base branch must be merged in", "behind")
   }
   if (pr.reviewDecision === "CHANGES_REQUESTED") {
-    return verdict("author", "a reviewer requested changes", "changes req.")
+    return verdict("author", "a reviewer requested changes", "changes")
   }
   if (checks === "FAILURE") {
-    return verdict("author", "failing checks to fix", counts.failed > 0 ? `${counts.failed} failing` : "CI failing")
+    return verdict("author", "failing checks to fix", counts.failed > 0 ? `${counts.failed} failing` : "failing")
   }
   if (checksAreStalled(pr, rollupState)) {
-    return verdict("author", "checks never started — re-trigger CI", "CI stalled")
+    return verdict("author", "checks never started — re-trigger CI", "stalled")
   }
 
   // An outstanding review outranks running CI: the review is the bottleneck a human can
   // clear now, and CI finishes on its own either way.
-  if (pr.reviewDecision === "REVIEW_REQUIRED") return verdict("others", "waiting for a review", "review")
+  if (pr.reviewDecision === "REVIEW_REQUIRED") return verdict("others", "waiting for a review", "")
 
   // Nothing is outstanding from any human — CI is running, has not reported yet, or
   // GitHub is still computing the merge state. NONE lands here rather than in the
@@ -302,7 +305,7 @@ export function computeMergeVerdictDetail(pr: PR, hasPendingAction: boolean): Me
     return verdict(
       "machine",
       "waiting for checks to finish",
-      counts.total > 0 ? `CI ${counts.passed}/${counts.total}` : "CI running"
+      counts.total > 0 ? `CI ${counts.passed}/${counts.total}` : "running"
     )
   }
   if (checks === "NONE" || pr.mergeStateStatus === "UNKNOWN") {
@@ -333,7 +336,7 @@ export function describeQueueState(state: MergeQueueState): string {
 
 function queueShort(entry: MergeQueueEntry): string {
   const eta = entry.estimatedTimeToMerge !== null ? ` ${formatEta(entry.estimatedTimeToMerge)}` : ""
-  return `queue #${entry.position}${eta}`
+  return `#${entry.position}${eta}`
 }
 
 /** Rounded up: "~1m" for anything under a minute, "~1h5m" past the hour */

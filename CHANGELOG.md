@@ -9,11 +9,11 @@ release, so write it before tagging.
 
 ### Added
 
-- **The Merge column names the blocker.** Next to the verdict glyph it now says what is in
-  the way, in a word or two: `! conflicts`, `! 2 failing`, `! behind main`, `? review`,
-  `· CI 5/8`, `⇢ auto squash`. On a narrow list the gate glyphs give way first, then the
-  words, so the title stays readable.
-- **Merge queue.** A queued PR shows `⧗ queue #1 ~3m`: its place in line and GitHub's
+- **Rows name the blocker.** Where the Merge glyph alone is ambiguous, the end of the
+  title says in one muted word what is in the way: `conflicts`, `2 failing`, `behind`,
+  `2 threads`, `CI 5/8`, `computing`, `protected`. Ready, review and auto-merge keep the
+  bare glyph, and only rows with a reason give up title width for it.
+- **Merge queue.** A queued PR shows `⧗` and `#1 ~3m`: its place in line and GitHub's
   estimate, green once GitHub calls it mergeable in the queue.
 - **Merge status in the preview.** The preview opens with the verdict, then one line per
   gate: checks (with the failing and running ones named), reviews (who approved, who

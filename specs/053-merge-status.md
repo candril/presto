@@ -6,8 +6,8 @@
 
 The list's merge verdict is one glyph: it says whose move a PR is, not what is holding it
 up, so `!` could be red CI, a conflict, a stale base or open threads, and the preview is
-the only place to find out. The Merge column now names the blocker in a word or two, and
-the preview replaces its five letter rows with a "Merge status" section modelled on
+the only place to find out. Each row now names the blocker in a word where the glyph is ambiguous, and the
+preview replaces its five letter rows with a "Merge status" section modelled on
 riff's (riff spec 108): one line per gate GitHub applies, with the detail where something
 is not fine. It also covers the merge queue, which spec 040 described and nothing showed.
 
@@ -28,16 +28,21 @@ is not fine. It also covers the merge queue, which spec 040 described and nothin
 
 ### P1 - Must Have
 
-#### Merge column in words
+#### The blocker in a word
 
-- The Merge column is the verdict glyph followed by its short reason, coloured like the
-  glyph: `✓ ready`, `✗ 2 failing`, `! 3 threads`, `! conflicts`, `! behind main`,
-  `! changes req.`, `? review`, `· CI 5/8`, `· computing`, `⧗ queue #1 ~3m`,
-  `⇢ auto squash`. A draft stays blank: the state column already says draft.
+- The Merge column stays one glyph. Its short reason sits right-aligned at the end of the
+  title's space, muted so the glyph stays the signal: `2 failing`, `3 threads`,
+  `conflicts`, `behind`, `changes`, `stalled`, `queue err`, `CI 5/8`, `CI queued`,
+  `computing`, `protected`, `#1 ~3m`, `updating`.
+- No word where the glyph says it all: `✓` ready, `?` review, `⇢` auto-merge. A draft
+  stays blank too: the state column already says draft.
+- No fixed column: one wide enough for the longest reason costs every row title width,
+  most of them to say nothing. Here only rows with a reason pay, and the reasons still
+  line up at the edge.
+- On a list too narrow for both, the reason goes before the title does (a title keeps at
+  least 16 cells).
 - The short reason comes from the same rule as the verdict (`computeMergeVerdictDetail`
-  returns both), so the column and the preview can never disagree.
-- Layout gives way in order: first the C/R/B gate glyphs go (as today, spec 036), then
-  the Merge column falls back to the glyph alone, so the title keeps its minimum width.
+  returns both), so the row and the preview can never disagree.
 
 #### Merge queue (spec 040)
 
@@ -119,7 +124,7 @@ reads `1/1` for the seconds until the first refresh replaces it.
 - `src/types.ts` — `checkCounts`, `mergeQueue`, the `queued` verdict, short reasons
 - `src/status.ts` — merge label for the list
 - `src/mergeStatus.ts` — the preview section's model (pure, tested)
-- `src/components/PRList.tsx` — Merge column in words, layout fallback
+- `src/components/PRList.tsx` — the reason at the end of the title
 - `src/components/PreviewPanel.tsx` — the section
 - `src/providers/graphql.ts`, `src/providers/github.ts` — fields, digest, behind count
 - `src/providers/demo/*` — a queued fixture, counts, behind count
