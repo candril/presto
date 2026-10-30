@@ -41,7 +41,8 @@ S C R B M  #    Title                                   Author   Repo
 The first four columns are the gates — **S**tate, **C**hecks, **R**eview, **B**ase — and the
 fifth is the **M**erge verdict: whose move it is. `✓` nobody's, merge it. `!` the author's:
 open comment threads, a red build, conflicts, behind its base. `?` someone else's, usually a
-review. `·` a machine's — CI is running. `⇢` auto-merge is armed.
+review. `·` a machine's — CI is running. `⧗` it is in the merge queue. `⇢` auto-merge is
+armed. Next to the glyph, the column names the blocker: `! conflicts`, `? review`, `· CI 5/8`.
 
 By default the list shows only **S** and **M**; press `c` to expand the gates. The full
 vocabulary is on [Status Columns](/presto/reference/status-columns/), and `?` shows the legend

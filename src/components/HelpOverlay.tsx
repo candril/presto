@@ -20,6 +20,7 @@ function getLegend(keys: KeybindingsContext) {
       { icon: "!", col: "M", color: theme.warning, text: "author's move — comments, conflicts, behind, CI" },
       { icon: "?", col: "M", color: theme.primary, text: "waiting on others — usually a review" },
       { icon: "·", col: "M", color: theme.textMuted, text: "machine's move — CI or GitHub working" },
+      { icon: "⧗", col: "M", color: theme.primary, text: "in the merge queue — green once mergeable" },
       { icon: "⇢", col: "M", color: theme.secondary, text: "auto-merge armed — lands by itself" },
       { icon: "↻", col: "M", color: theme.warning, text: "your branch update still landing" },
       { icon: "-", col: "M", color: theme.textMuted, text: "draft — not up for merge yet" },

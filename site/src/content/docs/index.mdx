@@ -38,7 +38,8 @@ presto --demo                           # the built-in demo — no GitHub, no co
 
 A PR row carries five glyphs: **S**tate, **C**hecks, **R**eview, **B**ase and **M**erge. The
 first four are the gates; the last one is the verdict — `✓` merge it, `!` the author's move,
-`?` someone else's, `·` a machine's, `⇢` auto-merge will land it. Not *blocked / pending /
+`?` someone else's, `·` a machine's, `⧗` queued, `⇢` auto-merge will land it — each followed by
+what is in the way, `! conflicts`, `· CI 5/8`. Not *blocked / pending /
 ready*: measured across real repos that put 86 % of PRs in "blocked" and told you nothing.
 
 ![The list with all five status columns](../../assets/screenshots/list.png)

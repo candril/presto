@@ -7,6 +7,19 @@ release, so write it before tagging.
 
 ## [Unreleased]
 
+### Added
+
+- **The Merge column names the blocker.** Next to the verdict glyph it now says what is in
+  the way, in a word or two: `! conflicts`, `! 2 failing`, `! behind main`, `? review`,
+  `· CI 5/8`, `⇢ auto squash`. On a narrow list the gate glyphs give way first, then the
+  words, so the title stays readable.
+- **Merge queue.** A queued PR shows `⧗ queue #1 ~3m`: its place in line and GitHub's
+  estimate, green once GitHub calls it mergeable in the queue.
+- **Merge status in the preview.** The preview opens with the verdict, then one line per
+  gate: checks (with the failing and running ones named), reviews (who approved, who
+  requested changes, who is still asked), conversations, conflicts, how many commits
+  behind its base the branch is, the queue, and what else blocks.
+
 ### Changed
 
 - **Refresh on a big monorepo drops from ~18s to ~5s.** A `starredOnly` repo now asks

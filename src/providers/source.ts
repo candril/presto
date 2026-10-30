@@ -37,7 +37,7 @@ export interface PRSource {
   getPRsByBranch(repos: string[], branch: string): Promise<PR[]>
   getPR(repo: string, number: number): Promise<PR | null>
   getPRsBulk(prs: Array<{ repo: string; number: number }>): Promise<PR[]>
-  fetchPRPreview(repo: string, number: number): Promise<PRPreview>
+  fetchPRPreview(repo: string, number: number, refs?: { base: string | null; head: string | null }): Promise<PRPreview>
 
   // Mutations
   submitPRReview(pr: PR, event: ReviewEvent, body: string): Promise<ActionResult>

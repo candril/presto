@@ -5,7 +5,7 @@
 
 import { $ } from "bun"
 import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck, PreviewComment } from "../types"
-import { toMergeMethod } from "../types"
+import { countCheckRuns, toMergeMethod } from "../types"
 import { listPRsGraphQL, getPRsGraphQL, type ListReposOptions, type RepoFetchResult } from "./graphql"
 import { isBot } from "../utils/bots"
 import { logRequest } from "../utils/logger"
@@ -34,7 +34,7 @@ const PR_FIELDS = [
 ].join(",")
 
 /** Raw PR from GitHub API (comments and reviews are arrays) */
-interface RawPR extends Omit<PR, "commentCount" | "openCommentCount" | "autoMergeMethod" | "baseSync" | "baseUpdateRequired" | "headCommittedAt" | "checksQueued" | "unresolvedThreads" | "approvedBy"> {
+interface RawPR extends Omit<PR, "commentCount" | "openCommentCount" | "autoMergeMethod" | "baseSync" | "baseUpdateRequired" | "headCommittedAt" | "checksQueued" | "unresolvedThreads" | "approvedBy" | "checkCounts" | "mergeQueue"> {
   comments: Array<{ author?: { login?: string } }>
   reviews: Array<{ author?: { login?: string }; state?: string }>
   autoMergeRequest: { mergeMethod?: string } | null
@@ -89,6 +89,9 @@ function transformPR(raw: RawPR): PR {
     unresolvedThreads: 0,
     approvedBy: computeApprovedBy(reviews),
     baseUpdateRequired: mergeStateStatus === "BEHIND",
+    checkCounts: countCheckRuns(rest.statusCheckRollup),
+    // `gh pr list --json` has no merge-queue field; the next GraphQL refresh fills it in
+    mergeQueue: null,
   }
 }
 
@@ -472,9 +475,17 @@ const PREVIEW_FIELDS = [
 /**
  * Fetch detailed PR preview data
  */
-export async function fetchPRPreview(repo: string, number: number): Promise<PRPreview> {
+export async function fetchPRPreview(
+  repo: string,
+  number: number,
+  refs?: { base: string | null; head: string | null }
+): Promise<PRPreview> {
   const log = logRequest("gh", `pr preview ${repo}#${number}`)
-  const result = await $`gh pr view ${number} -R ${repo} --json ${PREVIEW_FIELDS}`.json()
+  // The list row already knows base and head, so the compare need not wait for the view
+  const [result, behindBy] = await Promise.all([
+    $`gh pr view ${number} -R ${repo} --json ${PREVIEW_FIELDS}`.json(),
+    refs?.base && refs.head ? compareBehindBy(repo, refs.base, refs.head) : Promise.resolve(null),
+  ])
 
   // Calculate total additions/deletions
   const files = parseFiles(result.files)
@@ -505,9 +516,27 @@ export async function fetchPRPreview(repo: string, number: number): Promise<PRPr
     commentCount: countHuman(result.comments),
     reviewCommentCount: 0, // Not available via gh CLI
     recentComments: parseRecentComments(result.comments ?? [], result.reviews ?? []),
+    behindBy,
   }
   log.finish(`${files.length} files, +${additions}/-${deletions}`)
   return preview
+}
+
+/**
+ * How many commits base has that head lacks. Null on failure: a head commit can be gone
+ * (force-pushed away) or unreachable, and the preview then says it could not compare.
+ */
+async function compareBehindBy(repo: string, base: string, head: string): Promise<number | null> {
+  const log = logRequest("gh", `compare ${repo} ${base}...${head.slice(0, 7)}`)
+  try {
+    const behind = Number((await $`gh api repos/${repo}/compare/${base}...${head} --jq .behind_by`.quiet().text()).trim())
+    if (!Number.isFinite(behind)) throw new Error("no behind_by in the compare")
+    log.finish(`${behind} behind`)
+    return behind
+  } catch (error) {
+    log.fail(error)
+    return null
+  }
 }
 
 function parseFiles(files: any[]): ChangedFile[] {

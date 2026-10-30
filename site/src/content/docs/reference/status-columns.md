@@ -1,11 +1,12 @@
 ---
 title: Status Columns
-description: The five glyphs on every row, and how the merge verdict is decided.
+description: The status columns on every row, and how the merge verdict is decided.
 ---
 
-Every row carries five single-character columns. The first four are the **gates** GitHub
-evaluates; the fifth is presto's **verdict** on them: whose move it is. `c` toggles between
-the verdict alone and all five; `?` shows this legend in the app.
+Every row carries five status columns. The first four are single-glyph **gates** GitHub
+evaluates; the fifth is presto's **verdict** on them: whose move it is, and in a word or two
+what is holding the PR up. `c` toggles between the verdict alone and all five; `?` shows
+this legend in the app.
 
 ![The shortcut dialog with the column legend](../../../assets/screenshots/help.png)
 
@@ -61,7 +62,12 @@ need only read access — classic branch protection needs admin rights and 404s 
 
 ## M — Merge verdict
 
-The single answer to *who is holding this up?* Deliberately not blocked / pending / ready:
+The single answer to *who is holding this up?*, the glyph followed by the reason:
+`! conflicts`, `! 2 failing`, `! behind main`, `? review`, `· CI 5/8`, `⧗ queue #1 ~3m`.
+The words go first when the list is narrow: the C/R/B gates give way, then the Merge
+column shrinks to its glyph, so the title stays readable.
+
+Deliberately not blocked / pending / ready:
 measured across the configured repos, that split put 86 % of open PRs in "blocked" and made the
 column a constant. Sorting by whose move it is spreads the same PRs across buckets that each
 imply a different next step.
@@ -69,6 +75,7 @@ imply a different next step.
 | Glyph | Verdict | When |
 | --- | --- | --- |
 | `✓` green | **ready** | merge state is clean or has hooks; or unstable (only a non-required check is red — GitHub offers the merge, the checks column carries the warning) |
+| `⧗` blue | **queued** | the PR is in the merge queue: its place in line and GitHub's estimate. Green once GitHub calls it mergeable in the queue; unmergeable there is the author's move |
 | `⇢` purple | **auto-merge** | auto-merge is armed; it lands by itself when the gates clear |
 | `!` yellow | **author's move** | anything only the author can clear, in this order: open comment threads · conflicts · behind a base that requires it · changes requested · failing checks · required checks that never started |
 | `?` blue | **waiting on others** | a review is required; or reviewed, green and still blocked — something unnamed gates it (a required deployment, a CODEOWNER) |
@@ -87,9 +94,27 @@ Two rules worth knowing:
 
 ## In the preview
 
-The preview header repeats the five columns with their meaning written out — *Author's move —
-2 open comment threads to resolve* — derived from the same PR object the row renders, so the
-two can never disagree.
+The preview opens with a **Merge status** section: the verdict written out — *Author's move —
+2 open comment threads to resolve*, derived from the same PR object the row renders, so the
+two can never disagree — then one line per gate GitHub applies, so nothing hides behind the
+first thing that blocks:
+
+```
+Merge status  ⧗ Queued #1 · awaiting checks · ~3m
+
+✓ Checks         8/8 passed
+✓ Reviews        1 approval by luethis
+✓ Conversations  all resolved
+○ Conflicts      checking
+⚠ Base           1 commit behind master
+⧗ Queue          #1 · awaiting checks · ~3m · added by candril 2m ago
+○ Blockers       GitHub is still computing the merge state
+```
+
+`✓` fine, `⚠` a warning, `✗` blocks, `○` pending, `ℹ` information. Failing and running checks
+are listed under the Checks line by name; when every check is green there is no list. Behind
+counts come from comparing the branch with its base when the preview loads. Branch protection
+is named only when none of the gates above explains why GitHub blocks the merge.
 
 ![The preview header explaining the columns](../../../assets/screenshots/preview-author.png)
 

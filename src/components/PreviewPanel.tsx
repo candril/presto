@@ -9,7 +9,7 @@ import { SyntaxStyle, RGBA } from "@opentui/core"
 import { theme } from "../theme"
 import { Spinner } from "./Loading"
 import type { PR, PRPreview, PRReview, ChangedFile, PreviewPosition, PreviewComment } from "../types"
-import { buildStatusRows } from "../status"
+import { buildMergeStatus, lineStyle, type MergeStatus } from "../mergeStatus"
 import type { DetectedChange } from "../notifications"
 import { truncate } from "../utils/string"
 import { formatCompactTime } from "../utils/time"
@@ -86,6 +86,52 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
     <box height={1}>
       <text fg={theme.textMuted}>▼ {title}{countStr}</text>
+    </box>
+  )
+}
+
+/** Gate names are padded to the longest, "Conversations" */
+const GATE_LABEL_WIDTH = 15
+
+/** The merge verdict, then one line per gate with the checks that are not green under it (spec 053) */
+function MergeStatusSection({ status, width }: { status: MergeStatus; width: number }) {
+  const { header, lines } = status
+  return (
+    <box flexDirection="column">
+      <box height={1}>
+        <text>
+          <span fg={theme.textMuted}>Merge status  </span>
+          <span fg={header.color}>{header.icon} {truncate(header.text, width - 16)}</span>
+        </text>
+      </box>
+      {lines.length > 0 && <box height={1} />}
+      {lines.map((line) => {
+        const style = lineStyle(line)
+        return (
+          <box key={line.label} flexDirection="column">
+            <box height={1}>
+              <text>
+                <span fg={style.color}>{style.icon} </span>
+                <span fg={theme.textDim}>{line.label.padEnd(GATE_LABEL_WIDTH)}</span>
+                <span fg={line.state === "ok" || line.state === "none" ? theme.text : style.color}>
+                  {truncate(line.text, width - GATE_LABEL_WIDTH - 2)}
+                </span>
+              </text>
+            </box>
+            {(line.details ?? []).map((detail, index) => {
+              const detailStyle = lineStyle(detail)
+              return (
+                <box key={index} height={1} paddingLeft={2}>
+                  <text>
+                    <span fg={detailStyle.color}>{detailStyle.icon} </span>
+                    <span fg={theme.text}>{truncate(detail.text, width - 4)}</span>
+                  </text>
+                </box>
+              )
+            })}
+          </box>
+        )
+      })}
     </box>
   )
 }
@@ -285,8 +331,8 @@ export function PreviewPanel({ preview, pr, hasPendingAction, loading, scrollOff
 
   // Show preview content
   const statusInfo = getStatusInfo(preview.state, preview.isDraft)
-  // Same columns, same glyphs, same data as the list row — with the meaning spelled out
-  const statusRows = pr ? buildStatusRows(pr, hasPendingAction) : []
+  // The verdict comes from the list row, so the header says what the Merge column says
+  const mergeStatus = pr ? buildMergeStatus(pr, preview, hasPendingAction) : null
   // Counts come from the list row, the only side that sees review threads; `gh pr view`
   // reports the conversation alone, so it can stand in for the total only.
   const totalComments = pr ? pr.commentCount : preview.commentCount
@@ -307,17 +353,8 @@ export function PreviewPanel({ preview, pr, hasPendingAction, loading, scrollOff
             <text fg={theme.border}>{"─".repeat(Math.min(70, contentWidth))}</text>
           </box>
 
-          {/* Status block: the list's S C R B M columns, explained */}
-          {statusRows.length > 0 ? (
-            statusRows.map((row) => (
-              <box key={row.letter} height={1}>
-                <text>
-                  <span fg={theme.textDim}>{row.letter} </span>
-                  <span fg={row.color}>{row.icon}</span>
-                  <span fg={theme.text}>  {truncate(row.text, contentWidth - 5)}</span>
-                </text>
-              </box>
-            ))
+          {mergeStatus ? (
+            <MergeStatusSection status={mergeStatus} width={contentWidth} />
           ) : (
             // No list row to mirror (should not happen while a preview is open)
             <MetadataRow label="Status" value={statusInfo.label} valueColor={statusInfo.color} />

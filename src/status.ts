@@ -6,8 +6,8 @@
  */
 
 import { theme } from "./theme"
-import type { CheckState, MergeVerdict, PR } from "./types"
-import { computeCheckState, computeMergeVerdictDetail, getPRCheckState } from "./types"
+import type { CheckState, MergeQueueEntry, MergeVerdict, PR } from "./types"
+import { computeMergeVerdictDetail } from "./types"
 
 export interface StatusIndicator {
   icon: string
@@ -41,6 +41,7 @@ export const ICONS = {
   mergeOthers: "?",    // someone else's: usually a review, sometimes another gate
   mergeMachine: "·",   // a machine's: CI running, GitHub still computing
   mergeAuto: "⇢",      // nobody's: auto-merge will land it by itself
+  mergeQueued: "⧗",    // nobody's: in the merge queue, in line to land
   mergePending: "↻",   // an action the user fired has not landed yet
   mergeNone: "-",      // draft: not up for merge, so no verdict to give
 }
@@ -124,11 +125,16 @@ export function getSyncIndicator(pr: PR): StatusIndicator {
   }
 }
 
-/** Get the overall "who is holding this up?" indicator */
-export function getMergeIndicator(verdict: MergeVerdict): StatusIndicator {
+/**
+ * Get the overall "who is holding this up?" indicator. A queued PR turns green once
+ * GitHub calls it mergeable in the queue: from there it lands without anyone.
+ */
+export function getMergeIndicator(verdict: MergeVerdict, queue: MergeQueueEntry | null = null): StatusIndicator {
   switch (verdict) {
     case "pending-action":
       return { icon: ICONS.mergePending, color: theme.warning }
+    case "queued":
+      return { icon: ICONS.mergeQueued, color: queue?.state === "MERGEABLE" ? theme.success : theme.primary }
     case "auto-merge":
       return { icon: ICONS.mergeAuto, color: theme.secondary }
     case "ready":
@@ -145,106 +151,8 @@ export function getMergeIndicator(verdict: MergeVerdict): StatusIndicator {
   }
 }
 
-// ============================================================================
-// Spelled-out status rows (preview header, spec 039)
-// ============================================================================
-
-/** One explained status row: the list column's letter and glyph, plus what they mean */
-export interface StatusRow {
-  letter: "S" | "C" | "R" | "B" | "M"
-  icon: string
-  color: string
-  text: string
-}
-
-const VERDICT_PREFIX: Partial<Record<MergeVerdict, string>> = {
-  author: "Author's move",
-  others: "Waiting on others",
-  machine: "Machine's move",
-}
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
-
-/**
- * The preview header's status block: the same five columns as the list row, each with
- * its meaning spelled out. Everything derives from the same PR object the row renders,
- * so the two can never disagree.
- */
-export function buildStatusRows(pr: PR, hasPendingAction: boolean): StatusRow[] {
-  const checkState = getPRCheckState(pr)
+/** The list's Merge column: the verdict glyph and its reason in a word or two */
+export function getMergeLabel(pr: PR, hasPendingAction: boolean): StatusIndicator & { text: string } {
   const detail = computeMergeVerdictDetail(pr, hasPendingAction)
-  const prefix = VERDICT_PREFIX[detail.verdict]
-
-  return [
-    { letter: "S", ...getStateIndicator(pr), text: stateText(pr) },
-    { letter: "C", ...getCheckIndicator(checkState), text: checkText(pr, checkState) },
-    { letter: "R", ...getReviewIndicator(pr), text: reviewText(pr) },
-    { letter: "B", ...getSyncIndicator(pr), text: syncText(pr) },
-    {
-      letter: "M",
-      ...getMergeIndicator(detail.verdict),
-      text: prefix ? `${prefix} — ${detail.reason}` : capitalize(detail.reason),
-    },
-  ]
-}
-
-function stateText(pr: PR): string {
-  switch (pr.state) {
-    case "MERGED":
-      return "Merged"
-    case "CLOSED":
-      return "Closed"
-    default:
-      return pr.isDraft ? "Draft" : "Open"
-  }
-}
-
-function checkText(pr: PR, state: CheckState): string {
-  switch (state) {
-    case "SUCCESS":
-      return "Checks passing"
-    case "FAILURE":
-      return "Checks failing"
-    case "PENDING":
-      // The rollup counts only started runs; empty rollup + queued suites = not started
-      return computeCheckState(pr.statusCheckRollup) === "NONE"
-        ? "Checks queued — none started yet"
-        : "Checks running"
-    case "NONE":
-    default:
-      return "No checks"
-  }
-}
-
-function reviewText(pr: PR): string {
-  switch (pr.reviewDecision) {
-    case "APPROVED":
-      return `Approved${pr.approvedBy.length > 0 ? ` by ${pr.approvedBy.join(", ")}` : ""}`
-    case "CHANGES_REQUESTED":
-      return "Changes requested"
-    case "REVIEW_REQUIRED":
-      return "Review required"
-    default:
-      if (pr.approvedBy.length > 0) {
-        return `Approved by ${pr.approvedBy.join(", ")} — GitHub reports no decision`
-      }
-      return "No review yet"
-  }
-}
-
-function syncText(pr: PR): string {
-  const base = pr.baseRefName ?? "base"
-  switch (pr.baseSync) {
-    case "behind":
-      return pr.baseUpdateRequired
-        ? `Behind ${base} — update required`
-        : `Behind ${base} — update optional`
-    case "up-to-date":
-      return `Up to date with ${base}`
-    case "unknown":
-    default:
-      return "Base sync unknown"
-  }
+  return { ...getMergeIndicator(detail.verdict, pr.mergeQueue), text: detail.short }
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { authorSearchQueries, countComments, digestOf, fetchRepoPRs } from "./graphql"
+import { authorSearchQueries, countComments, digestOf, fetchRepoPRs, toCheckCounts } from "./graphql"
 
 const human = (login: string) => ({ author: { login } })
 const thread = (opts: { author?: string; typename?: string; resolved: boolean; comments: number }) => ({
@@ -91,6 +91,8 @@ describe("digestOf", () => {
     ["leaving draft", { isDraft: true }],
     ["an approval", { reviewDecision: "APPROVED" }],
     ["a force push", { commits: { nodes: [{ commit: { oid: "def456", statusCheckRollup: { state: "SUCCESS" } } }] } }],
+    ["moving up the merge queue", { mergeQueueEntry: { position: 1, state: "QUEUED" } }],
+    ["another check finishing", { commits: { nodes: [{ commit: { oid: "abc123", statusCheckRollup: { state: "PENDING", contexts: { checkRunCountsByState: [{ state: "SUCCESS", count: 1 }] } } } }] } }],
     ["checks going red", { commits: { nodes: [{ commit: { oid: "abc123", statusCheckRollup: { state: "FAILURE" } } }] } }],
   ]
 
@@ -229,5 +231,27 @@ describe("authorSearchQueries", () => {
     expect(queries.length).toBeGreaterThan(1)
     for (const query of queries) expect(query.length).toBeLessThanOrEqual(256)
     expect(queries.join(" ").match(/author:\S+/g)).toHaveLength(30)
+  })
+})
+
+describe("toCheckCounts", () => {
+  test("splits GitHub's per-state aggregates into passed, failed and running", () => {
+    expect(
+      toCheckCounts({
+        totalCount: 9,
+        checkRunCountsByState: [
+          { state: "SUCCESS", count: 4 },
+          { state: "SKIPPED", count: 1 },
+          { state: "FAILURE", count: 1 },
+          { state: "IN_PROGRESS", count: 2 },
+          { state: "QUEUED", count: 0 },
+        ],
+        statusContextCountsByState: [{ state: "PENDING", count: 1 }],
+      })
+    ).toEqual({ total: 9, passed: 5, failed: 1, running: 3 })
+  })
+
+  test("no rollup is no counts, not zero of zero", () => {
+    expect(toCheckCounts(null)).toBeNull()
   })
 })

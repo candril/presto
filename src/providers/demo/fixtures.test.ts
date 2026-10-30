@@ -12,7 +12,7 @@ const open = () => buildFixtures().map((f) => f.pr).filter((pr) => pr.state === 
 describe("demo fixtures", () => {
   test("cover every merge verdict", () => {
     const verdicts = new Set(open().map((pr) => computeMergeVerdict(pr, false)))
-    const all: MergeVerdict[] = ["ready", "author", "others", "machine", "auto-merge", "draft"]
+    const all: MergeVerdict[] = ["ready", "author", "others", "machine", "auto-merge", "queued", "draft"]
     for (const verdict of all) expect(verdicts).toContain(verdict)
   })
 

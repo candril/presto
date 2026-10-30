@@ -8,6 +8,7 @@
 import type {
   BaseSync,
   MergeMethod,
+  MergeQueueState,
   MergeStateStatus,
   PR,
   PRPreview,
@@ -58,6 +59,8 @@ interface PRSpec {
   checks: CheckSpec
   /** Unresolved review threads and the comments inside them */
   threads?: { count: number; comments: number }
+  /** In the merge queue: place in line, and minutes until GitHub expects the merge */
+  queue?: { position: number; state: MergeQueueState; etaMinutes?: number }
   /** Total human comments including thread comments */
   comments?: number
   autoMerge?: MergeMethod
@@ -161,6 +164,17 @@ function define(spec: PRSpec): DemoPR {
     baseRefName: base,
     baseSync: spec.sync ?? (spec.merge === "BEHIND" ? "behind" : "up-to-date"),
     baseUpdateRequired: spec.merge === "BEHIND" || spec.behindRequired === true,
+    // Counted from the rollup at read time: the demo's CI rewrites the rollup as it runs
+    checkCounts: null,
+    mergeQueue: spec.queue
+      ? {
+          position: spec.queue.position,
+          state: spec.queue.state,
+          estimatedTimeToMerge: spec.queue.etaMinutes !== undefined ? spec.queue.etaMinutes * 60 : null,
+          enqueuedAt: hoursAgo(0.05),
+          enqueuer: spec.author,
+        }
+      : null,
   }
 
   const preview: PRPreview = {
@@ -184,6 +198,9 @@ function define(spec: PRSpec): DemoPR {
     commentCount,
     reviewCommentCount: threads.comments,
     recentComments: conversation,
+    behindBy: (spec.sync ?? (spec.merge === "BEHIND" ? "behind" : "up-to-date")) === "behind"
+      ? 3
+      : spec.sync === "unknown" ? null : 0,
   }
   return { pr, preview }
 }
@@ -411,7 +428,7 @@ Bundle: 412 kB → 348 kB.`,
     define({
       repo: WEB, number: 1195, title: "Accessible focus rings across the app",
       author: "ines", branch: "ines/focus-rings", created: 36, updated: 3,
-      merge: "CLEAN", review: "APPROVED", checks: "pass",
+      merge: "CLEAN", review: "APPROVED", checks: "pass", queue: { position: 1, state: "AWAITING_CHECKS", etaMinutes: 3 },
       reviews: [["sofia", "APPROVED", 4], ["mara", "APPROVED", 6]],
       body: `Replaces the per-component outline hacks with one \`:focus-visible\` ring token. Buttons, links, inputs and the menu all get the same 2 px ring.`,
       files: [

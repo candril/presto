@@ -4,7 +4,9 @@
  * Column order: State | Checks | Review | Base | Merge | Time | Title (flex) | Author | Repo
  *
  * The four status columns collapse to State + Merge when the list is too narrow to
- * afford them — the merge verdict is the summary, the rest is the detail (spec 036).
+ * afford them — the merge verdict is the summary, the rest is the detail (spec 036). The
+ * Merge column names the blocker in words (spec 053) and is the last to shrink, to its
+ * glyph alone.
  * Title column format: #1234 PR title here...
  */
 
@@ -14,8 +16,8 @@ import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { theme, getMarkColor } from "../theme"
 import { fade, fadeLevel, type FadeSettings } from "../fade"
 import type { PR, ColumnVisibility, PendingAction } from "../types"
-import { getRepoName, getShortRepoName, getPRCheckState, computeMergeVerdict } from "../types"
-import { getStateIndicator, getCheckIndicator, getReviewIndicator, getSyncIndicator, getMergeIndicator } from "../status"
+import { getRepoName, getShortRepoName, getPRCheckState } from "../types"
+import { getStateIndicator, getCheckIndicator, getReviewIndicator, getSyncIndicator, getMergeLabel } from "../status"
 import { formatRelativeTime } from "../utils/time"
 import { truncate } from "../utils/string"
 import { getPRKey, isPRMarked, getPRMark, type History } from "../history"
@@ -28,6 +30,7 @@ const COL = {
   review: 1,     // icon (no trailing space)
   sync: 1,       // icon (no trailing space)
   merge: 1,      // icon (no trailing space)
+  mergeLabel: 15, // icon + space + "queue #12 ~45m"
   comments: 3,   // open comment count (e.g. "12" or "99+")
   time: 4,       // "1d" or "2mo" (without "ago")
   repo: 16,      // Short repo name
@@ -41,6 +44,12 @@ const COL = {
  */
 export type GateMode = "full" | "compact"
 
+/** The status columns as drawn: the gate glyphs, and the Merge column in words or as a glyph */
+export interface ListLayout {
+  gates: GateMode
+  mergeWords: boolean
+}
+
 /** Below this the title stops being readable, so the gate detail goes instead */
 const MIN_TITLE_WIDTH = 32
 
@@ -52,8 +61,25 @@ function isGateVisible(v: ColumnVisibility, mode: GateMode, column: "checks" | "
   return v[column] && mode === "full"
 }
 
+/**
+ * The richest layout that leaves the title readable. The gate glyphs go first: they
+ * explain the verdict, while the Merge column's words are the one-glance answer. The
+ * toggle only ever asks for the gates; width decides whether it gets them.
+ */
+export function chooseLayout(listWidth: number, v: ColumnVisibility, gateDetail: boolean): ListLayout {
+  const candidates: ListLayout[] = [
+    ...(gateDetail ? [{ gates: "full" as const, mergeWords: true }] : []),
+    { gates: "compact", mergeWords: true },
+    { gates: "compact", mergeWords: false },
+  ]
+  return (
+    candidates.find((layout) => listWidth - getFixedColumnsWidth(v, layout) >= MIN_TITLE_WIDTH) ??
+    candidates[candidates.length - 1]
+  )
+}
+
 /** Calculate total fixed width (everything except title) */
-function getFixedColumnsWidth(v: ColumnVisibility, mode: GateMode): number {
+function getFixedColumnsWidth(v: ColumnVisibility, { gates: mode, mergeWords }: ListLayout): number {
   let width = 2 // padding left + right
   width += 2 // mark letters column (2 chars)
   width += 2 // change indicator dot + space
@@ -61,7 +87,7 @@ function getFixedColumnsWidth(v: ColumnVisibility, mode: GateMode): number {
   if (isGateVisible(v, mode, "checks")) width += COL.checks // icon + space
   if (isGateVisible(v, mode, "review")) width += COL.review + 1 // icon + space
   if (isGateVisible(v, mode, "sync")) width += COL.sync + 1 // icon + space
-  if (v.merge) width += COL.merge + 1 // icon + space
+  if (v.merge) width += (mergeWords ? COL.mergeLabel : COL.merge) + 1 // + space
   if (v.comments) width += COL.comments + 1 // comments + space
   if (v.time) width += COL.time + 1 // time + space
   if (v.author) width += COL.author + 1 // space + author
@@ -165,14 +191,12 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
   const listWidth = previewPosition === "right" ? Math.floor(terminalWidth / 2) : terminalWidth
   // The toggle is the preference; width only overrides it when expanding would leave the
   // title unreadable, so `c` never silently produces a useless list.
-  const fitsFullGates = listWidth - getFixedColumnsWidth(columnVisibility, "full") >= MIN_TITLE_WIDTH
-  const gateMode: GateMode = gateDetail && fitsFullGates ? "full" : "compact"
-  const fixedWidth = getFixedColumnsWidth(columnVisibility, gateMode)
-  const titleWidth = Math.max(10, listWidth - fixedWidth)
+  const layout = chooseLayout(listWidth, columnVisibility, gateDetail)
+  const titleWidth = Math.max(10, listWidth - getFixedColumnsWidth(columnVisibility, layout))
 
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
-      <PRHeaderRow columnVisibility={columnVisibility} gateMode={gateMode} titleWidth={titleWidth} />
+      <PRHeaderRow columnVisibility={columnVisibility} layout={layout} titleWidth={titleWidth} />
       <scrollbox ref={scrollRef} flexGrow={1}>
         {prs.map((pr, index) => (
           <PRRow
@@ -180,7 +204,7 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
             pr={pr}
             selected={index === selectedIndex}
             columnVisibility={columnVisibility}
-            gateMode={gateMode}
+            layout={layout}
             titleWidth={titleWidth}
             history={history}
             pendingActions={pendingActions}
@@ -195,8 +219,9 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
 }
 
 /** Header row with column labels */
-function PRHeaderRow({ columnVisibility, gateMode, titleWidth }: { columnVisibility: ColumnVisibility; gateMode: GateMode; titleWidth: number }) {
+function PRHeaderRow({ columnVisibility, layout, titleWidth }: { columnVisibility: ColumnVisibility; layout: ListLayout; titleWidth: number }) {
   const v = columnVisibility
+  const gateMode = layout.gates
   
   return (
     <box
@@ -212,7 +237,7 @@ function PRHeaderRow({ columnVisibility, gateMode, titleWidth }: { columnVisibil
         {isGateVisible(v, gateMode, "checks") && "C "}
         {isGateVisible(v, gateMode, "review") && "R "}
         {isGateVisible(v, gateMode, "sync") && "B "}
-        {v.merge && "M "}
+        {v.merge && (layout.mergeWords ? padRight("Merge", COL.mergeLabel + 1) : "M ")}
         {v.comments && padRight("#", COL.comments)}
         {v.comments && " "}
         {v.time && padRight("", COL.time)}
@@ -231,7 +256,7 @@ interface PRRowProps {
   pr: PR
   selected: boolean
   columnVisibility: ColumnVisibility
-  gateMode: GateMode
+  layout: ListLayout
   titleWidth: number
   history: History
   pendingActions: Record<string, PendingAction>
@@ -240,8 +265,9 @@ interface PRRowProps {
   flashLabel?: string
 }
 
-function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, pendingActions, fadeSettings, flashing, flashLabel }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pendingActions, fadeSettings, flashing, flashLabel }: PRRowProps) {
   const v = columnVisibility
+  const gateMode = layout.gates
   const stateIndicator = getStateIndicator(pr)
   const checkIndicator = getCheckIndicator(getPRCheckState(pr))
   const reviewIndicator = getReviewIndicator(pr)
@@ -257,7 +283,7 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
   const isMarked = isPRMarked(history, prKey)
   const markLetter = getPRMark(history, prKey)
   const hasChanges = prHasChanges(history, prKey)
-  const mergeIndicator = getMergeIndicator(computeMergeVerdict(pr, prKey in pendingActions))
+  const mergeLabel = getMergeLabel(pr, prKey in pendingActions)
   
   // Title color: marked PRs get gold, everything else gets base text color.
   // The unread dot and mark letters handle visual differentiation (spec 029).
@@ -286,7 +312,15 @@ function PRRow({ pr, selected, columnVisibility, gateMode, titleWidth, history, 
   if (isGateVisible(v, gateMode, "checks")) lead.push({ text: checkIndicator.icon, fg: checkIndicator.color }, { text: " " })
   if (isGateVisible(v, gateMode, "review")) lead.push({ text: reviewIndicator.icon, fg: reviewIndicator.color }, { text: " " })
   if (isGateVisible(v, gateMode, "sync")) lead.push({ text: syncIndicator.icon, fg: syncIndicator.color }, { text: " " })
-  if (v.merge) lead.push({ text: mergeIndicator.icon, fg: mergeIndicator.color }, { text: " " })
+  if (v.merge) {
+    lead.push({ text: mergeLabel.icon, fg: mergeLabel.color })
+    if (layout.mergeWords) {
+      // Status, like the glyph: kept in colour when the row fades with age
+      const words = truncate(mergeLabel.text, COL.mergeLabel - 2)
+      lead.push({ text: ` ${padRight(words, COL.mergeLabel - 2)}`, fg: mergeLabel.color })
+    }
+    lead.push({ text: " " })
+  }
   if (v.comments) lead.push({ text: padRight(commentCount, COL.comments), fg: dim(theme.textMuted) }, { text: " " })
   if (v.time) lead.push({ text: padRight(timeAgo, COL.time), fg: dim(theme.textMuted) }, { text: " " })
 

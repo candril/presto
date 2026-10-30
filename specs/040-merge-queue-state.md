@@ -1,6 +1,6 @@
 # Merge queue state
 
-**Status**: Ready
+**Status**: Done — implemented as part of [053](./053-merge-status.md)
 
 ## Description
 

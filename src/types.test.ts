@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test"
-import { computeMergeVerdict, getPRCheckState, normalizePR, STALE_CHECKS_MS, type CheckState, type PR } from "./types"
+import { computeMergeVerdict, formatEta, getPRCheckState, normalizePR, STALE_CHECKS_MS, type CheckState, type PR } from "./types"
 
 const basePR: PR = {
   number: 0,
@@ -28,6 +28,8 @@ const basePR: PR = {
   baseRefName: "master",
   baseSync: "up-to-date",
   baseUpdateRequired: false,
+  checkCounts: null,
+  mergeQueue: null,
   headCommittedAt: new Date().toISOString(),
   checksQueued: false,
   unresolvedThreads: 0,
@@ -201,5 +203,14 @@ describe("getPRCheckState", () => {
 
   test("a real rollup always wins over the queued fallback", () => {
     expect(getPRCheckState(pr({ statusCheckRollup: checks("SUCCESS"), checksQueued: true }))).toBe("SUCCESS")
+  })
+})
+
+describe("formatEta", () => {
+  test("rounds up to whole minutes, and spells hours past the hour", () => {
+    expect(formatEta(10)).toBe("~1m")
+    expect(formatEta(170)).toBe("~3m")
+    expect(formatEta(3900)).toBe("~1h5m")
+    expect(formatEta(7200)).toBe("~2h")
   })
 })

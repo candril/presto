@@ -86,6 +86,32 @@ export interface PR {
   baseSync: BaseSync
   /** Whether being behind actually blocks the merge (base branch requires up-to-date) */
   baseUpdateRequired: boolean
+  /**
+   * Checks on the head commit by outcome. Null where nothing counted them (a PR cached
+   * before the field existed); `getCheckCounts` then counts the rollup instead.
+   */
+  checkCounts: CheckCounts | null
+  /** Present while the PR sits in a merge queue (spec 040) */
+  mergeQueue: MergeQueueEntry | null
+}
+
+export interface CheckCounts {
+  total: number
+  passed: number
+  failed: number
+  running: number
+}
+
+export type MergeQueueState = "QUEUED" | "AWAITING_CHECKS" | "MERGEABLE" | "UNMERGEABLE" | "LOCKED"
+
+export interface MergeQueueEntry {
+  /** 1-based place in line */
+  position: number
+  state: MergeQueueState
+  /** Seconds until GitHub expects the merge, when it can estimate */
+  estimatedTimeToMerge: number | null
+  enqueuedAt: string | null
+  enqueuer: string | null
 }
 
 /** How a PR's head branch relates to its base branch (GitHub `mergeStateStatus`) */
@@ -139,6 +165,8 @@ export function normalizePR(raw: Partial<PR> & Pick<PR, "number" | "title" | "ur
     checksQueued: false,
     unresolvedThreads: 0,
     approvedBy: [],
+    checkCounts: null,
+    mergeQueue: null,
     ...raw,
   }
 }
@@ -166,6 +194,7 @@ export function toMergeMethod(raw: unknown): MergeMethod | null {
  */
 export type MergeVerdict =
   | "pending-action"
+  | "queued"
   | "auto-merge"
   | "ready"
   | "author"
@@ -182,11 +211,18 @@ export function computeMergeVerdict(pr: PR, hasPendingAction: boolean): MergeVer
  * (the preview panel). One code path for both, so the explanation can never disagree
  * with the glyph.
  */
-export function computeMergeVerdictDetail(
-  pr: PR,
-  hasPendingAction: boolean
-): { verdict: MergeVerdict; reason: string } {
-  if (hasPendingAction) return { verdict: "pending-action", reason: "your branch update is still landing" }
+export interface MergeVerdictDetail {
+  verdict: MergeVerdict
+  /** The rule that produced the verdict, spelled out */
+  reason: string
+  /** The same rule in a word or two, for the list's Merge column; empty for a draft */
+  short: string
+}
+
+export function computeMergeVerdictDetail(pr: PR, hasPendingAction: boolean): MergeVerdictDetail {
+  const verdict = (verdict: MergeVerdict, reason: string, short: string) => ({ verdict, reason, short })
+
+  if (hasPendingAction) return verdict("pending-action", "your branch update is still landing", "updating")
 
   // A draft is not up for merge, so it has no merge verdict — the state column already
   // says it is a draft, and repeating that here would drown the column: drafts are 52% of
@@ -196,10 +232,19 @@ export function computeMergeVerdictDetail(
   // either: branch protection is not evaluated for drafts, so one draft answers CLEAN
   // with a null review decision while its base in fact requires an approval, and another
   // answers BLOCKED with REVIEW_REQUIRED that no one actually requested.
-  if (pr.isDraft) return { verdict: "draft", reason: "draft — not up for merge yet" }
+  if (pr.isDraft) return verdict("draft", "draft — not up for merge yet", "")
+
+  // Ahead of auto-merge: arming it is usually what put the PR in the queue, and "in line,
+  // position 2" says more than "will land when ready"
+  if (pr.mergeQueue) {
+    if (pr.mergeQueue.state === "UNMERGEABLE") {
+      return verdict("author", "unmergeable in the merge queue", "queue: unmergeable")
+    }
+    return verdict("queued", describeQueueEntry(pr.mergeQueue), queueShort(pr.mergeQueue))
+  }
 
   if (pr.autoMergeMethod) {
-    return { verdict: "auto-merge", reason: `auto-merge (${pr.autoMergeMethod}) armed — lands when ready` }
+    return verdict("auto-merge", `auto-merge (${pr.autoMergeMethod}) armed — lands when ready`, `auto ${pr.autoMergeMethod}`)
   }
 
   // Before any merge-state reading: this team blocks with plain comments instead of
@@ -207,55 +252,124 @@ export function computeMergeVerdictDetail(
   // reviewer is in fact waiting on the author. An open thread is the author's move, and
   // only once every thread is resolved does an unapproved PR go back to awaiting review.
   if (pr.unresolvedThreads > 0) {
-    const threads = pr.unresolvedThreads === 1 ? "1 open comment thread" : `${pr.unresolvedThreads} open comment threads`
-    return { verdict: "author", reason: `${threads} to resolve` }
+    const plural = pr.unresolvedThreads === 1 ? "" : "s"
+    return verdict(
+      "author",
+      `${pr.unresolvedThreads} open comment thread${plural} to resolve`,
+      `${pr.unresolvedThreads} thread${plural}`
+    )
   }
 
   if (pr.mergeStateStatus === "CLEAN" || pr.mergeStateStatus === "HAS_HOOKS") {
-    return { verdict: "ready", reason: "can be merged now" }
+    return verdict("ready", "can be merged now", "ready")
   }
   // UNSTABLE is mergeable too: only a non-required check is red, and GitHub offers the
   // merge. The checks column carries the warning.
   if (pr.mergeStateStatus === "UNSTABLE") {
-    return { verdict: "ready", reason: "mergeable — a non-required check is red" }
+    return verdict("ready", "mergeable — a non-required check is red", "ready")
   }
 
   const rollupState = computeCheckState(pr.statusCheckRollup)
   const checks = getPRCheckState(pr)
+  const counts = getCheckCounts(pr)
 
   // The author's move: everything only they can clear. A red build belongs here — it was
   // previously falling through to "waiting on others", which reads as "needs a review".
-  if (pr.mergeStateStatus === "DIRTY") return { verdict: "author", reason: "conflicts with base to resolve" }
-  if (pr.mergeStateStatus === "BEHIND") return { verdict: "author", reason: "base branch must be merged in" }
-  if (pr.reviewDecision === "CHANGES_REQUESTED") {
-    return { verdict: "author", reason: "a reviewer requested changes" }
+  if (pr.mergeStateStatus === "DIRTY") return verdict("author", "conflicts with base to resolve", "conflicts")
+  if (pr.mergeStateStatus === "BEHIND") {
+    return verdict("author", "base branch must be merged in", `behind ${pr.baseRefName ?? "base"}`)
   }
-  if (checks === "FAILURE") return { verdict: "author", reason: "failing checks to fix" }
+  if (pr.reviewDecision === "CHANGES_REQUESTED") {
+    return verdict("author", "a reviewer requested changes", "changes req.")
+  }
+  if (checks === "FAILURE") {
+    return verdict("author", "failing checks to fix", counts.failed > 0 ? `${counts.failed} failing` : "CI failing")
+  }
   if (checksAreStalled(pr, rollupState)) {
-    return { verdict: "author", reason: "checks never started — re-trigger CI" }
+    return verdict("author", "checks never started — re-trigger CI", "CI stalled")
   }
 
   // An outstanding review outranks running CI: the review is the bottleneck a human can
   // clear now, and CI finishes on its own either way.
-  if (pr.reviewDecision === "REVIEW_REQUIRED") return { verdict: "others", reason: "waiting for a review" }
+  if (pr.reviewDecision === "REVIEW_REQUIRED") return verdict("others", "waiting for a review", "review")
 
   // Nothing is outstanding from any human — CI is running, has not reported yet, or
   // GitHub is still computing the merge state. NONE lands here rather than in the
   // residual bucket because a blocked PR with no checks reported is waiting on required
   // checks to appear, not on a person.
   if (checks === "PENDING") {
-    return {
-      verdict: "machine",
-      reason: rollupState === "NONE" ? "waiting for checks to start" : "waiting for checks to finish",
-    }
+    if (rollupState === "NONE") return verdict("machine", "waiting for checks to start", "CI queued")
+    return verdict(
+      "machine",
+      "waiting for checks to finish",
+      counts.total > 0 ? `CI ${counts.passed}/${counts.total}` : "CI running"
+    )
   }
   if (checks === "NONE" || pr.mergeStateStatus === "UNKNOWN") {
-    return { verdict: "machine", reason: "waiting for GitHub" }
+    return verdict("machine", "waiting for GitHub", "computing")
   }
 
   // Residual: blocked, reviewed, green. Something unnamed gates it (required deployment,
   // unresolved conversation, a CODEOWNER). Still someone else's move, just not a named one.
-  return { verdict: "others", reason: "blocked by branch protection" }
+  return verdict("others", "blocked by branch protection", "protected")
+}
+
+const QUEUE_STATE_TEXT: Record<MergeQueueState, string> = {
+  QUEUED: "queued",
+  AWAITING_CHECKS: "awaiting checks",
+  MERGEABLE: "mergeable",
+  UNMERGEABLE: "unmergeable",
+  LOCKED: "locked",
+}
+
+export function describeQueueEntry(entry: MergeQueueEntry): string {
+  const eta = entry.estimatedTimeToMerge !== null ? ` · ${formatEta(entry.estimatedTimeToMerge)}` : ""
+  return `queued #${entry.position} · ${QUEUE_STATE_TEXT[entry.state]}${eta}`
+}
+
+export function describeQueueState(state: MergeQueueState): string {
+  return QUEUE_STATE_TEXT[state]
+}
+
+function queueShort(entry: MergeQueueEntry): string {
+  const eta = entry.estimatedTimeToMerge !== null ? ` ${formatEta(entry.estimatedTimeToMerge)}` : ""
+  return `queue #${entry.position}${eta}`
+}
+
+/** Rounded up: "~1m" for anything under a minute, "~1h5m" past the hour */
+export function formatEta(seconds: number): string {
+  const minutes = Math.max(1, Math.ceil(seconds / 60))
+  if (minutes < 60) return `~${minutes}m`
+  const rest = minutes % 60
+  return `~${Math.floor(minutes / 60)}h${rest > 0 ? `${rest}m` : ""}`
+}
+
+const PASSED_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"])
+const FAILED_CONCLUSIONS = new Set(["FAILURE", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED", "ERROR"])
+
+/**
+ * One check's outcome, by its conclusion (or a status context's state). STALE counts as
+ * passed: GitHub marks a run stale when a newer one superseded it, which is not a failure.
+ */
+export function checkOutcome(conclusion: string | null | undefined): "passed" | "failed" | "running" {
+  if (!conclusion) return "running"
+  if (PASSED_CONCLUSIONS.has(conclusion) || conclusion === "STALE") return "passed"
+  if (FAILED_CONCLUSIONS.has(conclusion)) return "failed"
+  return "running"
+}
+
+/** Count a check list by outcome — the `gh` and demo paths, which hold every check */
+export function countCheckRuns(rollup: StatusCheckRollup | null): CheckCounts {
+  const counts: CheckCounts = { total: 0, passed: 0, failed: 0, running: 0 }
+  for (const check of rollup ?? []) {
+    counts.total++
+    counts[checkOutcome(check.status === "COMPLETED" ? check.conclusion : null)]++
+  }
+  return counts
+}
+
+export function getCheckCounts(pr: PR): CheckCounts {
+  return pr.checkCounts ?? countCheckRuns(pr.statusCheckRollup)
 }
 
 /**
@@ -418,6 +532,9 @@ export interface PRPreview {
 
   /** Merge state */
   mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
+
+  /** Commits base has that head lacks; null when the compare was not run or failed */
+  behindBy: number | null
 
   /** Comment counts */
   commentCount: number

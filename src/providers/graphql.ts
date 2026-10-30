@@ -4,8 +4,8 @@
  */
 
 import { $ } from "bun"
-import type { PR } from "../types"
-import { getRepoName, toMergeMethod } from "../types"
+import type { CheckCounts, MergeQueueEntry, MergeQueueState, PR } from "../types"
+import { checkOutcome, getRepoName, toMergeMethod } from "../types"
 import { isBot } from "../utils/bots"
 import { stampBaseUpdateRequired } from "./branchRules"
 import { logRequest } from "../utils/logger"
@@ -30,6 +30,18 @@ export async function initGraphQL(): Promise<void> {
 }
 
 /**
+ * Checks by outcome, as aggregates: no per-check nodes, so no rate-limit points, where
+ * listing the checks themselves would cost a node apiece on every PR
+ */
+const CHECK_COUNTS = `
+  contexts {
+    totalCount
+    checkRunCountsByState { state count }
+    statusContextCountsByState { state count }
+  }
+`
+
+/**
  * Fragment for PR fields we need
  */
 const PR_FRAGMENT = `
@@ -49,6 +61,7 @@ const PR_FRAGMENT = `
   isCrossRepository
   viewerCanUpdateBranch
   autoMergeRequest { mergeMethod }
+  mergeQueueEntry { position state estimatedTimeToMerge enqueuedAt enqueuer { login } }
   reviewThreads(first: 50) {
     totalCount
     nodes {
@@ -72,7 +85,7 @@ const PR_FRAGMENT = `
       commit {
         oid
         committedDate
-        statusCheckRollup { state }
+        statusCheckRollup { state ${CHECK_COUNTS} }
         checkSuites(first: 20) { nodes { status } }
       }
     }
@@ -111,8 +124,9 @@ const PR_DIGEST_FRAGMENT = `
   comments { totalCount }
   reviews { totalCount }
   reviewThreads { totalCount }
+  mergeQueueEntry { position state }
   commits(last: 1) {
-    nodes { commit { oid statusCheckRollup { state } } }
+    nodes { commit { oid statusCheckRollup { state ${CHECK_COUNTS} } } }
   }
 `
 
@@ -137,10 +151,50 @@ export function digestOf(nodes: any[]): string {
         pr.reviewThreads?.totalCount ?? 0,
         commit?.oid ?? "",
         commit?.statusCheckRollup?.state ?? "",
+        pr.mergeQueueEntry ? `${pr.mergeQueueEntry.position}:${pr.mergeQueueEntry.state}` : "",
+        countsKey(commit?.statusCheckRollup?.contexts),
       ].join("|")
     })
     .sort()
     .join("\n")
+}
+
+/** The running/passed/failed split, so a refresh notices one more check finishing */
+function countsKey(contexts: any): string {
+  const counts = toCheckCounts(contexts)
+  return counts ? `${counts.passed}/${counts.failed}/${counts.running}` : ""
+}
+
+/** The rollup's per-state aggregates as passed/failed/running */
+export function toCheckCounts(contexts: any): CheckCounts | null {
+  if (!contexts) return null
+  const counts: CheckCounts = { total: contexts.totalCount ?? 0, passed: 0, failed: 0, running: 0 }
+  // A check run's "state" is its conclusion once completed and its status before; a
+  // status context's is SUCCESS, FAILURE, ERROR, PENDING or EXPECTED
+  const tally = (entries: Array<{ state?: string; count?: number }> | undefined, pending: Set<string>) => {
+    for (const { state, count } of entries ?? []) {
+      if (!state || !count) continue
+      // A completed run is normally reported under its conclusion; a bare COMPLETED is done
+      if (state === "COMPLETED") counts.passed += count
+      else counts[pending.has(state) ? "running" : checkOutcome(state)] += count
+    }
+  }
+  tally(contexts.checkRunCountsByState, new Set(["QUEUED", "IN_PROGRESS", "PENDING", "WAITING", "REQUESTED"]))
+  tally(contexts.statusContextCountsByState, new Set(["PENDING", "EXPECTED"]))
+  return counts
+}
+
+const QUEUE_STATES = new Set<MergeQueueState>(["QUEUED", "AWAITING_CHECKS", "MERGEABLE", "UNMERGEABLE", "LOCKED"])
+
+function toMergeQueueEntry(raw: any): MergeQueueEntry | null {
+  if (!raw || !QUEUE_STATES.has(raw.state)) return null
+  return {
+    position: raw.position ?? 0,
+    state: raw.state,
+    estimatedTimeToMerge: raw.estimatedTimeToMerge ?? null,
+    enqueuedAt: raw.enqueuedAt ?? null,
+    enqueuer: raw.enqueuer?.login ?? null,
+  }
 }
 
 /**
@@ -276,6 +330,8 @@ function transformGraphQLPR(raw: any): PR {
         : "up-to-date",
     // Filled in by stampBaseUpdateRequired once the branch rules are known
     baseUpdateRequired: raw.mergeStateStatus === "BEHIND",
+    checkCounts: toCheckCounts(statusRollup?.contexts) ?? { total: 0, passed: 0, failed: 0, running: 0 },
+    mergeQueue: toMergeQueueEntry(raw.mergeQueueEntry),
   }
 }
 

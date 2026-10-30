@@ -106,7 +106,7 @@ export function usePreview({
           return
         }
 
-        const preview = await fetchPRPreview(repo, selectedPR.number)
+        const preview = await fetchPRPreview(repo, selectedPR.number, { base: selectedPR.baseRefName, head: selectedPR.headRefOid })
 
         // Only update if we're still interested in this key
         if (fetchingKeyRef.current === cacheKey) {
@@ -167,7 +167,7 @@ export function usePreview({
         if (!repo) continue
 
         try {
-          const preview = await fetchPRPreview(repo, pr.number)
+          const preview = await fetchPRPreview(repo, pr.number, { base: pr.baseRefName, head: pr.headRefOid })
           dispatch({ type: "SET_PREVIEW_CACHE", key, data: preview })
         } catch {
           // Silent fail for prefetch
