@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PR } from "../types"
-import { replaceReposPRs, retainPRsFromRepos } from "./usePRData"
+import { replaceReposPRs, retainPRsFromRepos, starredAuthorScopes } from "./usePRData"
 
 const pr = (repo: string, number: number) =>
   ({ number, url: `https://github.com/${repo}/pull/${number}` }) as PR
@@ -27,5 +27,21 @@ describe("retainPRsFromRepos", () => {
     const held = [pr("acme/api", 1), pr("acme/web", 2)]
     const next = retainPRsFromRepos(held, [pr("acme/web", 3)], ["acme/api"])
     expect(next.map((p) => p.number).sort()).toEqual([1, 3])
+  })
+})
+
+describe("starredAuthorScopes", () => {
+  const repositories = [
+    { name: "acme/mono", starredOnly: true },
+    { name: "acme/api" },
+    { name: "acme/old", starredOnly: true, disabled: true },
+  ] as Parameters<typeof starredAuthorScopes>[0]
+
+  test("scopes only enabled starredOnly repos to the starred authors", () => {
+    expect(starredAuthorScopes(repositories, ["alice"], false)).toEqual({ "acme/mono": ["alice"] })
+  })
+
+  test("* scopes nothing: it shows every author", () => {
+    expect(starredAuthorScopes(repositories, ["alice"], true)).toEqual({})
   })
 })

@@ -9,7 +9,7 @@
  */
 
 import type { MergeMethod, PR, PRPreview } from "../types"
-import type { RepoFetchResult } from "./graphql"
+import type { ListReposOptions, RepoFetchResult } from "./graphql"
 import type { ReviewEvent } from "../actions/review"
 import type { UpdateStrategy } from "../actions/branch"
 import type { PRMergeState, RepoMergeSettings } from "../actions/merge"
@@ -33,7 +33,7 @@ export interface PRSource {
   listClosedPRs(repo: string, options?: { author?: string; days?: number }): Promise<PR[]>
   listMergedPRs(repo: string, options?: { author?: string; days?: number }): Promise<PR[]>
   listPRsByAuthor(repo: string, author: string, state?: "open" | "closed" | "merged" | "all"): Promise<PR[]>
-  listPRsFromRepos(repos: string[], opts?: { force?: boolean }): Promise<RepoFetchResult>
+  listPRsFromRepos(repos: string[], opts?: ListReposOptions): Promise<RepoFetchResult>
   getPRsByBranch(repos: string[], branch: string): Promise<PR[]>
   getPR(repo: string, number: number): Promise<PR | null>
   getPRsBulk(prs: Array<{ repo: string; number: number }>): Promise<PR[]>

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { countComments, digestOf, fetchRepoPRs } from "./graphql"
+import { authorSearchQueries, countComments, digestOf, fetchRepoPRs } from "./graphql"
 
 const human = (login: string) => ({ author: { login } })
 const thread = (opts: { author?: string; typename?: string; resolved: boolean; comments: number }) => ({
@@ -64,7 +64,6 @@ describe("digestOf", () => {
     updatedAt: "2026-09-23T10:00:00Z",
     isDraft: false,
     reviewDecision: "REVIEW_REQUIRED",
-    mergeStateStatus: "CLEAN",
     comments: { totalCount: 3 },
     reviews: { totalCount: 1 },
     reviewThreads: { totalCount: 2 },
@@ -91,7 +90,6 @@ describe("digestOf", () => {
     ["an edit", { updatedAt: "2026-09-23T11:00:00Z" }],
     ["leaving draft", { isDraft: true }],
     ["an approval", { reviewDecision: "APPROVED" }],
-    ["falling behind base", { mergeStateStatus: "BEHIND" }],
     ["a force push", { commits: { nodes: [{ commit: { oid: "def456", statusCheckRollup: { state: "SUCCESS" } } }] } }],
     ["checks going red", { commits: { nodes: [{ commit: { oid: "abc123", statusCheckRollup: { state: "FAILURE" } } }] } }],
   ]
@@ -161,6 +159,38 @@ describe("fetchRepoPRs", () => {
     expect(calls.full).toBe(1)
   })
 
+  test("a scoped fetch asks a search for the authors and reads its nodes", async () => {
+    const bodies: string[] = []
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      bodies.push(init.body)
+      return new Response(JSON.stringify({ data: { s0: { nodes: [prNode] } } }))
+    }) as unknown as typeof fetch
+
+    const result = await fetchRepoPRs("acme/scoped", "token", false, ["alice", "bob"])
+    expect(result.prs.map((pr) => pr.number)).toEqual([7])
+    expect(bodies.every((body) => body.includes("author:alice author:bob"))).toBe(true)
+  })
+
+  test("a scoped and an unscoped fetch of one repo never stand in for each other", async () => {
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      const data = init.body.includes("search(")
+        ? { s0: { nodes: [prNode] } }
+        : { repository: { pullRequests: { nodes: [prNode] } } }
+      return new Response(JSON.stringify({ data }))
+    }) as unknown as typeof fetch
+
+    await fetchRepoPRs("acme/both", "token", false, ["alice"])
+    const unscoped = await fetchRepoPRs("acme/both", "token", false)
+    expect(unscoped.unchanged).toBe(false)
+  })
+
+  test("no authors means nothing to ask for", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("should not fetch")
+    }) as unknown as typeof fetch
+    expect((await fetchRepoPRs("acme/none", "token", false, [])).prs).toEqual([])
+  })
+
   test("force pays for the full fetch even when nothing moved", async () => {
     const calls = stubGitHub()
     await fetchRepoPRs("acme/forced", "token", false)
@@ -168,5 +198,21 @@ describe("fetchRepoPRs", () => {
 
     expect(forced.unchanged).toBe(false)
     expect(calls.full).toBe(2)
+  })
+})
+
+describe("authorSearchQueries", () => {
+  test("a short author list is one search", () => {
+    expect(authorSearchQueries("acme/mono", ["alice", "bob"])).toEqual([
+      "repo:acme/mono is:pr is:open sort:updated-desc author:alice author:bob",
+    ])
+  })
+
+  test("a long one is split so no query passes GitHub's 256 characters, losing nobody", () => {
+    const authors = Array.from({ length: 30 }, (_, i) => `someone-with-a-long-name-${i}`)
+    const queries = authorSearchQueries("acme/mono", authors)
+    expect(queries.length).toBeGreaterThan(1)
+    for (const query of queries) expect(query.length).toBeLessThanOrEqual(256)
+    expect(queries.join(" ").match(/author:\S+/g)).toHaveLength(30)
   })
 })

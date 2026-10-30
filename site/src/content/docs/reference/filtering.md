@@ -74,3 +74,7 @@ configured repos:
 
 A repo with `starred_only = true` shows only PRs by authors you have starred (`⇧S`). It is the
 way to watch a busy repo for a few people. `*` in the filter lifts the restriction for a look.
+
+presto only asks GitHub for those authors' open PRs, so a busy repo costs a refresh no more
+than a quiet one, and a starred PR is found however long ago it was last touched. `*` or a
+`repo:` filter on the repo loads everyone else's when you switch to it.

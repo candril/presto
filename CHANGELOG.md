@@ -7,6 +7,16 @@ release, so write it before tagging.
 
 ## [Unreleased]
 
+### Changed
+
+- **Refresh on a big monorepo drops from ~18s to ~5s.** A `starredOnly` repo now asks
+  GitHub for its starred authors' PRs only, instead of its 50 most recently updated and
+  then hiding the rest — on isomorph that window held 2 of the 13 starred PRs, so most
+  were missing altogether. `*` and `repo:` still load every author. Each repo's rows also
+  land as soon as that repo answers rather than waiting on the slowest one, and the
+  change check no longer asks for the merge state, which GitHub is slowest to compute: a
+  PR that only fell behind its base shows it one refresh later, or at once with `r`.
+
 ## [0.3.0] — 2026-09-25
 
 ### Changed

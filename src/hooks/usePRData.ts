@@ -72,6 +72,26 @@ export function replaceReposPRs(current: PR[], fetched: PR[], repos: string[]): 
   return [...fetched, ...current.filter((pr) => !replacing.has(getRepoName(pr).toLowerCase()))]
 }
 
+/**
+ * The author scope for each enabled starredOnly repo: its rows outside the starred authors
+ * are hidden anyway, and on isomorph asking for only the starred ones is both the faster
+ * query and the only one that reaches past the 50 most recently updated. `*` shows them
+ * all, so it scopes nothing.
+ */
+export function starredAuthorScopes(
+  repositories: Config["repositories"],
+  starredAuthors: string[],
+  showAll: boolean
+): Record<string, string[]> {
+  if (showAll) return {}
+  const scopes: Record<string, string[]> = {}
+  for (const repo of repositories) {
+    if (repo.disabled || !repo.starredOnly) continue
+    scopes[repo.name] = starredAuthors
+  }
+  return scopes
+}
+
 function describeFailedRepos(failedRepos: string[]): string {
   const names = failedRepos.slice(0, 3).join(", ")
   const more = failedRepos.length > 3 ? ` +${failedRepos.length - 3} more` : ""
@@ -288,6 +308,24 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     fetchedMergedRepos.current.clear()
     fullyFetchedRepos.current.clear()
 
+    const authorScopes = starredAuthorScopes(
+      config.repositories,
+      historyRef.current.starredAuthors ?? [],
+      filter.showAll
+    )
+    const markUnscopedFetched = (repos: string[], failedRepos: string[]) => {
+      for (const repo of repos) {
+        if (failedRepos.includes(repo) || authorScopes[repo]) continue
+        fullyFetchedRepos.current.add(repo.toLowerCase())
+      }
+    }
+    // Rows go up per repo while the slower ones are still out; the backfilled rows the
+    // replacement takes with it come straight back
+    const showRepo = (repo: string, repoPRs: PR[]) => {
+      dispatch({ type: "REPLACE_REPO_PRS", repo, prs: repoPRs })
+      restoreBackfilledPRs()
+    }
+
     try {
       const { priority, rest } = getPriorityRepos()
       
@@ -352,10 +390,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
               // Fetch rest of configured repos
               if (rest.length > 0) {
-                const restResult = await listPRsFromRepos(rest, { force })
+                const restResult = await listPRsFromRepos(rest, { force, authorScopes, onRepo: showRepo })
                 if (restResult.failedRepos.length === rest.length) {
                   throw new Error(`Failed to fetch ${rest.join(", ")}`)
                 }
+                markUnscopedFetched(rest, restResult.failedRepos)
                 const restPRs = retainPRsFromRepos(
                   prsRef.current,
                   restResult.prs,
@@ -413,10 +452,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         }
       } else {
         // No priority repos, fetch all at once
-        const allResult = await listPRsFromRepos(allEnabledRepos, { force })
+        const allResult = await listPRsFromRepos(allEnabledRepos, { force, authorScopes, onRepo: showRepo })
         if (allEnabledRepos.length > 0 && allResult.failedRepos.length === allEnabledRepos.length) {
           throw new Error(`Failed to fetch ${allEnabledRepos.join(", ")}`)
         }
+        markUnscopedFetched(allEnabledRepos, allResult.failedRepos)
         let allFetchedPRs = retainPRsFromRepos(
           prsRef.current,
           allResult.prs,
@@ -468,7 +508,7 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         dispatch({ type: "SHOW_MESSAGE", message: "Refresh failed (offline?) — showing cached PRs" })
       }
     }
-  }, [config.repositories, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreBackfilledPRs, rememberOutsideRepoPRs])
+  }, [config.repositories, filter.showAll, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreBackfilledPRs, rememberOutsideRepoPRs])
 
   // Revalidate on mount - PRs are already hydrated from cache in createInitialState()
   // so always do a background refresh (stale data shows immediately)
@@ -629,6 +669,30 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       repoFilterDebounceRef.current = undefined
     }
   }, [filter.repos.join(","), refreshEpoch])
+
+  // A refresh fetches a starredOnly repo's starred authors only, and `*` or `repo:` on it
+  // asks for the rest. Claimed up front so the next keystroke of the filter does not ask again.
+  useEffect(() => {
+    const wanted = config.repositories
+      .filter((r) => !r.disabled && r.starredOnly)
+      .map((r) => r.name)
+      .filter((repo) => filter.showAll || filter.repos.some((f) => filterNamesRepo(f, repo)))
+      .filter((repo) => !fullyFetchedRepos.current.has(repo.toLowerCase()))
+    if (wanted.length === 0) return
+
+    for (const repo of wanted) fullyFetchedRepos.current.add(repo.toLowerCase())
+    dispatch({ type: "SHOW_MESSAGE", message: `Loading all of ${wanted.join(", ")}...` })
+    listPRsFromRepos(wanted).then(({ prs: fetchedPRs, failedRepos }) => {
+      for (const repo of failedRepos) fullyFetchedRepos.current.delete(repo.toLowerCase())
+      if (failedRepos.length > 0) {
+        dispatch({ type: "SHOW_MESSAGE", message: describeFailedRepos(failedRepos) })
+      }
+      if (fetchedPRs.length > 0) dispatch({ type: "APPEND_PRS", prs: fetchedPRs })
+    }).catch(() => {
+      for (const repo of wanted) fullyFetchedRepos.current.delete(repo.toLowerCase())
+      dispatch({ type: "SHOW_MESSAGE", message: "Failed to load PRs" })
+    })
+  }, [filter.showAll, filter.repos.join(","), config.repositories, refreshEpoch])
 
   // Fetch closed/merged PRs when state:closed or state:merged filter is active
   useEffect(() => {

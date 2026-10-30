@@ -17,6 +17,8 @@ export type AppAction =
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_PRS"; prs: PR[] }
   | { type: "APPEND_PRS"; prs: PR[] }
+  /** One repo's open PRs from a refresh still waiting on other repos; leaves `refreshing` on */
+  | { type: "REPLACE_REPO_PRS"; repo: string; prs: PR[] }
   | { type: "REMOVE_PRS"; urls: string[] }
   | { type: "SELECT"; index: number }
   | { type: "MOVE"; delta: number }
@@ -208,6 +210,24 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         prs: allPRs,
+      }
+    }
+
+    case "REPLACE_REPO_PRS": {
+      // Only the repo's open rows go: a closed/merged backfill for it is in no open-PR
+      // fetch, and dropping it would empty a state:merged tab until the refresh settles
+      const repo = action.repo.toLowerCase()
+      const kept = state.prs.filter(
+        (pr) => pr.state !== "OPEN" || getRepoName(pr).toLowerCase() !== repo
+      )
+      const sorted = [...kept, ...action.prs].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )
+      return {
+        ...state,
+        prs: sorted,
+        pendingActions: settlePendingActions(state.pendingActions, state.prs, sorted),
+        selectedIndex: Math.min(state.selectedIndex, Math.max(0, sorted.length - 1)),
       }
     }
 

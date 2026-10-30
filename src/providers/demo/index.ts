@@ -43,13 +43,17 @@ export function createDemoSource(): PRSource {
         state === "open" ? ["OPEN"] : state === "closed" ? ["CLOSED"] : state === "merged" ? ["MERGED"] : ["OPEN", "CLOSED", "MERGED"]
       return listByState(repo, states, author)
     },
-    listPRsFromRepos: async (repos) => {
+    listPRsFromRepos: async (repos, opts = {}) => {
       await sleep(LIST_MS)
-      return {
-        prs: store.list(repos.length > 0 ? repos : DEMO_REPOS, ["OPEN"]),
-        failedRepos: [],
-        unchangedRepos: [],
-      }
+      const prs = (repos.length > 0 ? repos : DEMO_REPOS).flatMap((repo) => {
+        const scope = opts.authorScopes?.[repo]
+        const repoPRs = store
+          .list([repo], ["OPEN"])
+          .filter((pr) => !scope || scope.includes(pr.author.login))
+        opts.onRepo?.(repo, repoPRs)
+        return repoPRs
+      })
+      return { prs, failedRepos: [], unchangedRepos: [] }
     },
     getPRsByBranch: async (repos, branch) => {
       await sleep(LIST_MS)

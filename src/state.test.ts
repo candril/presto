@@ -52,6 +52,27 @@ describe("APPEND_PRS", () => {
   })
 })
 
+describe("REPLACE_REPO_PRS", () => {
+  const apiPR = (number: number, over: Partial<PR> = {}) =>
+    pr(number, { url: `https://github.com/acme/api/pull/${number}`, ...over })
+
+  test("swaps the repo's open rows and leaves other repos alone", () => {
+    const refreshing = appReducer(withPRs([pr(1), apiPR(2)]), { type: "SET_REFRESHING", refreshing: true })
+    const state = appReducer(refreshing, { type: "REPLACE_REPO_PRS", repo: "Acme/API", prs: [apiPR(3)] })
+    expect(state.prs.map((p) => p.number).sort()).toEqual([1, 3])
+    expect(state.refreshing).toBe(true)
+  })
+
+  test("keeps the repo's merged rows, which no open-PR fetch returns", () => {
+    const state = appReducer(withPRs([apiPR(2, { state: "MERGED" })]), {
+      type: "REPLACE_REPO_PRS",
+      repo: "acme/api",
+      prs: [],
+    })
+    expect(state.prs.map((p) => p.number)).toEqual([2])
+  })
+})
+
 describe("REMOVE_PRS", () => {
   test("drops the named PRs and leaves the rest", () => {
     const before = withPRs([pr(1), pr(2), pr(3)])

@@ -6,11 +6,11 @@
 import { $ } from "bun"
 import type { PR, PRPreview, ChangedFile, PRCommit, PRReview, PreviewCheckStatus, PreviewCheck, PreviewComment } from "../types"
 import { toMergeMethod } from "../types"
-import { listPRsGraphQL, getPRsGraphQL, type RepoFetchResult } from "./graphql"
+import { listPRsGraphQL, getPRsGraphQL, type ListReposOptions, type RepoFetchResult } from "./graphql"
 import { isBot } from "../utils/bots"
 import { logRequest } from "../utils/logger"
 
-export type { RepoFetchResult } from "./graphql"
+export type { ListReposOptions, RepoFetchResult } from "./graphql"
 
 /** Fields to fetch from GitHub */
 const PR_FIELDS = [
@@ -102,12 +102,19 @@ function transformPRs(raws: RawPR[]): PR[] {
  * @param repo - Repository name (owner/repo)
  * @param state - PR state: "open" (default), "closed", "merged", or "all"
  */
-export async function listPRs(repo?: string, state: "open" | "closed" | "merged" | "all" = "open"): Promise<PR[]> {
+export async function listPRs(
+  repo?: string,
+  state: "open" | "closed" | "merged" | "all" = "open",
+  authors?: string[]
+): Promise<PR[]> {
+  if (authors?.length === 0) return []
   const args = ["pr", "list", "--json", PR_FIELDS, "--limit", "50"]
   if (repo) args.push("-R", repo)
   if (state !== "open") args.push("--state", state)
+  // Repeated author qualifiers are OR'd, as in the GraphQL search this stands in for
+  if (authors) args.push("--search", authors.map((author) => `author:${author}`).join(" "))
 
-  const log = logRequest("gh", `pr list ${repo ?? "(current)"} --state ${state}`)
+  const log = logRequest("gh", `pr list ${repo ?? "(current)"} --state ${state}${authors ? ` (${authors.length} authors)` : ""}`)
   try {
     const result = await $`gh ${args}`.json()
     const prs = transformPRs(result as RawPR[])
@@ -266,7 +273,7 @@ export async function listRecentPRs(repo: string, days: number): Promise<PR[]> {
  */
 export async function listPRsFromRepos(
   repos: string[],
-  opts: { force?: boolean } = {}
+  opts: ListReposOptions = {}
 ): Promise<RepoFetchResult> {
   if (repos.length === 0) {
     // Default to current repo
@@ -287,7 +294,9 @@ export async function listPRsFromRepos(
 
   log.fail(`${graphQL.failedRepos.length}/${repos.length} repos failed, retrying via REST`)
   const log2 = logRequest("gh", `listPRsFromReposREST (${graphQL.failedRepos.length} repos)`)
-  const results = await Promise.allSettled(graphQL.failedRepos.map((repo) => listPRs(repo)))
+  const results = await Promise.allSettled(
+    graphQL.failedRepos.map((repo) => listPRs(repo, "open", opts.authorScopes?.[repo]))
+  )
 
   const prs = [...graphQL.prs]
   const failedRepos: string[] = []

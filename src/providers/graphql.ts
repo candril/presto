@@ -90,15 +90,20 @@ const PR_FRAGMENT = `
  *
  * A PR's `updatedAt` alone would not do. GitHub leaves it untouched when a
  * check run finishes or a review lands, which is exactly the movement a PR
- * dashboard exists to show — hence the head oid, the rollup state, the
- * review decision and the merge state alongside it.
+ * dashboard exists to show — hence the head oid, the rollup state and the
+ * review decision alongside it.
+ *
+ * `mergeStateStatus` stays out, though falling behind base moves nothing
+ * else. GitHub computes it per PR on request: on isomorph it is 6.7s of an
+ * 8s probe, and since main moves all the time there it flips on most
+ * refreshes anyway, which would defeat the skip it is paid for. A PR that
+ * only fell behind shows it on the next refresh that fetches in full.
  */
 const PR_DIGEST_FRAGMENT = `
   number
   updatedAt
   isDraft
   reviewDecision
-  mergeStateStatus
   comments { totalCount }
   reviews { totalCount }
   reviewThreads { totalCount }
@@ -123,7 +128,6 @@ export function digestOf(nodes: any[]): string {
         pr.updatedAt,
         pr.isDraft,
         pr.reviewDecision ?? "",
-        pr.mergeStateStatus ?? "",
         pr.comments?.totalCount ?? 0,
         pr.reviews?.totalCount ?? 0,
         pr.reviewThreads?.totalCount ?? 0,
@@ -286,24 +290,63 @@ const RETRY_BASE_DELAY_MS = 400
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Single GraphQL round-trip for one repo, at full 28-point depth. */
-async function fetchRepoPRsOnce(repo: string, token: string): Promise<PR[]> {
-  const [owner, name] = repo.split("/")
+/** GitHub rejects a search query string longer than this */
+const SEARCH_QUERY_LIMIT = 256
 
-  const query = `query {
-    repository(owner: "${owner}", name: "${name}") {
-      nameWithOwner
-      pullRequests(first: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
-        nodes { ${PR_FRAGMENT} }
-      }
+/**
+ * Search query strings covering `authors`' open PRs in `repo`, split so none passes
+ * GitHub's length limit. Each string is a separate search, so each one is paid for.
+ */
+export function authorSearchQueries(repo: string, authors: string[]): string[] {
+  const base = `repo:${repo} is:pr is:open sort:updated-desc`
+  const queries: string[] = []
+  let current = base
+  for (const author of authors) {
+    const qualifier = ` author:${author}`
+    if (current !== base && current.length + qualifier.length > SEARCH_QUERY_LIMIT) {
+      queries.push(current)
+      current = base
     }
-  }`
-
-  return (await fetchRepoNodes(query, token)).map(transformGraphQLPR)
+    current += qualifier
+  }
+  queries.push(current)
+  return queries
 }
 
 /**
- * POST one repository query and hand back its pull request nodes.
+ * The open PRs of `repo` with `fields`, or with `authors` only those they opened.
+ *
+ * The author-scoped form is a search rather than a filter on the repository listing,
+ * which has none: on isomorph the 50 most recently updated of 264 open PRs held 2 of
+ * the 13 by starred authors, and asking for the rest that way means paying for all of them.
+ */
+function openPRsQuery(repo: string, fields: string, authors?: string[]): string {
+  if (authors) {
+    const searches = authorSearchQueries(repo, authors).map(
+      (q, index) => `s${index}: search(type: ISSUE, first: 50, query: ${JSON.stringify(q)}) {
+        nodes { ... on PullRequest { ${fields} } }
+      }`
+    )
+    return `query { ${searches.join("\n")} }`
+  }
+
+  const [owner, name] = repo.split("/")
+  return `query {
+    repository(owner: "${owner}", name: "${name}") {
+      pullRequests(first: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
+        nodes { ${fields} }
+      }
+    }
+  }`
+}
+
+/** Single GraphQL round-trip for one repo, at full 28-point depth. */
+async function fetchRepoPRsOnce(repo: string, token: string, authors?: string[]): Promise<PR[]> {
+  return (await fetchRepoNodes(openPRsQuery(repo, PR_FRAGMENT, authors), token)).map(transformGraphQLPR)
+}
+
+/**
+ * POST one repository or search query and hand back its pull request nodes.
  *
  * Throws on every failure mode — GitHub reports rate limits and outages as
  * HTTP 200 with an `errors` body, and returning [] for those is
@@ -329,11 +372,11 @@ async function fetchRepoNodes(query: string, token: string): Promise<any[]> {
   const result = await response.json().catch(() => {
     throw new RepoFetchError("malformed response body", true)
   }) as {
-    data?: { repository?: { pullRequests?: { nodes?: any[] } } | null }
+    data?: Record<string, any> | null
     errors?: Array<{ type?: string; message?: string }>
   }
 
-  const nodes = result.data?.repository?.pullRequests?.nodes
+  const nodes = pullRequestNodes(result.data)
   if (!nodes) {
     const error = result.errors?.[0]
     const detail = error ? `${error.type ?? "ERROR"}: ${error.message ?? ""}`.trim() : "no data returned"
@@ -343,23 +386,23 @@ async function fetchRepoNodes(query: string, token: string): Promise<any[]> {
   return nodes.filter(Boolean)
 }
 
+/** The nodes of a repository listing, or of every aliased search; null when any is missing */
+function pullRequestNodes(data: Record<string, any> | null | undefined): any[] | null {
+  if (!data) return null
+  if ("repository" in data) return data.repository?.pullRequests?.nodes ?? null
+
+  const searches = Object.values(data)
+  if (searches.length === 0 || searches.some((search) => !search?.nodes)) return null
+  return searches.flatMap((search) => search.nodes)
+}
+
 /**
  * Ask a repo what its open PRs look like from outside, for 1 GraphQL point.
  * Equal to the repo's last digest means nothing on any PR has moved, and the
  * 28-point fetch would produce exactly what the caller already holds.
  */
-async function probeRepo(repo: string, token: string): Promise<string> {
-  const [owner, name] = repo.split("/")
-
-  const query = `query {
-    repository(owner: "${owner}", name: "${name}") {
-      pullRequests(first: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
-        nodes { ${PR_DIGEST_FRAGMENT} }
-      }
-    }
-  }`
-
-  return digestOf(await fetchRepoNodes(query, token))
+async function probeRepo(repo: string, token: string, authors?: string[]): Promise<string> {
+  return digestOf(await fetchRepoNodes(openPRsQuery(repo, PR_DIGEST_FRAGMENT, authors), token))
 }
 
 /**
@@ -382,33 +425,40 @@ function isRetryableGraphQLError(type?: string): boolean {
  * The digest is stored only once the fetch succeeds. A fetch that died after
  * stamping it would leave the next refresh skipping a repo whose PRs presto
  * never actually loaded.
+ *
+ * `authors` narrows the fetch to their PRs. It is part of the cache key: a
+ * scoped and an unscoped fetch of one repo hold different PRs, and either
+ * standing in for the other would show the wrong set as "unchanged".
  */
 export async function fetchRepoPRs(
   repo: string,
   token: string,
-  force: boolean
+  force: boolean,
+  authors?: string[]
 ): Promise<{ prs: PR[]; unchanged: boolean }> {
   const [owner, name] = repo.split("/")
   if (!owner || !name) throw new RepoFetchError(`invalid repo name "${repo}"`, false)
+  if (authors?.length === 0) return { prs: [], unchanged: false }
 
-  const log = logRequest("graphql", `fetchRepoPRs ${repo}`)
+  const cacheKey = authors ? `${repo}|${[...authors].sort().join(",")}` : repo
+  const log = logRequest("graphql", `fetchRepoPRs ${repo}${authors ? ` (${authors.length} authors)` : ""}`)
   for (let attempt = 1; ; attempt++) {
     try {
-      const digest = await probeRepo(repo, token)
-      const last = lastFetches.get(repo)
+      const digest = await probeRepo(repo, token, authors)
+      const last = lastFetches.get(cacheKey)
       if (!force && last?.digest === digest) {
         log.finish("unchanged (1pt)")
         return { prs: last.prs, unchanged: true }
       }
 
-      const prs = await fetchRepoPRsOnce(repo, token)
-      lastFetches.set(repo, { digest, prs })
+      const prs = await fetchRepoPRsOnce(repo, token, authors)
+      lastFetches.set(cacheKey, { digest, prs })
       log.finish(`${prs.length} PRs`)
       return { prs, unchanged: false }
     } catch (error) {
       const retryable = error instanceof RepoFetchError ? error.retryable : true
       if (!retryable || attempt >= MAX_ATTEMPTS) {
-        lastFetches.delete(repo)
+        lastFetches.delete(cacheKey)
         log.fail(error)
         throw error
       }
@@ -425,13 +475,24 @@ export interface RepoFetchResult {
   unchangedRepos: string[]
 }
 
+export interface ListReposOptions {
+  force?: boolean
+  /** Repos to fetch only these authors' PRs from, keyed by repo name */
+  authorScopes?: Record<string, string[]>
+  /**
+   * Called with a repo's PRs as soon as that repo has answered and they differ from the
+   * last fetch. One slow repo would otherwise hold back every other repo's rows.
+   */
+  onRepo?: (repo: string, prs: PR[]) => void
+}
+
 /**
  * Fetch PRs from multiple repositories using GraphQL
  * Fetches all repos in parallel for maximum speed (~3s for 4 large repos)
  */
 export async function listPRsGraphQL(
   repos: string[],
-  { force = false }: { force?: boolean } = {}
+  { force = false, authorScopes = {}, onRepo }: ListReposOptions = {}
 ): Promise<RepoFetchResult> {
   if (repos.length === 0) return { prs: [], failedRepos: [], unchangedRepos: [] }
 
@@ -440,7 +501,13 @@ export async function listPRsGraphQL(
   // Fetch ALL repos in parallel - each as a separate request
   // This avoids resource limits while maximizing speed
   const results = await Promise.allSettled(
-    repos.map(repo => fetchRepoPRs(repo, token, force))
+    repos.map(async (repo) => {
+      const result = await fetchRepoPRs(repo, token, force, authorScopes[repo])
+      if (onRepo && !result.unchanged) {
+        onRepo(repo, await stampBaseUpdateRequired(result.prs, getRepoName))
+      }
+      return result
+    })
   )
 
   const allPRs: PR[] = []
