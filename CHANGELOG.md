@@ -11,8 +11,12 @@ release, so write it before tagging.
 
 - **Rows name the blocker.** Where the Merge glyph alone is ambiguous, the end of the
   title says in one muted word what is in the way: `conflicts`, `2 failing`, `behind`,
-  `2 threads`, `CI 5/8`, `computing`, `protected`. Ready, review and auto-merge keep the
+  `2 threads`, `CI 5/8`, `computing`, `blocked`. Ready, review and auto-merge keep the
   bare glyph, and only rows with a reason give up title width for it.
+- **The reason's colour is what the PR needs from you.** Green when nothing more is needed
+  from you (`ready` on your mergeable PR, `approved` on one you signed off), amber when the
+  author has to act, blue for a review you could give, muted for CI and everything that
+  is not yours.
 - **Merge queue.** A queued PR shows `⧗` and `#1 ~3m`: its place in line and GitHub's
   estimate, green once GitHub calls it mergeable in the queue.
 - **Merge status in the preview.** The preview opens with the verdict, then one line per

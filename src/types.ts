@@ -314,7 +314,7 @@ export function computeMergeVerdictDetail(pr: PR, hasPendingAction: boolean): Me
 
   // Residual: blocked, reviewed, green. Something unnamed gates it (required deployment,
   // unresolved conversation, a CODEOWNER). Still someone else's move, just not a named one.
-  return verdict("others", "blocked by branch protection", "protected")
+  return verdict("others", "blocked by branch protection", "blocked")
 }
 
 const QUEUE_STATE_TEXT: Record<MergeQueueState, string> = {

@@ -62,12 +62,24 @@ need only read access — classic branch protection needs admin rights and 404s 
 
 ## M — Merge verdict
 
-The single answer to *who is holding this up?*. Where one glyph covers several reasons,
-the reason sits muted at the right edge of the title: `conflicts`, `2 failing`, `behind`,
-`2 threads`, `CI 5/8`, `computing`, `protected`, `#1 ~3m`. Ready, review and auto-merge
-have none — the word would only repeat the glyph. Only rows with a reason give up title
-width for it, and on a list too narrow for both the reason goes before the title does.
-The preview spells every reason out.
+The single answer to *who is holding this up?*. The reason sits at the right edge of the
+title, in a word, where it tells you something the glyph does not. Only rows with a reason
+give up title width for it, and on a list too narrow for both the reason goes before the
+title does. The preview spells every reason out.
+
+The glyph is the verdict, the same for everyone. The reason's colour is what the PR needs
+from **you**, the logged-in `gh` user:
+
+| Colour | Means | Words |
+| --- | --- | --- |
+| green | nothing more needed from you | `ready` — your PR can be merged · `approved` — you approved it and it waits only on others · `#1 ~3m` once mergeable in the queue |
+| amber | the author has to act | `conflicts`, `behind`, `changes`, `2 failing`, `3 threads`, `stalled`, `queue err` |
+| blue | a review is open and could be yours | `review` — someone else's PR you have not approved |
+| muted | nobody's to give, or not yours | `CI 5/8`, `CI queued`, `computing`, `blocked`, `updating`, `#1 ~3m` while it waits |
+
+Your own PR waiting for review, someone else's ready PR you did not approve, auto-merge and
+drafts carry no word: there is nothing in them for you. The author's move outranks your
+approval — a PR you approved that grew a conflict turns amber.
 
 Deliberately not blocked / pending / ready:
 measured across the configured repos, that split put 86 % of open PRs in "blocked" and made the
@@ -80,7 +92,7 @@ imply a different next step.
 | `⧗` blue | **queued** | the PR is in the merge queue: its place in line and GitHub's estimate. Green once GitHub calls it mergeable in the queue; unmergeable there is the author's move |
 | `⇢` purple | **auto-merge** | auto-merge is armed; it lands by itself when the gates clear |
 | `!` yellow | **author's move** | anything only the author can clear, in this order: open comment threads · conflicts · behind a base that requires it · changes requested · failing checks · required checks that never started |
-| `?` blue | **waiting on others** | a review is required; or reviewed, green and still blocked — something unnamed gates it (a required deployment, a CODEOWNER) |
+| `?` blue | **waiting on others** | a review is required; or reviewed, green and still blocked (`blocked`) — a rule presto cannot see gates it: a required deployment, a CODEOWNER, a required check that never reported |
 | `·` dim | **machine's move** | checks are running, queued, or GitHub is still computing the merge state |
 | `↻` yellow | **pending** | you fired a branch update and GitHub has not landed it yet; clears when a refresh shows a new head commit, or after two minutes |
 | `-` dim | **draft** | not up for merge, so no verdict — nothing GitHub reports about a draft is trustworthy enough to build one on |

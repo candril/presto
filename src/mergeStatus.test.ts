@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildMergeStatus, MAX_CHECK_DETAILS, type MergeStatusLine } from "./mergeStatus"
-import { getMergeLabel } from "./status"
+import { getMergeLabel, getMergeReason } from "./status"
 import { normalizePR, type PR, type PRPreview, type PreviewCheck } from "./types"
 
 const pr = (over: Partial<PR> = {}): PR =>
@@ -158,5 +158,42 @@ describe("Merge status section", () => {
     const status = buildMergeStatus(pr({ state: "MERGED" }), preview(), false)
     expect(status.header.text).toBe("Merged")
     expect(status.lines).toEqual([])
+  })
+})
+
+describe("merge reason tone", () => {
+  const reason = (over: Partial<PR>, viewer: string | null = "me") => getMergeReason(pr(over), false, viewer)
+  const theirs = { author: { login: "kai" } }
+  const mine = { author: { login: "Me" } }
+
+  test("your mergeable PR is ready, in green", () => {
+    expect(reason({ ...mine, mergeStateStatus: "CLEAN" })).toEqual({ text: "ready", tone: "clear" })
+  })
+
+  test("someone else's mergeable PR says nothing unless you approved it", () => {
+    expect(reason({ ...theirs, mergeStateStatus: "CLEAN" })).toBeNull()
+    expect(reason({ ...theirs, mergeStateStatus: "CLEAN", approvedBy: ["ME"] })).toEqual({ text: "approved", tone: "clear" })
+  })
+
+  test("an open review is blue on someone else's PR, green once you approved, silent on yours", () => {
+    const awaiting = { reviewDecision: "REVIEW_REQUIRED" as const }
+    expect(reason({ ...theirs, ...awaiting })).toEqual({ text: "review", tone: "review" })
+    expect(reason({ ...theirs, ...awaiting, approvedBy: ["me"] })).toEqual({ text: "approved", tone: "clear" })
+    expect(reason({ ...mine, ...awaiting })).toBeNull()
+  })
+
+  test("the author's move is amber and outranks your approval", () => {
+    expect(reason({ ...theirs, mergeStateStatus: "DIRTY", approvedBy: ["me"] })).toEqual({ text: "conflicts", tone: "author" })
+  })
+
+  test("without a viewer nothing is yours", () => {
+    expect(reason({ ...mine, mergeStateStatus: "CLEAN" }, null)).toBeNull()
+    expect(reason({ ...mine, reviewDecision: "REVIEW_REQUIRED" }, null)).toEqual({ text: "review", tone: "review" })
+  })
+
+  test("the queue is green only once mergeable", () => {
+    const entry = { position: 1, estimatedTimeToMerge: null, enqueuedAt: null, enqueuer: null }
+    expect(reason({ mergeQueue: { ...entry, state: "AWAITING_CHECKS" } })?.tone).toBe("quiet")
+    expect(reason({ mergeQueue: { ...entry, state: "MERGEABLE" } })?.tone).toBe("clear")
   })
 })

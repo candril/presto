@@ -354,6 +354,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
               }}
               flashLabels={flash?.labels}
               viewHandle={listView}
+              currentUser={currentUser}
               emptyMessage={
                 filter.starred && history.starredAuthors.length === 0
                   ? "No starred authors"

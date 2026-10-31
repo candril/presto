@@ -17,7 +17,8 @@ import { theme, getMarkColor } from "../theme"
 import { fade, fadeLevel, type FadeSettings } from "../fade"
 import type { PR, ColumnVisibility, PendingAction } from "../types"
 import { getRepoName, getShortRepoName, getPRCheckState } from "../types"
-import { getStateIndicator, getCheckIndicator, getReviewIndicator, getSyncIndicator, getMergeLabel } from "../status"
+import { getStateIndicator, getCheckIndicator, getReviewIndicator, getSyncIndicator, getMergeIndicator, getMergeReason, REASON_COLORS } from "../status"
+import { computeMergeVerdict } from "../types"
 import { formatRelativeTime } from "../utils/time"
 import { truncate } from "../utils/string"
 import { getPRKey, isPRMarked, getPRMark, type History } from "../history"
@@ -121,12 +122,14 @@ interface PRListProps {
   /** Jump labels by PR URL while a flash jump is active (spec 047) */
   flashLabels?: Map<string, string>
   viewHandle?: MutableRefObject<ListViewHandle | null>
+  /** The logged-in `gh` user, for whose move a row's reason is (spec 054) */
+  currentUser: string | null
 }
 
 // Number of lines to keep visible above/below cursor when scrolling
 const SCROLL_MARGIN = 3
 
-export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, pendingActions, gateDetail, emptyMessage, emptyHint, fadeSettings, flashLabels, viewHandle }: PRListProps) {
+export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, history, pendingActions, gateDetail, emptyMessage, emptyHint, fadeSettings, flashLabels, viewHandle, currentUser }: PRListProps) {
   const scrollRef = useRef<ScrollBoxRenderable>(null)
   const holdScrollRef = useRef(false)
   const { width: terminalWidth } = useTerminalDimensions()
@@ -204,6 +207,7 @@ export function PRList({ prs, selectedIndex, columnVisibility, previewPosition, 
             fadeSettings={fadeSettings}
             flashing={flashLabels !== undefined}
             flashLabel={flashLabels?.get(pr.url)}
+            currentUser={currentUser}
           />
         ))}
       </scrollbox>
@@ -256,9 +260,10 @@ interface PRRowProps {
   fadeSettings: FadeSettings
   flashing: boolean
   flashLabel?: string
+  currentUser: string | null
 }
 
-function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pendingActions, fadeSettings, flashing, flashLabel }: PRRowProps) {
+function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pendingActions, fadeSettings, flashing, flashLabel, currentUser }: PRRowProps) {
   const v = columnVisibility
   const gateMode = layout.gates
   const stateIndicator = getStateIndicator(pr)
@@ -276,7 +281,9 @@ function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pe
   const isMarked = isPRMarked(history, prKey)
   const markLetter = getPRMark(history, prKey)
   const hasChanges = prHasChanges(history, prKey)
-  const mergeLabel = getMergeLabel(pr, prKey in pendingActions)
+  const hasPendingAction = prKey in pendingActions
+  const mergeIndicator = getMergeIndicator(computeMergeVerdict(pr, hasPendingAction), pr.mergeQueue)
+  const mergeReason = v.merge ? getMergeReason(pr, hasPendingAction, currentUser) : null
   
   // Title color: marked PRs get gold, everything else gets base text color.
   // The unread dot and mark letters handle visual differentiation (spec 029).
@@ -295,8 +302,8 @@ function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pe
   // The verdict's reason, right-aligned in the title's space: only rows with something to
   // say give up title width, and the reasons line up at the edge. It goes before the title
   // does — the title must keep a readable stub.
-  const reasonCells = v.merge && mergeLabel.text ? mergeLabel.text.length + 3 : 0
-  const reason = reasonCells > 0 && titleWidth - prSuffix.length - reasonCells >= MIN_REASON_TITLE ? mergeLabel.text : ""
+  const reasonCells = mergeReason ? mergeReason.text.length + 3 : 0
+  const reason = reasonCells > 0 && titleWidth - prSuffix.length - reasonCells >= MIN_REASON_TITLE ? mergeReason : null
   const titleTextWidth = titleWidth - prSuffix.length - (reason ? reasonCells : 0)
   const title = truncate(pr.title, titleTextWidth)
 
@@ -310,7 +317,7 @@ function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pe
   if (isGateVisible(v, gateMode, "checks")) lead.push({ text: checkIndicator.icon, fg: checkIndicator.color }, { text: " " })
   if (isGateVisible(v, gateMode, "review")) lead.push({ text: reviewIndicator.icon, fg: reviewIndicator.color }, { text: " " })
   if (isGateVisible(v, gateMode, "sync")) lead.push({ text: syncIndicator.icon, fg: syncIndicator.color }, { text: " " })
-  if (v.merge) lead.push({ text: mergeLabel.icon, fg: mergeLabel.color }, { text: " " })
+  if (v.merge) lead.push({ text: mergeIndicator.icon, fg: mergeIndicator.color }, { text: " " })
   if (v.comments) lead.push({ text: padRight(commentCount, COL.comments), fg: dim(theme.textMuted) }, { text: " " })
   if (v.time) lead.push({ text: padRight(timeAgo, COL.time), fg: dim(theme.textMuted) }, { text: " " })
 
@@ -338,8 +345,8 @@ function PRRow({ pr, selected, columnVisibility, layout, titleWidth, history, pe
         <span fg={dim(titleColor)}>{title}</span>
         <span fg={dim(theme.textDim)}>{prSuffix}</span>
         <span>{" ".repeat(Math.max(0, titleTextWidth - title.length))}</span>
-        {/* Muted so the glyph stays the signal; not faded with age, since it is status */}
-        {reason && <span fg={theme.textMuted}>{`  ${reason} `}</span>}
+        {/* Not faded with age: it is status, like the glyphs */}
+        {reason && <span fg={REASON_COLORS[reason.tone]}>{`  ${reason.text} `}</span>}
         {v.author && " "}
         {v.author && <span fg={dim(theme.textMuted)}>{padRight(truncate(author, COL.author), COL.author)}</span>}
         {v.repo && " "}

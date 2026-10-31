@@ -156,3 +156,53 @@ export function getMergeLabel(pr: PR, hasPendingAction: boolean): StatusIndicato
   const detail = computeMergeVerdictDetail(pr, hasPendingAction)
   return { ...getMergeIndicator(detail.verdict, pr.mergeQueue), text: detail.short }
 }
+
+/** What a PR needs, from where the viewer sits (spec 054) */
+export type ReasonTone = "clear" | "author" | "review" | "quiet"
+
+export const REASON_COLORS: Record<ReasonTone, string> = {
+  clear: theme.success,
+  author: theme.warning,
+  review: theme.primary,
+  quiet: theme.textMuted,
+}
+
+export interface MergeReason {
+  text: string
+  tone: ReasonTone
+}
+
+/**
+ * The word at the end of a row's title and the tone it is drawn in, or null when the glyph
+ * says it all or there is nothing for the viewer in it. The glyph stays the verdict for
+ * everyone; only the reason knows who is looking.
+ */
+export function getMergeReason(pr: PR, hasPendingAction: boolean, viewer: string | null): MergeReason | null {
+  const detail = computeMergeVerdictDetail(pr, hasPendingAction)
+  const me = viewer?.toLowerCase()
+  const mine = me !== undefined && pr.author.login.toLowerCase() === me
+  const approvedByMe = me !== undefined && pr.approvedBy.some((login) => login.toLowerCase() === me)
+
+  switch (detail.verdict) {
+    case "ready":
+      if (mine) return { text: "ready", tone: "clear" }
+      // Someone else's mergeable PR is theirs to merge: only say so if you signed it off
+      return approvedByMe ? { text: "approved", tone: "clear" } : null
+    case "author":
+      return { text: detail.short, tone: "author" }
+    case "others":
+      // A named residue (branch protection) is nobody's review to give
+      if (detail.short) return { text: detail.short, tone: "quiet" }
+      if (approvedByMe) return { text: "approved", tone: "clear" }
+      return mine ? null : { text: "review", tone: "review" }
+    case "queued":
+      return { text: detail.short, tone: pr.mergeQueue?.state === "MERGEABLE" ? "clear" : "quiet" }
+    case "machine":
+    case "pending-action":
+      return detail.short ? { text: detail.short, tone: "quiet" } : null
+    case "auto-merge":
+    case "draft":
+    default:
+      return null
+  }
+}

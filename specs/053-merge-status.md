@@ -33,7 +33,7 @@ is not fine. It also covers the merge queue, which spec 040 described and nothin
 - The Merge column stays one glyph. Its short reason sits right-aligned at the end of the
   title's space, muted so the glyph stays the signal: `2 failing`, `3 threads`,
   `conflicts`, `behind`, `changes`, `stalled`, `queue err`, `CI 5/8`, `CI queued`,
-  `computing`, `protected`, `#1 ~3m`, `updating`.
+  `computing`, `blocked`, `#1 ~3m`, `updating`.
 - No word where the glyph says it all: `✓` ready, `?` review, `⇢` auto-merge. A draft
   stays blank too: the state column already says draft.
 - No fixed column: one wide enough for the longest reason costs every row title width,

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
 import { theme } from "../theme"
+import { REASON_COLORS } from "../status"
 import type { KeybindingsContext } from "../keybindings"
 
 interface HelpOverlayProps {
@@ -24,6 +25,10 @@ function getLegend(keys: KeybindingsContext) {
       { icon: "⇢", col: "M", color: theme.secondary, text: "auto-merge armed — lands by itself" },
       { icon: "↻", col: "M", color: theme.warning, text: "your branch update still landing" },
       { icon: "-", col: "M", color: theme.textMuted, text: "draft — not up for merge yet" },
+      { icon: "■", col: "why", color: REASON_COLORS.clear, text: "nothing more from you — ready, approved" },
+      { icon: "■", col: "why", color: REASON_COLORS.author, text: "the author has to act — conflicts, threads, CI" },
+      { icon: "■", col: "why", color: REASON_COLORS.review, text: "a review you could give" },
+      { icon: "■", col: "why", color: REASON_COLORS.quiet, text: "CI or GitHub working, or not yours" },
       { icon: "↓", col: "B", color: theme.warning, text: "behind base — dim when optional" },
       { icon: "✓", col: "B", color: theme.success, text: "up to date · - cannot tell (fork)" },
       { icon: "✓", col: "C", color: theme.success, text: "checks pass · ✗ fail · * running/queued" },
