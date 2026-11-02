@@ -46,6 +46,7 @@ import {
   usePreview,
   useAutoRefresh,
   useFlash,
+  useStickySelection,
   useTabNotifications,
 } from "./hooks"
 import { debouncedSaveTabs } from "./tabs"
@@ -190,6 +191,8 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     if (!rows) return
     startFlash(filteredPRs.slice(rows.start, rows.end).map((pr) => pr.url))
   }, [filteredPRs, startFlash])
+
+  useStickySelection(filteredPRs, state.selectedIndex, `${state.activeTabId}\0${state.discoveryQuery}`, dispatch)
 
   // Feature: Keyboard navigation
   useKeyboardNav({
