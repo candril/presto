@@ -51,6 +51,7 @@ export function createDemoSource(): PRSource {
           .list([repo], ["OPEN"])
           .filter((pr) => !scope || scope.includes(pr.author.login))
         opts.onRepo?.(repo, repoPRs)
+        opts.onRepoDone?.(repo)
         return repoPRs
       })
       return { prs, failedRepos: [], unchangedRepos: [] }

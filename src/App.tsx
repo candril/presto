@@ -81,7 +81,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
   })
 
   // Feature: PR data fetching
-  const { fetchPRs } = usePRData({
+  const { fetchPRs, refreshPRs } = usePRData({
     config,
     filter,
     prs: state.prs,
@@ -174,12 +174,11 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
   }, [state.prs, state.loading, handlePRsUpdated])
 
   // Feature: Auto-refresh
-  const { isStale } = useAutoRefresh({
+  useAutoRefresh({
     interval: config.refresh.interval,
     onFocus: config.refresh.onFocus,
     onRefresh: () => fetchPRs(true),
     lastRefresh: state.lastRefresh,
-    onRefreshComplete: (time) => dispatch({ type: "SET_LAST_REFRESH", time }),
     registerFocusCallback: onFocusChange,
   })
 
@@ -241,6 +240,7 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     selectedPR,
     allPRs: filteredPRs,
     selectedIndex: state.selectedIndex,
+    onPreviewFetch: refreshPRs,
   })
 
   // Feature: Message toast
@@ -284,6 +284,12 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
     setHistory,
     renderer,
     fetchPRs,
+    // Most actions land synchronously and the first fetch confirms them; a branch update
+    // or a review decision GitHub recomputes can take longer, which the second catches
+    confirmPR: (pr) => {
+      refreshPRs([pr], 2_000)
+      refreshPRs([pr], 10_000)
+    },
     setShowHelp,
     columnVisibility: state.columnVisibility,
     tabs: state.tabs,
@@ -307,9 +313,11 @@ export function App({ config, currentUser, onFocusChange }: AppProps) {
         title="PResto"
         badge={isDemoMode() ? "demo" : undefined}
         loading={state.refreshing}
+        progress={state.refreshProgress}
         right={headerRight}
-        lastRefresh={state.lastRefresh}
-        isStale={isStale}
+        asOf={state.lastRefresh ?? state.cachedAt}
+        staleAfterMs={config.refresh.interval * 2 * 1000}
+        staleRepos={state.staleRepos}
       />
       <TabBar
         tabs={state.tabs}

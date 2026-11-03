@@ -41,6 +41,7 @@ function markBranchUpdatePending(ctx: CommandContext, pr: PR): void {
     kind: "update-branch",
     firedAt: Date.now(),
   })
+  ctx.confirmPR(pr)
 }
 
 /** Column display names */
@@ -536,7 +537,8 @@ export const commands: Command[] = [
     category: "action",
     shortcut: "R",
     execute: async (ctx) => {
-      ctx.fetchPRs(true)
+      // Forced like `r`: someone asking for a refresh wants GitHub's answer, not the probe's
+      ctx.fetchPRs(true, true)
       return { type: "success", message: "Refreshing..." }
     },
   },
@@ -566,6 +568,7 @@ export const commands: Command[] = [
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { isDraft: false } })
       const result = await markReady(pr)
+      ctx.confirmPR(pr)
       return { type: result.success ? "success" : "error", message: result.message }
     },
   },
@@ -581,6 +584,7 @@ export const commands: Command[] = [
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { isDraft: true } })
       const result = await convertToDraft(pr)
+      ctx.confirmPR(pr)
       return { type: result.success ? "success" : "error", message: result.message }
     },
   },
@@ -596,6 +600,7 @@ export const commands: Command[] = [
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "CLOSED" } })
       const result = await closePR(pr)
+      ctx.confirmPR(pr)
       return { type: result.success ? "success" : "error", message: result.message }
     },
   },
@@ -610,6 +615,7 @@ export const commands: Command[] = [
       // Optimistic update
       ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { state: "OPEN" } })
       const result = await reopenPR(pr)
+      ctx.confirmPR(pr)
       return { type: result.success ? "success" : "error", message: result.message }
     },
   },
@@ -678,6 +684,7 @@ export const commands: Command[] = [
       if (result.success) {
         ctx.dispatch({ type: "UPDATE_PR", url: pr.url, updates: { autoMergeMethod: null } })
       }
+      ctx.confirmPR(pr)
       return { type: result.success ? "success" : "error", message: result.message }
     },
   },

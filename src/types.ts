@@ -640,8 +640,14 @@ export interface AppState {
   refreshing: boolean
   /** A state:closed / state:merged fetch is queued or in flight (spec 044) */
   closedMergedLoading: boolean
-  /** Last successful refresh timestamp */
+  /** When the last refresh finished with data; never stamped by one that failed outright */
   lastRefresh: Date | null
+  /** When the disk cache the list was hydrated from was written; the age shown until a refresh lands */
+  cachedAt: Date | null
+  /** Repos answered out of those asked, while a refresh is out */
+  refreshProgress: { done: number; total: number } | null
+  /** Repos whose rows are kept from an earlier fetch because the last one failed */
+  staleRepos: string[]
   error: string | null
   /** Discovery bar visibility */
   discoveryVisible: boolean

@@ -22,6 +22,11 @@ interface UsePreviewOptions {
   allPRs: PR[]
   /** Current selected index for prefetching */
   selectedIndex: number
+  /**
+   * Called with the selected PR as its preview is fetched, so its row can be fetched
+   * too: the preview is live, and a row older than the panel beside it would contradict it
+   */
+  onPreviewFetch?: (prs: PR[]) => void
 }
 
 interface UsePreviewResult {
@@ -52,7 +57,10 @@ export function usePreview({
   selectedPR,
   allPRs,
   selectedIndex,
+  onPreviewFetch,
 }: UsePreviewOptions): UsePreviewResult {
+  const onPreviewFetchRef = useRef(onPreviewFetch)
+  onPreviewFetchRef.current = onPreviewFetch
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prefetchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fetchingKeyRef = useRef<string | null>(null)
@@ -106,6 +114,8 @@ export function usePreview({
           return
         }
 
+        // Alongside the preview rather than after it: both are round trips of their own
+        onPreviewFetchRef.current?.([selectedPR])
         const preview = await fetchPRPreview(repo, selectedPR.number, { base: selectedPR.baseRefName, head: selectedPR.headRefOid })
 
         // Only update if we're still interested in this key

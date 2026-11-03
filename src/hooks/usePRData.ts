@@ -98,6 +98,9 @@ function describeFailedRepos(failedRepos: string[]): string {
   return `Could not refresh ${names}${more} — showing cached PRs`
 }
 
+/** Long enough for GitHub to have computed a merge state it reported as UNKNOWN */
+const UNKNOWN_FOLLOW_UP_MS = 5_000
+
 function getMissingMarkedPRs(
   loadedPRs: PR[],
   history: History
@@ -288,6 +291,36 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
   const historyRef = useRef(history)
   historyRef.current = history
 
+  /**
+   * Fetch `targets` again after `delayMs` with the list's own query and put GitHub's
+   * answer in their rows. It replaces whatever the row held — an optimistic patch, a copy
+   * older than the preview beside it — and the provider keeps it for the next probe.
+   */
+  const refreshPRs = useCallback((targets: PR[], delayMs = 0) => {
+    if (targets.length === 0) return
+    const keys = targets.map((pr) => ({ repo: getRepoName(pr), number: pr.number }))
+    setTimeout(() => {
+      getPRsBulk(keys)
+        .then((fresh) => {
+          if (fresh.length > 0) dispatch({ type: "APPEND_PRS", prs: fresh })
+        })
+        .catch(() => {
+          // The next refresh carries the same answer; a toast here would only be noise
+        })
+    }, delayMs)
+  }, [dispatch])
+
+  /**
+   * GitHub computes a PR's merge state lazily and answers UNKNOWN until it has. Waiting
+   * a full interval for the answer leaves "computing" on screen for minutes.
+   */
+  const followUpUnknownMergeState = useCallback((list: PR[]) => {
+    const computing = list.filter(
+      (pr) => pr.state === "OPEN" && !pr.isDraft && pr.mergeStateStatus === "UNKNOWN"
+    )
+    refreshPRs(computing, UNKNOWN_FOLLOW_UP_MS)
+  }, [refreshPRs])
+
   // Fetch PRs from GitHub
   // When repo filter is active: fetch filtered repos first, then background load the rest
   const fetchPRs = useCallback(async (showAsRefresh = false, force = false) => {
@@ -325,13 +358,25 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
       dispatch({ type: "REPLACE_REPO_PRS", repo, prs: repoPRs })
       restoreBackfilledPRs()
     }
+    const { priority, rest } = getPriorityRepos()
+    const progress = { done: 0, total: priority.length > 0 ? priority.length + rest.length : allEnabledRepos.length }
+    const countRepoDone = () => {
+      progress.done++
+      dispatch({ type: "SET_REFRESH_PROGRESS", progress: { ...progress } })
+    }
+    if (progress.total > 1) dispatch({ type: "SET_REFRESH_PROGRESS", progress: { ...progress } })
+    // Stamped only once all of it has landed: a stamp after the first half would put
+    // "just now" over rows of repos still waiting on an answer.
+    const finish = (staleRepos: string[], list: PR[]) => {
+      dispatch({ type: "SET_STALE_REPOS", repos: staleRepos })
+      dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
+      followUpUnknownMergeState(list)
+    }
 
     try {
-      const { priority, rest } = getPriorityRepos()
-      
       // If we have priority repos (matching current filter), fetch those first
       if (priority.length > 0) {
-        const priorityResult = await listPRsFromRepos(priority, { force })
+        const priorityResult = await listPRsFromRepos(priority, { force, onRepoDone: countRepoDone })
         if (priorityResult.failedRepos.length === priority.length) {
           throw new Error(`Failed to fetch ${priority.join(", ")}`)
         }
@@ -375,7 +420,8 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         // Dispatch priority PRs immediately for fast UI update
         dispatch({ type: "SET_PRS", prs: replaceReposPRs(prsRef.current, priorityPRs, priority) })
         restoreBackfilledPRs()
-        dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
+        // SET_PRS ends the spinner; the rest is still out
+        if (rest.length > 0) dispatch({ type: "SET_REFRESHING", refreshing: true })
         
         // Rest of configured repos + tracked PRs + missing marked PRs. Awaited, though the
         // priority PRs are already on screen, so the caller's in-flight guard covers the
@@ -387,13 +433,15 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
           await (async () => {
             try {
               let backgroundPRs = [...priorityPRs]
+              let restFailed: string[] = []
 
               // Fetch rest of configured repos
               if (rest.length > 0) {
-                const restResult = await listPRsFromRepos(rest, { force, authorScopes, onRepo: showRepo })
+                const restResult = await listPRsFromRepos(rest, { force, authorScopes, onRepo: showRepo, onRepoDone: countRepoDone })
                 if (restResult.failedRepos.length === rest.length) {
                   throw new Error(`Failed to fetch ${rest.join(", ")}`)
                 }
+                restFailed = restResult.failedRepos
                 markUnscopedFetched(rest, restResult.failedRepos)
                 const restPRs = retainPRsFromRepos(
                   prsRef.current,
@@ -436,9 +484,12 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
                 const repoName = getRepoName(pr).toLowerCase()
                 return allEnabledRepos.some(r => r.toLowerCase() === repoName)
               }), allEnabledRepos)
+              finish([...priorityResult.failedRepos, ...restFailed], backgroundPRs)
             } catch (err) {
               // Background fetch failed — keep already-shown priority PRs, don't overwrite cache
+              dispatch({ type: "SET_REFRESHING", refreshing: false })
               dispatch({ type: "SHOW_MESSAGE", message: "Background refresh failed (offline?)" })
+              finish([...priorityResult.failedRepos, ...rest], priorityPRs)
             }
           })()
         } else {
@@ -449,10 +500,11 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
           }), allEnabledRepos)
           // Bump epoch so background fetch effects re-run (caches were cleared above)
           setRefreshEpoch(e => e + 1)
+          finish(priorityResult.failedRepos, priorityPRs)
         }
       } else {
         // No priority repos, fetch all at once
-        const allResult = await listPRsFromRepos(allEnabledRepos, { force, authorScopes, onRepo: showRepo })
+        const allResult = await listPRsFromRepos(allEnabledRepos, { force, authorScopes, onRepo: showRepo, onRepoDone: countRepoDone })
         if (allEnabledRepos.length > 0 && allResult.failedRepos.length === allEnabledRepos.length) {
           throw new Error(`Failed to fetch ${allEnabledRepos.join(", ")}`)
         }
@@ -486,13 +538,13 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
 
         dispatch({ type: "SET_PRS", prs: allFetchedPRs })
         restoreBackfilledPRs()
-        dispatch({ type: "SET_LAST_REFRESH", time: new Date() })
         // Bump epoch so background fetch effects re-run (caches were cleared above)
         setRefreshEpoch(e => e + 1)
         saveCache(allFetchedPRs.filter(pr => {
           const repoName = getRepoName(pr).toLowerCase()
           return allEnabledRepos.some(r => r.toLowerCase() === repoName)
         }), allEnabledRepos)
+        finish(allResult.failedRepos, allFetchedPRs)
       }
     } catch (err) {
       dispatch({ type: "SET_REFRESHING", refreshing: false })
@@ -507,8 +559,10 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
         // the list they're seeing is stale rather than silently doing nothing.
         dispatch({ type: "SHOW_MESSAGE", message: "Refresh failed (offline?) — showing cached PRs" })
       }
+    } finally {
+      dispatch({ type: "SET_REFRESH_PROGRESS", progress: null })
     }
-  }, [config.repositories, filter.showAll, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreBackfilledPRs, rememberOutsideRepoPRs])
+  }, [config.repositories, filter.showAll, dispatch, getTrackedPRsFromNonConfiguredRepos, getPriorityRepos, restoreBackfilledPRs, rememberOutsideRepoPRs, followUpUnknownMergeState])
 
   // Revalidate on mount - PRs are already hydrated from cache in createInitialState()
   // so always do a background refresh (stale data shows immediately)
@@ -885,5 +939,5 @@ export function usePRData({ config, filter, prs, dispatch, history, setHistory, 
     }
   }, [filter.authors.join(","), filter.states.join(","), filter.repos.join(","), config.repositories, refreshEpoch])
 
-  return { fetchPRs }
+  return { fetchPRs, refreshPRs }
 }

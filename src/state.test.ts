@@ -44,6 +44,30 @@ describe("APPEND_PRS", () => {
     expect(state.prs[0]!.title).toBe("current")
   })
 
+  test("a refetch puts GitHub's answer over an optimistic patch that never landed", () => {
+    const patched = appReducer(withPRs([pr(1)]), {
+      type: "UPDATE_PR",
+      url: pr(1).url,
+      updates: { state: "CLOSED" },
+    })
+    const state = appReducer(patched, { type: "APPEND_PRS", prs: [pr(1)] })
+    expect(state.prs[0]!.state).toBe("OPEN")
+  })
+
+  test("a refetch showing the new head commit settles a branch-update marker", () => {
+    const pending = appReducer(withPRs([pr(1, { headRefOid: "old" })]), {
+      type: "SET_PR_PENDING",
+      prKey: "acme/web#1",
+      kind: "update-branch",
+      firedAt: Date.now(),
+    })
+    const state = appReducer(pending, {
+      type: "APPEND_PRS",
+      prs: [pr(1, { headRefOid: "new", updatedAt: "2026-09-20T10:05:00Z" })],
+    })
+    expect(state.pendingActions).toEqual({})
+  })
+
   test("nothing new keeps the same state object, so nothing re-renders", () => {
     const before = withPRs([pr(1)])
     const after = appReducer(before, { type: "APPEND_PRS", prs: [pr(1)] })

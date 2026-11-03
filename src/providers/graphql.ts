@@ -57,6 +57,7 @@ const PR_FRAGMENT = `
   headRefOid
   headRefName
   baseRefName
+  baseRef { target { oid } }
   mergeStateStatus
   isCrossRepository
   viewerCanUpdateBranch
@@ -113,14 +114,19 @@ const PR_FRAGMENT = `
  * `mergeStateStatus` stays out, though falling behind base moves nothing
  * else. GitHub computes it per PR on request: on isomorph it is 6.7s of an
  * 8s probe, and since main moves all the time there it flips on most
- * refreshes anyway, which would defeat the skip it is paid for. A PR that
- * only fell behind shows it on the next refresh that fetches in full.
+ * refreshes anyway, which would defeat the skip it is paid for.
+ *
+ * The base branch's tip stands in for it. Main moving is what turns a PR
+ * BEHIND or conflicting, and `baseRef` is a single object, so it costs no
+ * points. On a busy repo most refreshes then fetch in full: that is the
+ * price of a Merge column that is current rather than one main-push late.
  */
 const PR_DIGEST_FRAGMENT = `
   number
   updatedAt
   isDraft
   reviewDecision
+  baseRef { target { oid } }
   comments { totalCount }
   reviews { totalCount }
   reviewThreads { totalCount }
@@ -132,9 +138,9 @@ const PR_DIGEST_FRAGMENT = `
 
 /**
  * Resolving a review thread moves none of the digest fields — GitHub treats
- * it as neither an update nor a new comment. An unresolved-thread badge can
- * therefore sit one or more ticks behind until something else on the PR
- * moves; `r` forces a full fetch and settles it.
+ * it as neither an update nor a new comment, and reading `isResolved` would
+ * cost a node per thread. `UNCHANGED_MAX_AGE_MS` bounds how long such a
+ * change can go unseen.
  */
 export function digestOf(nodes: any[]): string {
   return nodes
@@ -146,6 +152,7 @@ export function digestOf(nodes: any[]): string {
         pr.updatedAt,
         pr.isDraft,
         pr.reviewDecision ?? "",
+        pr.baseRef?.target?.oid ?? "",
         pr.comments?.totalCount ?? 0,
         pr.reviews?.totalCount ?? 0,
         pr.reviewThreads?.totalCount ?? 0,
@@ -209,7 +216,28 @@ function toMergeQueueEntry(raw: any): MergeQueueEntry | null {
  * a tab's repo filter, a refresh that had only landed its first half — and
  * the repo's PRs then vanish until something in it moves.
  */
-const lastFetches = new Map<string, { digest: string; prs: PR[] }>()
+const lastFetches = new Map<string, { digest: string; prs: PR[]; fetchedAt: number }>()
+
+/**
+ * How long a probe match may stand in for a full fetch. Some changes move no
+ * digest field (a resolved review thread); past this age the repo is fetched
+ * in full regardless, so such a change is never more than this late.
+ */
+export const UNCHANGED_MAX_AGE_MS = 15 * 60 * 1000
+
+/**
+ * Put freshly fetched single PRs into the stored full fetches. Without this an
+ * "unchanged" probe answers with the copy from before, and a row a preview or
+ * an action had just brought up to date flips back to the old state.
+ */
+export function rememberRefetchedPRs(prs: PR[]): void {
+  if (prs.length === 0) return
+  const byUrl = new Map(prs.map((pr) => [pr.url, pr]))
+  for (const entry of lastFetches.values()) {
+    if (!entry.prs.some((pr) => byUrl.has(pr.url))) continue
+    entry.prs = entry.prs.map((pr) => byUrl.get(pr.url) ?? pr)
+  }
+}
 
 /** Comment tallies derived from one PR's conversation, reviews and review threads */
 export interface CommentCounts {
@@ -515,14 +543,15 @@ export async function fetchRepoPRs(
   const log = logRequest("graphql", `fetchRepoPRs ${repo}${authors ? ` (${authors.length} authors)` : ""}`)
   for (let attempt = 1; ; attempt++) {
     try {
-      const last = force ? undefined : lastFetches.get(cacheKey)
+      const stored = force ? undefined : lastFetches.get(cacheKey)
+      const last = stored && Date.now() - stored.fetchedAt <= UNCHANGED_MAX_AGE_MS ? stored : undefined
       if (last && last.digest === (await probeRepo(repo, token, authors))) {
         log.finish("unchanged (1pt)")
         return { prs: last.prs, unchanged: true }
       }
 
       const { prs, digest } = await fetchRepoPRsOnce(repo, token, authors)
-      lastFetches.set(cacheKey, { digest, prs })
+      lastFetches.set(cacheKey, { digest, prs, fetchedAt: Date.now() })
       log.finish(`${prs.length} PRs`)
       return { prs, unchanged: false }
     } catch (error) {
@@ -554,6 +583,8 @@ export interface ListReposOptions {
    * last fetch. One slow repo would otherwise hold back every other repo's rows.
    */
   onRepo?: (repo: string, prs: PR[]) => void
+  /** Called once per repo when its fetch has ended, whether it succeeded or not */
+  onRepoDone?: (repo: string) => void
 }
 
 /**
@@ -562,7 +593,7 @@ export interface ListReposOptions {
  */
 export async function listPRsGraphQL(
   repos: string[],
-  { force = false, authorScopes = {}, onRepo }: ListReposOptions = {}
+  { force = false, authorScopes = {}, onRepo, onRepoDone }: ListReposOptions = {}
 ): Promise<RepoFetchResult> {
   if (repos.length === 0) return { prs: [], failedRepos: [], unchangedRepos: [] }
 
@@ -572,11 +603,15 @@ export async function listPRsGraphQL(
   // This avoids resource limits while maximizing speed
   const results = await Promise.allSettled(
     repos.map(async (repo) => {
-      const result = await fetchRepoPRs(repo, token, force, authorScopes[repo])
-      if (onRepo && !result.unchanged) {
-        onRepo(repo, await stampBaseUpdateRequired(result.prs, getRepoName))
+      try {
+        const result = await fetchRepoPRs(repo, token, force, authorScopes[repo])
+        if (onRepo && !result.unchanged) {
+          onRepo(repo, await stampBaseUpdateRequired(result.prs, getRepoName))
+        }
+        return result
+      } finally {
+        onRepoDone?.(repo)
       }
-      return result
     })
   )
 
@@ -669,5 +704,6 @@ export async function getPRsGraphQL(
   }
 
   await stampBaseUpdateRequired(allPRs, getRepoName)
+  rememberRefetchedPRs(allPRs)
   return allPRs
 }

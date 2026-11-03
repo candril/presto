@@ -30,7 +30,12 @@ export interface CommandContext {
   history: History
   setHistory: (history: History) => void
   renderer: CliRenderer
-  fetchPRs: (showAsRefresh?: boolean) => void
+  fetchPRs: (showAsRefresh?: boolean, force?: boolean) => void
+  /**
+   * Fetch the PR again shortly after an action on it, so GitHub's answer replaces the
+   * optimistic patch — including when the action failed after the patch went in
+   */
+  confirmPR: (pr: PR) => void
   setShowHelp: (show: boolean) => void
   columnVisibility: ColumnVisibility
   // Tab state (spec 011)

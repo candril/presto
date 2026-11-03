@@ -14,6 +14,8 @@ export type AppAction =
   | { type: "SET_REFRESHING"; refreshing: boolean }
   | { type: "SET_CLOSED_MERGED_LOADING"; loading: boolean }
   | { type: "SET_LAST_REFRESH"; time: Date }
+  | { type: "SET_REFRESH_PROGRESS"; progress: { done: number; total: number } | null }
+  | { type: "SET_STALE_REPOS"; repos: string[] }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_PRS"; prs: PR[] }
   | { type: "APPEND_PRS"; prs: PR[] }
@@ -84,6 +86,9 @@ export function createInitialState(): AppState {
     refreshing: false,
     closedMergedLoading: false,
     lastRefresh: null,
+    cachedAt: hasCachedPRs ? parseCacheTime(cache.updatedAt) : null,
+    refreshProgress: null,
+    staleRepos: [],
     error: null,
     discoveryVisible: false,
     discoveryQuery: filterQuery,
@@ -109,6 +114,12 @@ export function createInitialState(): AppState {
     // Gate detail (spec 037)
     gateDetail: getGateDetail(),
   }
+}
+
+function parseCacheTime(raw: string | null | undefined): Date | null {
+  if (!raw) return null
+  const time = new Date(raw)
+  return Number.isNaN(time.getTime()) ? null : time
 }
 
 /**
@@ -170,6 +181,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "SET_LAST_REFRESH":
       return { ...state, lastRefresh: action.time }
 
+    case "SET_REFRESH_PROGRESS":
+      return { ...state, refreshProgress: action.progress }
+
+    case "SET_STALE_REPOS":
+      return { ...state, staleRepos: action.repos }
+
     case "SET_ERROR":
       return { ...state, error: action.error, loading: false }
 
@@ -210,6 +227,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         prs: allPRs,
+        // A single-PR refetch is how a fired action gets confirmed
+        pendingActions: settlePendingActions(state.pendingActions, state.prs, allPRs),
       }
     }
 

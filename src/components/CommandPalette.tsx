@@ -362,6 +362,7 @@ export function CommandPalette({
           updates: { reviewDecision: "CHANGES_REQUESTED" },
         })
       }
+      context.confirmPR(pr)
       setReviewDialog(null)
       onClose()
       onResult({ type: "success", message: result.message })
@@ -477,6 +478,7 @@ export function CommandPalette({
         url: pr.url,
         updates: mode === "auto" ? { autoMergeMethod: method } : { state: "MERGED" },
       })
+      context.confirmPR(pr)
     }
     onClose()
     onResult(result.success 

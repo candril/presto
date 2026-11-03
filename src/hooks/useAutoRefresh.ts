@@ -1,6 +1,7 @@
 /**
  * Hook for auto-refresh functionality
- * Handles interval-based refresh, focus refresh, and stale detection
+ * Handles interval-based refresh and focus refresh. The refresh stamps its own time:
+ * only it knows whether it succeeded.
  */
 
 import { useEffect, useRef, useCallback } from "react"
@@ -15,17 +16,8 @@ interface UseAutoRefreshOptions {
   onRefresh: () => Promise<void>
   /** Last refresh timestamp */
   lastRefresh: Date | null
-  /** Called when lastRefresh should be updated */
-  onRefreshComplete: (time: Date) => void
   /** Register for terminal focus events (tmux/window switches) */
   registerFocusCallback?: (cb: FocusCallback) => () => void
-}
-
-interface AutoRefreshState {
-  /** Data is stale (older than 2x interval) */
-  isStale: boolean
-  /** Time until next refresh in seconds */
-  nextRefreshIn: number | null
 }
 
 export function useAutoRefresh({
@@ -33,9 +25,8 @@ export function useAutoRefresh({
   onFocus,
   onRefresh,
   lastRefresh,
-  onRefreshComplete,
   registerFocusCallback,
-}: UseAutoRefreshOptions): AutoRefreshState {
+}: UseAutoRefreshOptions): void {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isRefreshingRef = useRef(false)
   const lastRefreshRef = useRef(lastRefresh)
@@ -53,8 +44,6 @@ export function useAutoRefresh({
   // whole interval — while someone is using presto, it would never fire.
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
-  const onRefreshCompleteRef = useRef(onRefreshComplete)
-  onRefreshCompleteRef.current = onRefreshComplete
 
   const doRefresh = useCallback(async () => {
     if (isRefreshingRef.current) return
@@ -62,7 +51,6 @@ export function useAutoRefresh({
     
     try {
       await onRefreshRef.current()
-      onRefreshCompleteRef.current(new Date())
     } finally {
       isRefreshingRef.current = false
     }
@@ -136,20 +124,4 @@ export function useAutoRefresh({
       process.off("SIGCONT", handleResume)
     }
   }, [onFocus, doRefresh])
-
-  // Calculate stale state and next refresh time
-  const isStale = lastRefresh && interval > 0
-    ? Date.now() - lastRefresh.getTime() > interval * 2 * 1000
-    : false
-
-  const nextRefreshIn = lastRefresh && interval > 0
-    ? Math.max(0, Math.ceil((lastRefresh.getTime() + interval * 1000 - Date.now()) / 1000))
-    : null
-
-  return {
-    isStale,
-    nextRefreshIn,
-  }
 }
-
-

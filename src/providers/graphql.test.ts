@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { authorSearchQueries, countComments, digestOf, fetchRepoPRs, toCheckCounts } from "./graphql"
+import {
+  authorSearchQueries,
+  countComments,
+  digestOf,
+  fetchRepoPRs,
+  rememberRefetchedPRs,
+  toCheckCounts,
+  UNCHANGED_MAX_AGE_MS,
+} from "./graphql"
 
 const human = (login: string) => ({ author: { login } })
 const thread = (opts: { author?: string; typename?: string; resolved: boolean; comments: number }) => ({
@@ -94,6 +102,8 @@ describe("digestOf", () => {
     ["moving up the merge queue", { mergeQueueEntry: { position: 1, state: "QUEUED" } }],
     ["another check finishing", { commits: { nodes: [{ commit: { oid: "abc123", statusCheckRollup: { state: "PENDING", contexts: { checkRunCountsByState: [{ state: "SUCCESS", count: 1 }] } } } }] } }],
     ["checks going red", { commits: { nodes: [{ commit: { oid: "abc123", statusCheckRollup: { state: "FAILURE" } } }] } }],
+    // What turns a PR BEHIND or conflicting, with nothing on the PR itself moving
+    ["main moving", { baseRef: { target: { oid: "base999" } } }],
   ]
 
   for (const [what, over] of movements) {
@@ -207,6 +217,30 @@ describe("fetchRepoPRs", () => {
 
     expect(forced.unchanged).toBe(false)
     expect(calls).toEqual({ full: 2, probe: 0 })
+  })
+
+  test("a probe match older than the expiry is fetched in full anyway", async () => {
+    const calls = stubGitHub()
+    const realNow = Date.now
+    try {
+      await fetchRepoPRs("acme/expired", "token", false)
+      Date.now = () => realNow() + UNCHANGED_MAX_AGE_MS + 1
+      const later = await fetchRepoPRs("acme/expired", "token", false)
+      expect(later.unchanged).toBe(false)
+      expect(calls).toEqual({ full: 2, probe: 0 })
+    } finally {
+      Date.now = realNow
+    }
+  })
+
+  test("a PR refetched on its own replaces its copy in what an unchanged probe answers", async () => {
+    stubGitHub()
+    const first = await fetchRepoPRs("acme/refetched", "token", false)
+    rememberRefetchedPRs([{ ...first.prs[0]!, title: "Renamed" }])
+
+    const next = await fetchRepoPRs("acme/refetched", "token", false)
+    expect(next.unchanged).toBe(true)
+    expect(next.prs.map((pr) => pr.title)).toEqual(["Renamed"])
   })
 
   test("the digest a forced fetch stores lets the next refresh skip", async () => {
