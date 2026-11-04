@@ -56,6 +56,7 @@ export type AppAction =
   | { type: "CLOSE_TAB"; tabId: string }
   | { type: "CLOSE_OTHER_TABS" }
   | { type: "SWITCH_TAB"; tabId: string }
+  | { type: "MOVE_TAB"; delta: -1 | 1 }
   | { type: "UPDATE_TAB_NOTIFICATION"; tabId: string; hasNotification: boolean }
   | { type: "SET_TAB_NOTIFICATIONS"; notifications: Record<string, boolean> }
   | { type: "LOAD_TABS"; tabs: Tab[]; activeTabId: string }
@@ -501,6 +502,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         discoveryQuery: tab.filterQuery,
         selectedIndex: tab.selectedIndex,
       }
+    }
+
+    case "MOVE_TAB": {
+      const from = state.tabs.findIndex((t: Tab) => t.id === state.activeTabId)
+      const to = from + action.delta
+      if (from < 0 || to < 0 || to >= state.tabs.length) return state
+
+      const tabs = [...state.tabs]
+      ;[tabs[from], tabs[to]] = [tabs[to], tabs[from]]
+      return { ...state, tabs }
     }
 
     case "UPDATE_TAB_NOTIFICATION": {

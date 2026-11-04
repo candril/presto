@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { appReducer, createInitialState } from "./state"
+import type { Tab } from "./tabs/types"
 import { normalizePR } from "./types"
-import type { PR } from "./types"
+import type { AppState, PR } from "./types"
 
 const pr = (number: number, over: Partial<PR> = {}): PR =>
   normalizePR({
@@ -135,5 +136,47 @@ describe("NEW_TAB", () => {
     expect(state.selectedIndex).toBe(0)
     expect(left?.filterQuery).toBe("@candril")
     expect(left?.selectedIndex).toBe(1)
+  })
+})
+
+describe("MOVE_TAB", () => {
+  const tab = (id: string): Tab => ({
+    id,
+    title: id,
+    filterQuery: "",
+    hasNotification: false,
+    selectedIndex: 0,
+  })
+  const withTabs = (ids: string[], activeTabId: string) =>
+    appReducer(createInitialState(), { type: "LOAD_TABS", tabs: ids.map(tab), activeTabId })
+  const ids = (state: AppState) => state.tabs.map((t) => t.id)
+
+  test("moves the active tab one left and keeps it active", () => {
+    const state = appReducer(withTabs(["a", "b", "c"], "b"), { type: "MOVE_TAB", delta: -1 })
+
+    expect(ids(state)).toEqual(["b", "a", "c"])
+    expect(state.activeTabId).toBe("b")
+  })
+
+  test("moves the active tab one right and keeps it active", () => {
+    const state = appReducer(withTabs(["a", "b", "c"], "b"), { type: "MOVE_TAB", delta: 1 })
+
+    expect(ids(state)).toEqual(["a", "c", "b"])
+    expect(state.activeTabId).toBe("b")
+  })
+
+  test("does nothing at the ends", () => {
+    const first = withTabs(["a", "b", "c"], "a")
+    const last = withTabs(["a", "b", "c"], "c")
+
+    expect(appReducer(first, { type: "MOVE_TAB", delta: -1 })).toBe(first)
+    expect(appReducer(last, { type: "MOVE_TAB", delta: 1 })).toBe(last)
+  })
+
+  test("does nothing with a single tab", () => {
+    const single = withTabs(["a"], "a")
+
+    expect(appReducer(single, { type: "MOVE_TAB", delta: -1 })).toBe(single)
+    expect(appReducer(single, { type: "MOVE_TAB", delta: 1 })).toBe(single)
   })
 })

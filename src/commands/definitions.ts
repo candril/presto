@@ -106,6 +106,28 @@ export function getTabCommands(ctx: CommandContext): Command[] {
         return { type: "success", message: "Closed other tabs" }
       },
     })
+
+    cmds.push({
+      id: "tab.moveLeft",
+      label: "Move Tab Left",
+      category: "action" as const,
+      shortcut: "{",
+      execute: async (execCtx: CommandContext) => {
+        execCtx.dispatch({ type: "MOVE_TAB", delta: -1 })
+        return { type: "success" }
+      },
+    })
+
+    cmds.push({
+      id: "tab.moveRight",
+      label: "Move Tab Right",
+      category: "action" as const,
+      shortcut: "}",
+      execute: async (execCtx: CommandContext) => {
+        execCtx.dispatch({ type: "MOVE_TAB", delta: 1 })
+        return { type: "success" }
+      },
+    })
   }
 
   // New tab (duplicate current)

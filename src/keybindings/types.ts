@@ -43,6 +43,8 @@ export type KeyAction =
   | "tab.undo"
   | "tab.prev"
   | "tab.next"
+  | "tab.moveLeft"
+  | "tab.moveRight"
   | "tab.1"
   | "tab.2"
   | "tab.3"

@@ -233,6 +233,15 @@ export function useKeyboardNav({
       return
     }
 
+    if (keys.matches(key, "tab.moveLeft")) {
+      dispatch({ type: "MOVE_TAB", delta: -1 })
+      return
+    }
+    if (keys.matches(key, "tab.moveRight")) {
+      dispatch({ type: "MOVE_TAB", delta: 1 })
+      return
+    }
+
     // Number keys 1-9 to switch tabs
     for (let i = 1; i <= 9; i++) {
       if (keys.matches(key, `tab.${i}` as any) && i <= tabs.length) {

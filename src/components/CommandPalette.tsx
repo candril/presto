@@ -145,7 +145,7 @@ export function CommandPalette({
   // Get available commands and filter by query
   const availableCommands = useMemo(
     () => getAvailableCommands(context),
-    [context.selectedPR, context.columnVisibility]
+    [context.selectedPR, context.columnVisibility, context.tabs, context.history]
   )
 
   const filteredCommands = useMemo(() => {

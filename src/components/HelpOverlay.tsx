@@ -96,6 +96,7 @@ function getHelpSections(keys: KeybindingsContext) {
         [keys.getKeyDisplay("tab.close"), "Close tab"],
         [keys.getKeyDisplay("tab.undo"), "Undo close"],
         [keys.getKeyDisplay("tab.prev") + " / " + keys.getKeyDisplay("tab.next"), "Previous / next tab"],
+        [keys.getKeyDisplay("tab.moveLeft") + " / " + keys.getKeyDisplay("tab.moveRight"), "Move tab left / right"],
         ["1-9", "Switch to tab N"],
       ],
     },

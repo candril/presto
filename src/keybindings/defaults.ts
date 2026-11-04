@@ -49,6 +49,8 @@ export const defaultBindings: Record<KeyAction, string> = {
   "tab.undo": "u",
   "tab.prev": "[",
   "tab.next": "]",
+  "tab.moveLeft": "{",
+  "tab.moveRight": "}",
   "tab.1": "1",
   "tab.2": "2",
   "tab.3": "3",

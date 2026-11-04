@@ -58,6 +58,7 @@ derived one.
 | --- | --- |
 | `1`–`9` | switch to tab N |
 | `[` / `]` | previous / next |
+| `{` / `}` | move the current tab left / right; `1`–`9` follow the new order |
 | `d` | close the current tab (the last one cannot be closed) |
 | `u` | reopen the last closed tab |
 | `^P` → *Close other tabs* | keep only this one |

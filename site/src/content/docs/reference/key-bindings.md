@@ -70,6 +70,7 @@ Press `?` at any time for this list in the app; `esc`, `?` or `q` closes it.
 | `d` | close the tab |
 | `u` | undo the last close |
 | `[` / `]` | previous / next tab |
+| `{` / `}` | move the tab left / right |
 | `1`–`9` | switch to tab N |
 
 ## Everything else
