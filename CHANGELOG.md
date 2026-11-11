@@ -7,6 +7,8 @@ release, so write it before tagging.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-11
+
 ### Added
 
 - **Rows name the blocker.** Where the Merge glyph alone is ambiguous, the end of the
@@ -23,6 +25,15 @@ release, so write it before tagging.
   gate: checks (with the failing and running ones named), reviews (who approved, who
   requested changes, who is still asked), conversations, conflicts, how many commits
   behind its base the branch is, the queue, and what else blocks.
+- **The header says how fresh the list is.** The age is stamped when a refresh finishes,
+  not when it starts, and a refresh that failed stamps nothing; it ticks every 30s, shows
+  the cache's age on a start from disk, and turns amber with `! 1 repo stale` when a repo's
+  rows are kept from an earlier fetch. While repos are still answering, the spinner counts
+  them: `3/5`.
+- **Tabs move with `{` and `}`.** The current tab moves one place left or right and `1`–`9`
+  follow the new order; *Move Tab Left* / *Move Tab Right* are in the palette.
+- **A bare number filters by PR number.** `482` narrows the rows already listed to PRs
+  numbered 482 and fetches nothing; `#482` is still the lookup across every repo.
 
 ### Changed
 
@@ -31,10 +42,23 @@ release, so write it before tagging.
   then hiding the rest — on isomorph that window held 2 of the 13 starred PRs, so most
   were missing altogether. `*` and `repo:` still load every author. Each repo's rows also
   land as soon as that repo answers rather than waiting on the slowest one, and the
-  change check no longer asks for the merge state, which GitHub is slowest to compute: a
-  PR that only fell behind its base shows it one refresh later, or at once with `r`. The
+  change check no longer asks for the merge state, which GitHub is slowest to compute. The
   first refresh after startup and `r` skip that check altogether, since there is nothing
   yet to compare it with.
+
+### Fixed
+
+- **The list no longer shows stale merge state.** The change check now notices the base
+  branch moving, which is what turns a PR behind or conflicting, and a repo is fetched in
+  full at least every 15 minutes even when nothing seems to have changed. Opening the
+  preview refetches that PR's row, so the two never disagree; a merge state GitHub was
+  still computing is asked for again 5s later; and after merge, auto-merge, a review,
+  ready/draft, close, reopen or update branch the PR is fetched again after 2s and 10s, so
+  GitHub's answer replaces the optimistic one even when the action failed. The palette's
+  *Refresh PRs* now forces a full fetch like `r`.
+- **The selection stays on its PR when a refresh reorders the list.** A PR that moved up
+  used to push another one under the cursor, so `y` copied and `Enter` opened a PR you
+  never picked.
 
 ## [0.3.0] — 2026-09-25
 
@@ -103,7 +127,8 @@ First release.
 - Prebuilt binaries for macOS (arm64, x64) and Linux (x64, arm64), a curl installer, a
   Homebrew formula and a Nix package via [candril/homebrew-tap](https://github.com/candril/homebrew-tap).
 
-[Unreleased]: https://github.com/candril/presto/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/candril/presto/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/candril/presto/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/candril/presto/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/candril/presto/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/candril/presto/releases/tag/v0.1.0
